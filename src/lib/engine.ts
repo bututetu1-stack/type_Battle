@@ -25,11 +25,15 @@ export function processKey(key: string, state: PlayerState): ProcessResult {
   const word = backlog[0];
   const currentToken = word.tokens[tokenIndex];
 
-  // 特殊処理: 「っ」のショートカット (次の文字の子音で「っ」を確定)
+  // 促音「っ」: 次の音の頭の子音を打つと、その一打で「っ」を確定する。
+  // 例: きって(き + っ + て) → k, i, t, t, e。最初の t で「っ」が確定し、
+  //     残りの t, e で「て」を打つ（＝子音を2回打つ方式）。
+  // この一打は「っ」の確定だけに使い、次の音には繰り越さない（currentTyping は空のまま）。
   if (currentTyping === '' && currentToken.kana === 'っ') {
     const nextT = word.tokens[tokenIndex + 1];
-    if (nextT && nextT.romaji.some((r) => r.startsWith(key) && !['a', 'i', 'u', 'e', 'o', 'y'].includes(key))) {
-      return processKey(key, { ...state, tokenIndex: tokenIndex + 1 });
+    const isConsonant = !['a', 'i', 'u', 'e', 'o', 'n'].includes(key);
+    if (nextT && isConsonant && nextT.romaji.some((r) => r.startsWith(key))) {
+      return { miss: false, nextState: { ...state, tokenIndex: tokenIndex + 1, currentTyping: '' } };
     }
   }
   // 特殊処理: 「ん」のショートカット (nの次が母音/y/n以外の子音なら確定)

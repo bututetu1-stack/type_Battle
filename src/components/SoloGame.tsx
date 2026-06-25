@@ -13,10 +13,10 @@ const MIN_SPAWN_INTERVAL = 1000;
 const DUMMY_COUNT = 20;
 const BRAKE_DURATION = 5000;
 
-const ITEM_META: Record<ItemType, { name: string }> = {
-  shield: { name: 'シールド' },
-  clear: { name: 'おじゃま一掃' },
-  brake: { name: 'ブレーキ' },
+const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> = {
+  shield: { name: 'シールド', icon: '🛡', desc: '次の自動供給を1回無効化' },
+  clear: { name: 'おじゃま一掃', icon: '🌀', desc: 'バックログのおじゃまを消す' },
+  brake: { name: 'ブレーキ', icon: '⏸', desc: '自動供給を5秒間ストップ' },
 };
 
 export default function SoloGame({ onExit }: { onExit: () => void }) {
@@ -343,7 +343,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   <ItemIcon type={heldItem} />
                   <div className="leading-tight">
                     <div className="text-sm font-bold text-yellow-200">{ITEM_META[heldItem].name}</div>
-                    <div className="text-[10px] text-gray-500">[Enter] で使用</div>
+                    <div className="text-[11px] text-gray-300">{ITEM_META[heldItem].desc}</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">[Enter] で使用</div>
                   </div>
                 </div>
               </div>
@@ -411,6 +412,20 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               <p className="text-xs text-gray-600 mt-4 max-w-sm text-center">
                 ノーミスで打ち切ると連鎖UP。5連鎖ごとに敵へおじゃまを送って撃墜！ お宝(🟨)を打つとアイテム獲得 → [Enter] で使用。
               </p>
+              <div className="mt-4 text-xs bg-neutral-900/50 p-3 rounded-xl max-w-sm w-full">
+                <div className="text-gray-400 font-bold mb-1.5 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-yellow-400" /> アイテム効果（お宝🟨で入手 → [Enter]で使用）
+                </div>
+                <div className="flex flex-col gap-1 text-left text-gray-400">
+                  {(['shield', 'clear', 'brake'] as const).map((t) => (
+                    <div key={t}>
+                      <span className="mr-1">{ITEM_META[t].icon}</span>
+                      <span className="text-gray-300 font-bold">{ITEM_META[t].name}</span>
+                      <span className="text-gray-500"> … {ITEM_META[t].desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
