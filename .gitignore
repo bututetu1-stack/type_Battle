@@ -3,6 +3,11 @@ dist
 dist-ssr
 *.local
 
+# 環境変数（Firebase 設定など。.env.example のみコミット）
+.env
+.env.*
+!.env.example
+
 # logs
 npm-debug.log*
 yarn-debug.log*
