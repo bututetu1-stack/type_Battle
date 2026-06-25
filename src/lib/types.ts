@@ -12,12 +12,13 @@ export interface Token {
 
 export interface Word {
   id: string;
-  text: string;
+  display: string; // 表示テキスト（漢字交じり）
+  reading: string; // 読み（かな）。判定・トークン化の元
   type: WordType;
   tokens: Token[];
 }
 
-// 周囲のダミープレイヤー（ミニボード）。
+// ダミープレイヤー（ソロ）の盤面。
 export interface Dummy {
   id: number;
   height: number;
@@ -26,3 +27,6 @@ export interface Dummy {
 
 // お宝単語クリアで獲得できるアイテム種別。
 export type ItemType = 'shield' | 'clear' | 'brake';
+
+// 攻撃ターゲティング（仕様 §3.4）。
+export type TargetMode = 'random' | 'finish' | 'counter' | 'strong';

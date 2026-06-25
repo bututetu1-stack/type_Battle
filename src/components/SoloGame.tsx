@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause, ArrowLeft } from 'lucide-react';
+import { Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause, ArrowLeft, Volume2, VolumeX } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
+import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
 import type { Dummy, GameStatus, ItemType } from '../lib/types';
 import MiniBoard from './MiniBoard';
+import CurrentWord from './CurrentWord';
+import AttackGauge from './AttackGauge';
 
 // --- 定数 ---
 const MAX_BACKLOG = 12;
@@ -39,6 +42,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [missFlash, setMissFlash] = useState(false);
   const [itemFlash, setItemFlash] = useState(false);
   const [attackFlash, setAttackFlash] = useState(0);
+  const [muted, setMuted] = useState(false);
 
   const [dummies, setDummies] = useState<Dummy[]>(
     Array.from({ length: DUMMY_COUNT }).map((_, i) => ({ id: i, height: 0, isKO: false })),
@@ -74,29 +78,41 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         d.id === target.id ? (willKO ? { ...d, height: 0, isKO: true } : { ...d, height: d.height + amount }) : d,
       ),
     );
-    if (willKO) setPlayerKOs((k) => k + 1);
+    if (willKO) {
+      setPlayerKOs((k) => k + 1);
+      sfx.ko();
+    }
+    sfx.attack();
     setAttackFlash(amount);
     setTimeout(() => setAttackFlash(0), 600);
   }, []);
 
-  const grantItem = useCallback(() => {
-    const rng = itemRngRef.current;
-    const items: ItemType[] = ['shield', 'clear', 'brake'];
-    const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
-    setHeldItem(pick);
-    setItemFlash(true);
-    setTimeout(() => setItemFlash(false), 1000);
-  }, []);
-
-  const useItem = useCallback(() => {
-    const item = heldItemRef.current;
-    if (!item) return;
+  // アイテムの効果を適用（所持状態のクリアは行わない）。
+  const applyItem = useCallback((item: ItemType) => {
     if (item === 'shield') shieldRef.current = true;
     else if (item === 'brake') brakeUntilRef.current = Date.now() + BRAKE_DURATION;
     else if (item === 'clear')
       setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1).filter((w) => w.type !== 'ojama')]));
-    setHeldItem(null);
   }, []);
+
+  const grantItem = useCallback(() => {
+    // 既にアイテムを持っていたら自動発動してから新規をスタックする。
+    if (heldItemRef.current) applyItem(heldItemRef.current);
+    const rng = itemRngRef.current;
+    const items: ItemType[] = ['shield', 'clear', 'brake'];
+    const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
+    setHeldItem(pick);
+    sfx.item();
+    setItemFlash(true);
+    setTimeout(() => setItemFlash(false), 1000);
+  }, [applyItem]);
+
+  const useItem = useCallback(() => {
+    const item = heldItemRef.current;
+    if (!item) return;
+    applyItem(item);
+    setHeldItem(null);
+  }, [applyItem]);
 
   const startGame = useCallback(() => {
     const newSeed = randomSeed();
@@ -120,13 +136,18 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setSpawnInterval(INITIAL_SPAWN_INTERVAL);
     setGameState('playing');
     setDummies((prev) => prev.map((d) => ({ ...d, height: Math.floor(Math.random() * 5), isKO: false })));
+    sfx.start();
   }, []);
 
-  const gameOver = useCallback(() => setGameState('gameover'), []);
+  const gameOver = useCallback(() => {
+    setGameState('gameover');
+    sfx.gameover();
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const { gameState } = stateRef.current;
+      resumeAudio();
       if ((gameState === 'start' || gameState === 'gameover') && e.key === ' ') {
         e.preventDefault();
         startGame();
@@ -145,6 +166,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       if (result.miss) {
         setCombo(0);
         setMissFlash(true);
+        sfx.miss();
         setTimeout(() => setMissFlash(false), 150);
       } else if (result.wordCleared && result.nextState) {
         const newCombo = result.nextState.combo;
@@ -155,12 +177,14 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setMaxCombo((m) => Math.max(m, newCombo));
         setKeysTyped((prev) => prev + 1);
         setScore((s) => s + 100 + newCombo * 10);
+        sfx.clear();
         if (newCombo >= 5 && newCombo % 5 === 0) fireAttack(newCombo / 5);
         if (result.clearedType === 'treasure') grantItem();
       } else if (result.nextState) {
         setTokenIndex(result.nextState.tokenIndex);
         setCurrentTyping(result.nextState.currentTyping);
         setKeysTyped((prev) => prev + 1);
+        sfx.type();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -229,44 +253,12 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               : 'border-blue-500/30 bg-gray-800/80'
         }`}
       >
-        <div className="flex justify-center items-center text-4xl md:text-5xl font-bold tracking-widest mb-4">
-          {word.tokens.map((t, i) => {
-            let colorClass = 'text-gray-400';
-            if (i < tokenIndex) colorClass = 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]';
-            if (i === tokenIndex) colorClass = isOjama ? 'text-red-400' : isTreasure ? 'text-yellow-400' : 'text-cyan-400';
-            return (
-              <span key={i} className={`${colorClass} transition-colors duration-100`}>
-                {t.kana}
-              </span>
-            );
-          })}
-        </div>
-        <div className="flex justify-center items-center text-xl md:text-2xl font-mono tracking-[0.2em]">
-          {word.tokens.map((t, i) => {
-            if (i < tokenIndex)
-              return (
-                <span key={i} className="text-gray-600">
-                  {''.padEnd(t.romaji[0].length, '-')}
-                </span>
-              );
-            if (i === tokenIndex) {
-              const typed = currentTyping;
-              const target = t.romaji.find((r) => r.startsWith(typed)) || t.romaji[0];
-              const remain = target.slice(typed.length);
-              return (
-                <span key={i} className="flex">
-                  <span className="text-cyan-300">{typed}</span>
-                  <span className="text-gray-400 opacity-70">{remain}</span>
-                </span>
-              );
-            }
-            return (
-              <span key={i} className="text-gray-500 opacity-50">
-                {t.romaji[0]}
-              </span>
-            );
-          })}
-        </div>
+        <CurrentWord
+          word={word}
+          tokenIndex={tokenIndex}
+          currentTyping={currentTyping}
+          accent={isOjama ? 'text-red-400' : isTreasure ? 'text-yellow-400' : 'text-cyan-400'}
+        />
       </div>
     );
   };
@@ -310,6 +302,17 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           <Hud label="KPM" value={calculateKPM()} />
           <Hud label="K.O." value={playerKOs} icon={<Trophy className="w-4 h-4 text-yellow-500" />} />
           <Hud label="BADGE" value={Math.min(playerKOs, 4)} icon={<Shield className="w-4 h-4 text-blue-400" />} />
+          <button
+            onClick={() => {
+              const next = !muted;
+              setMuted(next);
+              setSfxEnabled(!next);
+            }}
+            className="text-gray-500 hover:text-gray-300 self-center"
+            title={muted ? '効果音オン' : '効果音オフ'}
+          >
+            {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+          </button>
         </div>
       </header>
 
@@ -378,7 +381,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                             : 'bg-neutral-800 text-gray-400'
                       }`}
                     >
-                      <span>{word.text}</span>
+                      <span>{word.display}</span>
                       {word.type === 'ojama' && <AlertTriangle className="w-4 h-4" />}
                       {word.type === 'treasure' && <Sparkles className="w-4 h-4" />}
                     </div>
@@ -396,6 +399,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   }`}
                 />
               ))}
+            </div>
+
+            <div className="mt-3">
+              <AttackGauge combo={combo} pinch={isDanger} badges={Math.min(playerKOs, 4)} />
             </div>
           </div>
 

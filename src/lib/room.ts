@@ -34,6 +34,7 @@ export interface RoomPlayer {
   kpm: number;
   badges: number;
   rank: number; // 脱落時に確定（0=未確定）
+  koBy: string; // 自分にトドメを刺した相手の uid（KOクレジット用）
   connected: boolean;
   lastSeen: number;
   joinedAt: number;
@@ -75,6 +76,7 @@ function newPlayer(name: string, host: boolean): RoomPlayer {
     kpm: 0,
     badges: 0,
     rank: 0,
+    koBy: '',
     connected: true,
     lastSeen: Date.now(),
     joinedAt: Date.now(),
@@ -137,7 +139,7 @@ export function subscribeRoom(roomId: string, cb: (snap: RoomSnapshot) => void):
 export function writePlayerSummary(
   roomId: string,
   uid: string,
-  summary: Partial<Pick<RoomPlayer, 'backlog' | 'combo' | 'kpm' | 'badges' | 'alive' | 'rank'>>,
+  summary: Partial<Pick<RoomPlayer, 'backlog' | 'combo' | 'kpm' | 'badges' | 'alive' | 'rank' | 'koBy'>>,
 ): void {
   update(ref(db, `rooms/${roomId}/players/${uid}`), { ...summary, lastSeen: Date.now() }).catch(() => {});
 }
@@ -153,6 +155,18 @@ export async function startGame(roomId: string): Promise<void> {
 // 決着: ホストが finished へ遷移。
 export async function finishGame(roomId: string): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { status: 'finished' });
+}
+
+// 再戦: ホストが部屋を解散せず待機状態へ戻す（新しいシードで仕切り直し）。
+// 各プレイヤーの alive/rank などは次のゲーム開始時に各自リセットする。
+export async function resetRoom(roomId: string): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), {
+    status: 'waiting',
+    startAt: 0,
+    seed: randomSeed(),
+  });
+  // 古い攻撃キューを掃除。
+  await remove(ref(db, `rooms/${roomId}/attacks`)).catch(() => {});
 }
 
 // --- 攻撃（おじゃま送受信 / Phase 2）---
