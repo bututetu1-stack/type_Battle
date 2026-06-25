@@ -42,6 +42,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [missFlash, setMissFlash] = useState(false);
   const [itemFlash, setItemFlash] = useState(false);
   const [attackFlash, setAttackFlash] = useState(0);
+  const [hitDummy, setHitDummy] = useState<number | null>(null);
   const [muted, setMuted] = useState(false);
 
   const [dummies, setDummies] = useState<Dummy[]>(
@@ -84,7 +85,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     }
     sfx.attack();
     setAttackFlash(amount);
+    setHitDummy(target.id);
     setTimeout(() => setAttackFlash(0), 600);
+    setTimeout(() => setHitDummy((cur) => (cur === target.id ? null : cur)), 600);
   }, []);
 
   // アイテムの効果を適用（所持状態のクリアは行わない）。
@@ -319,7 +322,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       <main className="flex-1 flex w-full max-w-7xl mx-auto p-4 gap-4 h-[calc(100vh-4rem)]">
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
           {dummies.slice(0, 10).map((d) => (
-            <MiniBoard key={d.id} height={d.height} max={MAX_BACKLOG} isKO={d.isKO} />
+            <MiniBoard key={d.id} height={d.height} max={MAX_BACKLOG} isKO={d.isKO} hit={hitDummy === d.id} />
           ))}
         </div>
 
@@ -455,7 +458,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
           {dummies.slice(10, 20).map((d) => (
-            <MiniBoard key={d.id} height={d.height} max={MAX_BACKLOG} isKO={d.isKO} />
+            <MiniBoard key={d.id} height={d.height} max={MAX_BACKLOG} isKO={d.isKO} hit={hitDummy === d.id} />
           ))}
         </div>
       </main>

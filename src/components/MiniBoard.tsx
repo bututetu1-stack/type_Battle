@@ -5,10 +5,11 @@ interface MiniBoardProps {
   name?: string;
   combo?: number;
   highlight?: boolean; // 自分自身を強調
+  hit?: boolean; // 直近に自分が攻撃した対象
 }
 
 // 周囲プレイヤー（または solo のダミー）を表す小さな盤面ゲージ。
-export default function MiniBoard({ height, max, isKO, name, combo, highlight }: MiniBoardProps) {
+export default function MiniBoard({ height, max, isKO, name, combo, highlight, hit }: MiniBoardProps) {
   if (isKO) {
     return (
       <div className="aspect-[3/4] bg-neutral-900/40 rounded-md border border-neutral-800 flex flex-col items-center justify-center relative overflow-hidden">
@@ -23,12 +24,14 @@ export default function MiniBoard({ height, max, isKO, name, combo, highlight }:
 
   return (
     <div
-      className={`aspect-[3/4] rounded-md border p-1 flex flex-col justify-end transition-colors duration-500 relative ${
-        highlight
-          ? 'border-cyan-500/70 bg-cyan-950/20'
-          : dangerLevel > 0.7
-            ? 'bg-red-950/20 border-red-900/50'
-            : 'bg-neutral-900/50 border-neutral-800'
+      className={`aspect-[3/4] rounded-md border p-1 flex flex-col justify-end transition-all duration-200 relative ${
+        hit
+          ? 'border-orange-400 ring-2 ring-orange-400/80 bg-orange-950/30 scale-105 shadow-lg shadow-orange-500/30'
+          : highlight
+            ? 'border-cyan-500/70 bg-cyan-950/20'
+            : dangerLevel > 0.7
+              ? 'bg-red-950/20 border-red-900/50'
+              : 'bg-neutral-900/50 border-neutral-800'
       }`}
     >
       <div className="w-full flex gap-[1px] h-full items-end opacity-60">

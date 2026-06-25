@@ -73,11 +73,22 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [spawnInterval, setSpawnInterval] = useState(INITIAL_SPAWN_INTERVAL);
   const [missFlash, setMissFlash] = useState(false);
   const [pending, setPending] = useState<Telegraph[]>([]);
-  const [attackFlash, setAttackFlash] = useState(0);
+  const [attackFlash, setAttackFlash] = useState<{ amount: number; name: string } | null>(null);
   const [heldItem, setHeldItem] = useState<ItemType | null>(null);
   const [itemFlash, setItemFlash] = useState(false);
   const [targetMode, setTargetMode] = useState<TargetMode>('random');
   const [muted, setMuted] = useState(false);
+  // エフェクト用
+  const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number }[]>([]);
+  const [hitId, setHitId] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<{ id: number; text: string; kind: 'ko' | 'in' }[]>([]);
+  const [shake, setShake] = useState(false);
+
+  const centerRef = useRef<HTMLDivElement>(null);
+  const boardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const beamIdRef = useRef(0);
+  const toastIdRef = useRef(0);
+  const prevPlayersRef = useRef(players);
 
   const startTimeRef = useRef(0);
   const wordRngRef = useRef<RNG | null>(null);
@@ -94,6 +105,28 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const updatePending = useCallback((next: Telegraph[]) => {
     pendingRef.current = next;
     setPending(next);
+  }, []);
+
+  const pushToast = useCallback((text: string, kind: 'ko' | 'in') => {
+    const id = toastIdRef.current++;
+    setToasts((t) => [...t, { id, text, kind }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 1700);
+  }, []);
+
+  // 自分のボードから対象ミニボードへ攻撃ビームを描く。
+  const fireBeam = useCallback((targetId: string) => {
+    const from = centerRef.current?.getBoundingClientRect();
+    const to = boardRefs.current[targetId]?.getBoundingClientRect();
+    setHitId(targetId);
+    setTimeout(() => setHitId((cur) => (cur === targetId ? null : cur)), 650);
+    if (!from || !to) return;
+    const x1 = from.left + from.width / 2;
+    const y1 = from.top + from.height * 0.35;
+    const x2 = to.left + to.width / 2;
+    const y2 = to.top + to.height / 2;
+    const id = beamIdRef.current++;
+    setBeams((b) => [...b, { id, x1, y1, x2, y2 }]);
+    setTimeout(() => setBeams((b) => b.filter((x) => x.id !== id)), 700);
   }, []);
 
   useEffect(() => {
@@ -156,8 +189,28 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     setRank(myRank);
     setSelfAlive(false);
     sfx.gameover();
+    setShake(true);
+    setTimeout(() => setShake(false), 500);
     writePlayerSummary(roomId, uid, { alive: false, rank: myRank, backlog: MAX_BACKLOG, koBy: lastAttackerRef.current });
   }, [roomId, uid]);
+
+  // 他プレイヤーの脱落を検知してトースト表示（自分の撃破なら強調）。
+  useEffect(() => {
+    const prev = prevPlayersRef.current;
+    for (const [id, p] of Object.entries(players)) {
+      if (id === uid) continue;
+      const wasLive = prev[id] && prev[id].alive && prev[id].connected !== false;
+      if (wasLive && !isLive(p)) {
+        if (p.koBy === uid) {
+          pushToast(`${p.name} を撃破！`, 'ko');
+          sfx.ko();
+        } else {
+          pushToast(`${p.name} 脱落`, 'in');
+        }
+      }
+    }
+    prevPlayersRef.current = players;
+  }, [players, uid, pushToast]);
 
   // ターゲット選択（4モード / 仕様 §3.4）。
   const pickTarget = useCallback(() => {
@@ -197,15 +250,24 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       updatePending(sorted.filter((e) => e.amount > 0));
 
       sfx.attack();
-      setAttackFlash(amount);
-      setTimeout(() => setAttackFlash(0), 600);
 
       if (remaining > 0) {
         const targetId = pickTarget();
-        if (targetId) sendAttack(roomId, targetId, uid, remaining);
+        if (targetId) {
+          const targetName = playersRef.current[targetId]?.name || '相手';
+          sendAttack(roomId, targetId, uid, remaining);
+          fireBeam(targetId);
+          setAttackFlash({ amount: remaining, name: targetName });
+        } else {
+          setAttackFlash({ amount: remaining, name: '' });
+        }
+      } else {
+        // 相殺しきった
+        setAttackFlash({ amount: 0, name: '相殺！' });
       }
+      setTimeout(() => setAttackFlash(null), 700);
     },
-    [roomId, uid, updatePending, pickTarget],
+    [roomId, uid, updatePending, pickTarget, fireBeam],
   );
 
   // アイテム効果適用（所持状態のクリアは行わない）。
@@ -246,10 +308,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     if (!started) return;
     const unsub = subscribeAttacks(roomId, uid, (ev) => {
       if (ev.from) lastAttackerRef.current = ev.from;
+      const fromName = playersRef.current[ev.from]?.name || '相手';
+      pushToast(`${fromName} から +${ev.amount}`, 'in');
       updatePending([...pendingRef.current, { id: ev.id, amount: ev.amount, confirmAt: Date.now() + TELEGRAPH_DELAY }]);
     });
     return () => unsub();
-  }, [started, roomId, uid, updatePending]);
+  }, [started, roomId, uid, updatePending, pushToast]);
 
   // 予告ゲージの確定処理。
   useEffect(() => {
@@ -422,13 +486,50 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const word = backlog[0];
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col">
+    <div className={`min-h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col ${shake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
 
-      {attackFlash > 0 && (
+      {/* 攻撃ビーム（自分→対象ミニボード） */}
+      {beams.length > 0 && (
+        <svg className="fixed inset-0 w-full h-full pointer-events-none z-40">
+          {beams.map((b) => (
+            <g key={b.id} className="attack-beam">
+              <line x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} stroke="#fb923c" strokeWidth={3} strokeLinecap="round" />
+              <circle cx={b.x2} cy={b.y2} r={12} fill="none" stroke="#fb923c" strokeWidth={3} />
+              <circle cx={b.x1} cy={b.y1} r={4} fill="#fb923c" />
+            </g>
+          ))}
+        </svg>
+      )}
+
+      {/* 通知トースト（被弾・撃破・脱落） */}
+      <div className="fixed top-20 right-4 z-50 flex flex-col gap-1 items-end pointer-events-none">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={`px-3 py-1.5 rounded-lg text-sm font-bold shadow-lg animate-in slide-in-from-right-4 fade-in duration-200 ${
+              t.kind === 'ko' ? 'bg-orange-600/90 text-white' : 'bg-red-950/90 text-red-200 border border-red-500/40'
+            }`}
+          >
+            {t.kind === 'ko' ? '🏆 ' : '⚠ '}
+            {t.text}
+          </div>
+        ))}
+      </div>
+
+      {attackFlash && (
         <div className="fixed top-1/3 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <div className="text-4xl font-black italic text-orange-400 drop-shadow-[0_0_15px_rgba(251,146,60,0.8)] flex items-center gap-2">
-            <Swords className="w-9 h-9" /> ATTACK ×{attackFlash}!
+          <div className="text-4xl font-black italic text-orange-400 drop-shadow-[0_0_15px_rgba(251,146,60,0.8)] flex flex-col items-center gap-1">
+            {attackFlash.amount > 0 ? (
+              <span className="flex items-center gap-2">
+                <Swords className="w-9 h-9" /> ATTACK ×{attackFlash.amount}!
+              </span>
+            ) : (
+              <span className="text-cyan-300 text-3xl">相殺！</span>
+            )}
+            {attackFlash.name && attackFlash.amount > 0 && (
+              <span className="text-base text-orange-200 not-italic">→ {attackFlash.name}</span>
+            )}
           </div>
         </div>
       )}
@@ -488,11 +589,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       <main className="flex-1 flex w-full max-w-7xl mx-auto p-4 gap-4 h-[calc(100vh-4rem)]">
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
           {others.slice(0, Math.ceil(others.length / 2)).map(([id, p]) => (
-            <MiniBoard key={id} height={p.backlog} max={MAX_BACKLOG} isKO={!isLive(p)} name={p.name} combo={p.combo} />
+            <div key={id} ref={(el) => { boardRefs.current[id] = el; }}>
+              <MiniBoard height={p.backlog} max={MAX_BACKLOG} isKO={!isLive(p)} name={p.name} combo={p.combo} hit={hitId === id} />
+            </div>
           ))}
         </div>
 
-        <div className="w-2/4 flex flex-col h-full relative">
+        <div ref={centerRef} className="w-2/4 flex flex-col h-full relative">
           {isDanger && selfAlive && started && (
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}
@@ -612,10 +715,29 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
           {others.slice(Math.ceil(others.length / 2)).map(([id, p]) => (
-            <MiniBoard key={id} height={p.backlog} max={MAX_BACKLOG} isKO={!isLive(p)} name={p.name} combo={p.combo} />
+            <div key={id} ref={(el) => { boardRefs.current[id] = el; }}>
+              <MiniBoard height={p.backlog} max={MAX_BACKLOG} isKO={!isLive(p)} name={p.name} combo={p.combo} hit={hitId === id} />
+            </div>
           ))}
         </div>
       </main>
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        @keyframes beamFade { 0% { opacity: 0; } 12% { opacity: 1; } 100% { opacity: 0; } }
+        .attack-beam { animation: beamFade 0.7s ease-out forwards; }
+        @keyframes screenShake {
+          0%, 100% { transform: translate(0, 0); }
+          20% { transform: translate(-5px, 3px); }
+          40% { transform: translate(5px, -3px); }
+          60% { transform: translate(-4px, -2px); }
+          80% { transform: translate(4px, 2px); }
+        }
+        .screen-shake { animation: screenShake 0.45s ease-in-out; }
+      `,
+        }}
+      />
     </div>
   );
 }
