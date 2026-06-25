@@ -31,7 +31,9 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   clear: { name: 'おじゃま一掃', desc: 'バックログのおじゃまを消す' },
   brake: { name: 'ブレーキ', desc: '自動供給を5秒間ストップ' },
   longbomb: { name: 'ロング送信', desc: '相手に長い単語を送りつける' },
+  rapid: { name: '連射', desc: '8秒間 1連鎖ごとに1攻撃' },
 };
+const RAPID_DURATION = 8000;
 
 const TARGET_MODES: { mode: TargetMode; label: string }[] = [
   { mode: 'random', label: 'ランダム' },
@@ -82,6 +84,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [itemFlash, setItemFlash] = useState(false);
   const [targetMode, setTargetMode] = useState<TargetMode>('random');
   const [muted, setMuted] = useState(false);
+  const [rapidActive, setRapidActive] = useState(false);
   // エフェクト用
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number }[]>([]);
   const [hitId, setHitId] = useState<string | null>(null);
@@ -105,6 +108,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const lastAttackerRef = useRef('');
   const shieldRef = useRef(false);
   const brakeUntilRef = useRef(0);
+  const rapidUntilRef = useRef(0);
   const categoryRef = useRef(category);
   useEffect(() => {
     categoryRef.current = category;
@@ -239,18 +243,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     return alive[Math.floor(Math.random() * alive.length)][0];
   }, [uid]);
 
-  const launchAttack = useCallback(
-    (comboVal: number) => {
-      let amount = Math.floor(comboVal / 5);
+  // 指定量を送る共通処理: 受信予告と相殺 → 余剰を相手へ。
+  const sendAmount = useCallback(
+    (amount: number) => {
       if (amount <= 0) return;
-      if (stateRef.current.backlog.length / MAX_BACKLOG >= PINCH_RATIO) amount = Math.round(amount * PINCH_MULT);
-      // バッジ倍率（仕様 §3.5）
-      const badges = Object.values(playersRef.current).filter((p) => p.koBy === uid).length;
-      amount = Math.round(amount * (1 + 0.25 * Math.min(badges, 4)));
-      // 1回の攻撃量に上限を設け、長い連鎖でも一撃必殺にならないようにする。
-      amount = Math.min(amount, ATTACK_CAP);
-
-      // 受信予告と 1:1 相殺
       let remaining = amount;
       const sorted = [...pendingRef.current].sort((a, b) => a.confirmAt - b.confirmAt);
       for (const e of sorted) {
@@ -260,9 +256,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         remaining -= cut;
       }
       updatePending(sorted.filter((e) => e.amount > 0));
-
       sfx.attack();
-
       if (remaining > 0) {
         const targetId = pickTarget();
         if (targetId) {
@@ -274,12 +268,25 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           setAttackFlash({ amount: remaining, name: '' });
         }
       } else {
-        // 相殺しきった
         setAttackFlash({ amount: 0, name: '相殺！' });
       }
       setTimeout(() => setAttackFlash(null), 700);
     },
     [roomId, uid, updatePending, pickTarget, fireBeam],
+  );
+
+  // 連鎖マイルストーン攻撃: 倍率・上限を適用して送信。
+  const launchAttack = useCallback(
+    (comboVal: number) => {
+      let amount = Math.floor(comboVal / 5);
+      if (amount <= 0) return;
+      if (stateRef.current.backlog.length / MAX_BACKLOG >= PINCH_RATIO) amount = Math.round(amount * PINCH_MULT);
+      const badges = Object.values(playersRef.current).filter((p) => p.koBy === uid).length;
+      amount = Math.round(amount * (1 + 0.25 * Math.min(badges, 4)));
+      amount = Math.min(amount, ATTACK_CAP);
+      sendAmount(amount);
+    },
+    [uid, sendAmount],
   );
 
   // アイテム効果適用（所持状態のクリアは行わない）。
@@ -301,6 +308,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           setTimeout(() => setAttackFlash(null), 800);
           sfx.attack();
         }
+      } else if (item === 'rapid') {
+        rapidUntilRef.current = Date.now() + RAPID_DURATION;
+        setRapidActive(true);
+        setTimeout(() => setRapidActive(false), RAPID_DURATION);
       }
     },
     [pickTarget, fireBeam, roomId, uid],
@@ -309,7 +320,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const grantItem = useCallback(() => {
     if (heldItemRef.current) applyItem(heldItemRef.current); // 既存を自動発動してスタック
     const rng = itemRngRef.current;
-    const items: ItemType[] = ['shield', 'clear', 'brake', 'longbomb'];
+    const items: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid'];
     const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
     setHeldItem(pick);
     sfx.item();
@@ -400,6 +411,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         setKeysTyped((k) => k + 1);
         sfx.clear();
         if (newCombo >= 5 && newCombo % 5 === 0) launchAttack(newCombo);
+        if (Date.now() < rapidUntilRef.current) sendAmount(1); // 連射: 1連鎖ごとに1攻撃
         if (result.clearedType === 'treasure') grantItem();
       } else if (result.nextState) {
         setTokenIndex(result.nextState.tokenIndex);
@@ -410,7 +422,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [started, launchAttack, useItem, grantItem, cycleTargetMode]);
+  }, [started, launchAttack, sendAmount, useItem, grantItem, cycleTargetMode]);
 
   // ベース供給＆加速ループ（シールド/ブレーキ対応）。
   useEffect(() => {
@@ -584,6 +596,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         <div className="fixed inset-0 bg-neutral-950/90 flex flex-col items-center justify-center z-50">
           <p className="text-gray-400 mb-2 tracking-widest">GET READY</p>
           <div className="text-8xl font-black text-cyan-400 animate-pulse">{countdown > 0 ? countdown : 'GO!'}</div>
+        </div>
+      )}
+
+      {rapidActive && (
+        <div className="fixed top-[7.5rem] left-1/2 -translate-x-1/2 z-40 bg-yellow-500/90 text-black text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse pointer-events-none">
+          <Zap className="w-4 h-4" /> 連射中！
         </div>
       )}
 
@@ -780,5 +798,6 @@ const ItemIcon = ({ type }: { type: ItemType }) => {
   if (type === 'shield') return <Shield className="w-5 h-5 text-blue-300" />;
   if (type === 'clear') return <Wind className="w-5 h-5 text-cyan-300" />;
   if (type === 'brake') return <Pause className="w-5 h-5 text-green-300" />;
-  return <Bomb className="w-5 h-5 text-red-300" />;
+  if (type === 'longbomb') return <Bomb className="w-5 h-5 text-red-300" />;
+  return <Zap className="w-5 h-5 text-yellow-300" />;
 };

@@ -12,21 +12,22 @@ import AttackGauge from './AttackGauge';
 // --- 定数 ---
 const MAX_BACKLOG = 12;
 const INITIAL_SPAWN_INTERVAL = 4000;
-const SHORT_SPAWN_INTERVAL = 2000; // ショートモードの初期供給間隔
 const MIN_SPAWN_INTERVAL = 1000;
+const DEFAULT_ACCEL = 0.98; // 1供給ごとの間隔倍率
 const DUMMY_COUNT = 20;
 const BRAKE_DURATION = 5000;
 const ATTACK_CAP = 5; // 1回の攻撃量の上限（即死コンボ防止）
+const RAPID_DURATION = 8000; // 連射アイテムの効果時間
 
 const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> = {
   shield: { name: 'シールド', icon: '🛡', desc: '次の自動供給を1回無効化' },
   clear: { name: 'おじゃま一掃', icon: '🌀', desc: 'バックログのおじゃまを消す' },
   brake: { name: 'ブレーキ', icon: '⏸', desc: '自動供給を5秒間ストップ' },
   longbomb: { name: 'ロング送信', icon: '📨', desc: '敵に長い単語(大ダメージ)を送る' },
+  rapid: { name: '連射', icon: '⚡', desc: '8秒間 1連鎖ごとに1攻撃' },
 };
 
-export default function SoloGame({ onExit, fast = false }: { onExit: () => void; fast?: boolean }) {
-  const baseInterval = fast ? SHORT_SPAWN_INTERVAL : INITIAL_SPAWN_INTERVAL;
+export default function SoloGame({ onExit, custom = false }: { onExit: () => void; custom?: boolean }) {
   const [gameState, setGameState] = useState<GameStatus>('start');
 
   const [backlog, setBacklog] = useState<PlayerState['backlog']>([]);
@@ -49,6 +50,14 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
   const [hitDummy, setHitDummy] = useState<number | null>(null);
   const [muted, setMuted] = useState(false);
   const [theme, setTheme] = useState('all');
+  const [rapidActive, setRapidActive] = useState(false);
+  // カスタムモードの設定
+  const [cfgInitial, setCfgInitial] = useState(INITIAL_SPAWN_INTERVAL);
+  const [cfgMin, setCfgMin] = useState(MIN_SPAWN_INTERVAL);
+  const [cfgAccel, setCfgAccel] = useState(DEFAULT_ACCEL);
+  const accelRef = useRef(DEFAULT_ACCEL);
+  const minRef = useRef(MIN_SPAWN_INTERVAL);
+  const rapidUntilRef = useRef(0);
   const themeRef = useRef(theme);
   useEffect(() => {
     themeRef.current = theme;
@@ -107,6 +116,11 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
       else if (item === 'clear')
         setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1).filter((w) => w.type !== 'ojama')]));
       else if (item === 'longbomb') fireAttack(6); // ソロでは敵ダミーへの大ダメージ攻撃
+      else if (item === 'rapid') {
+        rapidUntilRef.current = Date.now() + RAPID_DURATION;
+        setRapidActive(true);
+        setTimeout(() => setRapidActive(false), RAPID_DURATION);
+      }
     },
     [fireAttack],
   );
@@ -115,7 +129,7 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
     // 既にアイテムを持っていたら自動発動してから新規をスタックする。
     if (heldItemRef.current) applyItem(heldItemRef.current);
     const rng = itemRngRef.current;
-    const items: ItemType[] = ['shield', 'clear', 'brake', 'longbomb'];
+    const items: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid'];
     const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
     setHeldItem(pick);
     sfx.item();
@@ -151,11 +165,15 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
     setPlayerKOs(0);
     setHeldItem(null);
     setStartTime(Date.now());
-    setSpawnInterval(baseInterval);
+    accelRef.current = custom ? cfgAccel : DEFAULT_ACCEL;
+    minRef.current = custom ? cfgMin : MIN_SPAWN_INTERVAL;
+    rapidUntilRef.current = 0;
+    setRapidActive(false);
+    setSpawnInterval(custom ? cfgInitial : INITIAL_SPAWN_INTERVAL);
     setGameState('playing');
     setDummies((prev) => prev.map((d) => ({ ...d, height: Math.floor(Math.random() * 5), isKO: false })));
     sfx.start();
-  }, [baseInterval]);
+  }, [custom, cfgInitial, cfgMin, cfgAccel]);
 
   const gameOver = useCallback(() => {
     setGameState('gameover');
@@ -197,6 +215,7 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
         setScore((s) => s + 100 + newCombo * 10);
         sfx.clear();
         if (newCombo >= 5 && newCombo % 5 === 0) fireAttack(Math.min(newCombo / 5, ATTACK_CAP));
+        if (Date.now() < rapidUntilRef.current) fireAttack(1); // 連射: 1連鎖ごとに1攻撃
         if (result.clearedType === 'treasure') grantItem();
       } else if (result.nextState) {
         setTokenIndex(result.nextState.tokenIndex);
@@ -257,7 +276,7 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
           return rng ? [...prev, generateWord(rng, themeRef.current)] : prev;
         });
       }
-      setSpawnInterval((prev) => Math.max(MIN_SPAWN_INTERVAL, prev * 0.98));
+      setSpawnInterval((prev) => Math.max(minRef.current, prev * accelRef.current));
       timerId = setTimeout(loop, spawnInterval);
     };
     timerId = setTimeout(loop, spawnInterval);
@@ -326,7 +345,7 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
           </button>
           <Swords className="text-cyan-400" />
           <h1 className="text-xl font-bold tracking-widest text-gray-200">
-            TYPE ROYALE<span className="text-xs ml-2 text-gray-500">{fast ? 'SHORT' : 'SOLO'}</span>
+            TYPE ROYALE<span className="text-xs ml-2 text-gray-500">{custom ? 'CUSTOM' : 'SOLO'}</span>
           </h1>
         </div>
         <div className="flex gap-6 md:gap-8">
@@ -361,6 +380,11 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
           )}
 
           <div className="flex-1 flex flex-col items-center justify-end pb-8 relative z-10">
+            {rapidActive && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-yellow-500/90 text-black text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
+                <Zap className="w-4 h-4" /> 連射中！
+              </div>
+            )}
             {gameState === 'playing' && (
               <div className="absolute top-2 right-0 text-right">
                 <div className="text-xs text-gray-500">ALIVE</div>
@@ -440,6 +464,52 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
               <h2 className="text-4xl font-black tracking-widest mb-2 text-white">TYPE ROYALE</h2>
               <p className="text-gray-400 mb-6 font-mono">Press [SPACE] to Start</p>
 
+              {/* カスタムモードの設定 */}
+              {custom && (
+                <div className="mb-6 w-full max-w-sm bg-neutral-900/60 border border-amber-700/40 rounded-xl p-4">
+                  <div className="text-xs text-amber-300 font-bold mb-3 flex items-center gap-1">
+                    <Zap className="w-3.5 h-3.5" /> カスタム設定
+                  </div>
+                  <label className="block text-[11px] text-gray-400 mb-3">
+                    初期供給間隔: <span className="text-cyan-300 font-mono">{(cfgInitial / 1000).toFixed(1)}秒</span>
+                    <input
+                      type="range"
+                      min={500}
+                      max={6000}
+                      step={100}
+                      value={cfgInitial}
+                      onChange={(e) => setCfgInitial(Number(e.target.value))}
+                      className="w-full accent-cyan-500"
+                    />
+                  </label>
+                  <label className="block text-[11px] text-gray-400 mb-3">
+                    最短間隔: <span className="text-cyan-300 font-mono">{(cfgMin / 1000).toFixed(1)}秒</span>
+                    <input
+                      type="range"
+                      min={300}
+                      max={3000}
+                      step={100}
+                      value={cfgMin}
+                      onChange={(e) => setCfgMin(Number(e.target.value))}
+                      className="w-full accent-cyan-500"
+                    />
+                  </label>
+                  <label className="block text-[11px] text-gray-400">
+                    加速の強さ: <span className="text-cyan-300 font-mono">×{cfgAccel.toFixed(2)}</span>
+                    <span className="text-gray-600"> （小さいほど速く加速 / 1.00で加速なし）</span>
+                    <input
+                      type="range"
+                      min={0.9}
+                      max={1.0}
+                      step={0.01}
+                      value={cfgAccel}
+                      onChange={(e) => setCfgAccel(Number(e.target.value))}
+                      className="w-full accent-cyan-500"
+                    />
+                  </label>
+                </div>
+              )}
+
               {/* 出題テーマ選択 */}
               <div className="mb-6 w-full max-w-sm">
                 <div className="text-xs text-gray-500 mb-1.5 text-center">出題テーマ</div>
@@ -471,7 +541,7 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
                   <Sparkles className="w-3 h-3 text-yellow-400" /> アイテム効果（お宝🟨で入手 → [Enter]で使用）
                 </div>
                 <div className="flex flex-col gap-1 text-left text-gray-400">
-                  {(['shield', 'clear', 'brake', 'longbomb'] as const).map((t) => (
+                  {(['shield', 'clear', 'brake', 'longbomb', 'rapid'] as const).map((t) => (
                     <div key={t}>
                       <span className="mr-1">{ITEM_META[t].icon}</span>
                       <span className="text-gray-300 font-bold">{ITEM_META[t].name}</span>
@@ -549,5 +619,6 @@ const ItemIcon = ({ type }: { type: ItemType }) => {
   if (type === 'shield') return <Shield className="w-5 h-5 text-blue-300" />;
   if (type === 'clear') return <Wind className="w-5 h-5 text-cyan-300" />;
   if (type === 'brake') return <Pause className="w-5 h-5 text-green-300" />;
-  return <Bomb className="w-5 h-5 text-red-300" />;
+  if (type === 'longbomb') return <Bomb className="w-5 h-5 text-red-300" />;
+  return <Zap className="w-5 h-5 text-yellow-300" />;
 };

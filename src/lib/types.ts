@@ -26,7 +26,7 @@ export interface Dummy {
 }
 
 // お宝単語クリアで獲得できるアイテム種別。
-export type ItemType = 'shield' | 'clear' | 'brake' | 'longbomb';
+export type ItemType = 'shield' | 'clear' | 'brake' | 'longbomb' | 'rapid';
 
 // 攻撃ターゲティング（仕様 §3.4）。
 export type TargetMode = 'random' | 'finish' | 'counter' | 'strong';

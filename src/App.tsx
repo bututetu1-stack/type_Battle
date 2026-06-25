@@ -13,7 +13,7 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [name, setName] = useState('');
   const [roomId, setRoomId] = useState<string | null>(null);
-  const [soloFast, setSoloFast] = useState(false);
+  const [soloCustom, setSoloCustom] = useState(false);
 
   // オンライン用に匿名サインイン（バックグラウンドで先行実行）。
   useEffect(() => {
@@ -23,7 +23,7 @@ export default function App() {
   }, []);
 
   if (view === 'solo') {
-    return <SoloGame fast={soloFast} onExit={() => setView('home')} />;
+    return <SoloGame custom={soloCustom} onExit={() => setView('home')} />;
   }
 
   if (view === 'lobby') {
@@ -65,7 +65,7 @@ export default function App() {
       <div className="flex flex-col gap-4 w-full max-w-xs">
         <button
           onClick={() => {
-            setSoloFast(false);
+            setSoloCustom(false);
             setView('solo');
           }}
           className="bg-neutral-800 hover:bg-neutral-700 rounded-xl px-6 py-4 font-bold flex items-center justify-center gap-3 transition-colors"
@@ -74,12 +74,12 @@ export default function App() {
         </button>
         <button
           onClick={() => {
-            setSoloFast(true);
+            setSoloCustom(true);
             setView('solo');
           }}
           className="bg-amber-700/80 hover:bg-amber-600 rounded-xl px-6 py-4 font-bold flex items-center justify-center gap-3 transition-colors"
         >
-          <Zap className="w-5 h-5" /> ショートモード <span className="text-xs text-amber-200/80">(高速)</span>
+          <Zap className="w-5 h-5" /> カスタムモード <span className="text-xs text-amber-200/80">(設定変更)</span>
         </button>
         <button
           onClick={() => setView('lobby')}
