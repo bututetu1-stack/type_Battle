@@ -452,11 +452,15 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   }, [started, roomId, uid]);
 
   // ホスト: 生存者が1人以下になったら決着へ。
+  // started（カウントダウン後）になってから判定する。開始直後は各自の alive 再設定が
+  // 伝播しておらず、判定すると即終了→再戦できない不具合になるため。
   useEffect(() => {
-    if (uid !== hostUid || status !== 'playing') return;
+    if (uid !== hostUid || status !== 'playing' || !started) return;
+    const total = Object.keys(players).length;
     const aliveCount = Object.values(players).filter(isLive).length;
-    if (aliveCount <= 1) finishGame(roomId);
-  }, [players, status, uid, hostUid, roomId]);
+    // 全滅(=1人プレイのトップアウト)か、2人以上で残り1人になったら決着。
+    if (aliveCount === 0 || (total >= 2 && aliveCount <= 1)) finishGame(roomId);
+  }, [players, status, uid, hostUid, roomId, started]);
 
   const others = Object.entries(players).filter(([id]) => id !== uid);
   const aliveCount = Object.values(players).filter(isLive).length;

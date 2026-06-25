@@ -36,23 +36,32 @@ export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 
         })}
       </div>
 
-      {/* ローマ字ガイド（寿司打方式: 入力したキーは1文字ずつ消える＝残りだけ表示） */}
-      <div className="flex justify-center items-center text-lg md:text-xl font-mono tracking-[0.2em] min-h-[1.6em]">
+      {/* ローマ字ガイド: 入力済みは薄く残し、次に打つ1文字だけを強調する */}
+      <div className="flex justify-center items-center text-lg md:text-xl font-mono tracking-[0.15em] min-h-[1.6em]">
         {word.tokens.map((t, i) => {
-          // 入力済みのトークンは消す（何も表示しない）
-          if (i < tokenIndex) return null;
-          if (i === tokenIndex) {
-            const target = t.romaji.find((r) => r.startsWith(currentTyping)) || t.romaji[0];
-            // 入力した分は消し、残りだけ表示する
-            return (
-              <span key={i} className="text-cyan-200">
-                {target.slice(currentTyping.length)}
-              </span>
-            );
-          }
+          // そのトークンに表示する綴り（入力中トークンは入力に合う候補を使う）
+          const str = i === tokenIndex ? t.romaji.find((r) => r.startsWith(currentTyping)) || t.romaji[0] : t.romaji[0];
+          const typedLen = i < tokenIndex ? str.length : i === tokenIndex ? currentTyping.length : 0;
           return (
-            <span key={i} className="text-gray-500 opacity-50">
-              {t.romaji[0]}
+            <span key={i} className="flex">
+              {str.split('').map((ch, j) => {
+                const isTyped = j < typedLen;
+                const isNext = i === tokenIndex && j === typedLen; // 次に打つべき1文字
+                return (
+                  <span
+                    key={j}
+                    className={
+                      isNext
+                        ? 'text-cyan-300 font-bold drop-shadow-[0_0_6px_rgba(34,211,238,0.7)]'
+                        : isTyped
+                          ? 'text-gray-600'
+                          : 'text-gray-400'
+                    }
+                  >
+                    {ch}
+                  </span>
+                );
+              })}
             </span>
           );
         })}
