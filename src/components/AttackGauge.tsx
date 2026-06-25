@@ -13,6 +13,7 @@ export default function AttackGauge({ combo, pinch, badges = 0 }: AttackGaugePro
   let amount = Math.floor(nextMilestone / 5);
   if (pinch) amount = Math.round(amount * 1.5);
   amount = Math.round(amount * (1 + 0.25 * Math.min(badges, 4)));
+  amount = Math.min(amount, 5); // ATTACK_CAP と一致
 
   return (
     <div className="w-full max-w-lg">

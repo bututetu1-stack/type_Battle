@@ -16,6 +16,7 @@ const SHORT_SPAWN_INTERVAL = 2000; // ショートモードの初期供給間隔
 const MIN_SPAWN_INTERVAL = 1000;
 const DUMMY_COUNT = 20;
 const BRAKE_DURATION = 5000;
+const ATTACK_CAP = 5; // 1回の攻撃量の上限（即死コンボ防止）
 
 const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> = {
   shield: { name: 'シールド', icon: '🛡', desc: '次の自動供給を1回無効化' },
@@ -189,7 +190,7 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
         setKeysTyped((prev) => prev + 1);
         setScore((s) => s + 100 + newCombo * 10);
         sfx.clear();
-        if (newCombo >= 5 && newCombo % 5 === 0) fireAttack(newCombo / 5);
+        if (newCombo >= 5 && newCombo % 5 === 0) fireAttack(Math.min(newCombo / 5, ATTACK_CAP));
         if (result.clearedType === 'treasure') grantItem();
       } else if (result.nextState) {
         setTokenIndex(result.nextState.tokenIndex);

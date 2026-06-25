@@ -314,20 +314,31 @@ export const makeOjamaWord = (): Word => {
   return buildWord(entry, 'ojama', 'o');
 };
 
-// アイテム「ロング送信」で相手に送りつける長めの単語。
+// アイテム「ロング送信」で相手に送りつける長文（読みは14文字以上）。
+// 1個でも打ち切るのに時間がかかる“重い”お邪魔として機能する。
 export const LONG_WORDS: WordEntry[] = [
-  { display: '電光石火', reading: 'でんこうせっか' },
-  { display: '臨機応変', reading: 'りんきおうへん' },
-  { display: '七転八起', reading: 'しちてんばっき' },
-  { display: '国際連合', reading: 'こくさいれんごう' },
-  { display: '試行錯誤', reading: 'しこうさくご' },
-  { display: '質疑応答', reading: 'しつぎおうとう' },
-  { display: '一致団結', reading: 'いっちだんけつ' },
-  { display: '油断大敵', reading: 'ゆだんたいてき' },
-  { display: 'コミュニケーション', reading: 'こみゅにけーしょん' },
-  { display: 'インフォメーション', reading: 'いんふぉめーしょん' },
-  { display: 'プロフェッショナル', reading: 'ぷろふぇっしょなる' },
-  { display: 'オリンピック', reading: 'おりんぴっく' },
+  { display: '継続は力なりという言葉', reading: 'けいぞくはちからなりということば' },
+  { display: '雨にも負けず風にも負けず', reading: 'あめにもまけずかぜにもまけず' },
+  { display: '千里の道も一歩から始まる', reading: 'せんりのみちもいっぽからはじまる' },
+  { display: '思い立ったが吉日である', reading: 'おもいたったがきちじつである' },
+  { display: '明日があるさと信じている', reading: 'あしたがあるさとしんじている' },
+  { display: '郷に入っては郷に従え', reading: 'ごうにいってはごうにしたがえ' },
+  { display: '石の上にも三年という', reading: 'いしのうえにもさんねんという' },
+  { display: '早起きは三文の徳だそうだ', reading: 'はやおきはさんもんのとくだそうだ' },
+  { display: '猫の手も借りたいほど忙しい', reading: 'ねこのてもかりたいほどいそがしい' },
+  { display: '猿も木から落ちることがある', reading: 'さるもきからおちることがある' },
+  { display: '塵も積もれば山となるという', reading: 'ちりもつもればやまとなるという' },
+  { display: '花より団子ということわざ', reading: 'はなよりだんごということわざ' },
+  { display: '時は金なりとよく言われる', reading: 'ときはかねなりとよくいわれる' },
+  { display: '能ある鷹は爪を隠すという', reading: 'のうあるたかはつめをかくすという' },
+  { display: '急がば回れという教訓', reading: 'いそがばまわれというきょうくん' },
+  { display: '全力で駆け抜ける夏休み', reading: 'ぜんりょくでかけぬけるなつやすみ' },
+  { display: '旅の恥はかき捨てということ', reading: 'たびのはじはかきすてということ' },
+  { display: '美味い話には裏があるものだ', reading: 'うまいはなしにはうらがあるものだ' },
+  { display: '鬼の居ぬ間に洗濯をする', reading: 'おにのいぬまにせんたくをする' },
+  { display: '寝る子は育つと言われている', reading: 'ねるこはそだつといわれている' },
+  { display: '健全な精神は健全な肉体に宿る', reading: 'けんぜんなせいしんはけんぜんなにくたいにやどる' },
+  { display: '正直者が馬鹿を見る世の中', reading: 'しょうじきものがばかをみるよのなか' },
 ];
 
 // ロング送信用の単語をランダムに選ぶ（表示と読みのペア）。

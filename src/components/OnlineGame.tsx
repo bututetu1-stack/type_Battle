@@ -24,6 +24,7 @@ const TELEGRAPH_DELAY = 1500;
 const PINCH_RATIO = 0.7;
 const PINCH_MULT = 1.5;
 const BRAKE_DURATION = 5000;
+const ATTACK_CAP = 5; // 1回の攻撃で送れるおじゃまの上限（即死コンボ防止）
 
 const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   shield: { name: 'シールド', desc: '次の自動供給を1回無効化' },
@@ -240,6 +241,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       // バッジ倍率（仕様 §3.5）
       const badges = Object.values(playersRef.current).filter((p) => p.koBy === uid).length;
       amount = Math.round(amount * (1 + 0.25 * Math.min(badges, 4)));
+      // 1回の攻撃量に上限を設け、長い連鎖でも一撃必殺にならないようにする。
+      amount = Math.min(amount, ATTACK_CAP);
 
       // 受信予告と 1:1 相殺
       let remaining = amount;
