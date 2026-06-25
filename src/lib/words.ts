@@ -247,7 +247,7 @@ export const ROMAJI_MAP: Record<string, string[]> = {
   'ぱ': ['pa'], 'ぴ': ['pi'], 'ぷ': ['pu'], 'ぺ': ['pe'], 'ぽ': ['po'],
   'きゃ': ['kya'], 'きゅ': ['kyu'], 'きょ': ['kyo'],
   'しゃ': ['sha', 'sya'], 'しゅ': ['shu', 'syu'], 'しょ': ['sho', 'syo'],
-  'ちゃ': ['cha', 'tya', 'cya'], 'ちゅ': ['chu', 'tyu', 'cyu'], 'ちょ': ['cho', 'tyo', 'cyo'],
+  'ちゃ': ['tya', 'cha', 'cya'], 'ちゅ': ['tyu', 'chu', 'cyu'], 'ちょ': ['tyo', 'cho', 'cyo'],
   'にゃ': ['nya'], 'にゅ': ['nyu'], 'にょ': ['nyo'],
   'ひゃ': ['hya'], 'ひゅ': ['hyu'], 'ひょ': ['hyo'],
   'みゃ': ['mya'], 'みゅ': ['myu'], 'みょ': ['myo'],
@@ -282,6 +282,16 @@ export const tokenizeWord = (reading: string): Token[] => {
       i += 1;
     }
   }
+  // 促音「っ」は次の音の頭の子音を重ねる表記をデフォルトにする（例: きって→t）。
+  // xtu/ltu などの明示入力も引き続き許容する。
+  tokens.forEach((tk, idx) => {
+    if (tk.kana !== 'っ') return;
+    const next = tokens[idx + 1];
+    const c = next?.romaji[0]?.[0];
+    if (c && !'aiueon'.includes(c)) {
+      tk.romaji = [c, 'xtu', 'xtsu', 'ltu', 'ltsu'];
+    }
+  });
   return tokens;
 };
 

@@ -12,7 +12,7 @@ import AttackGauge from './AttackGauge';
 // --- 定数 ---
 const MAX_BACKLOG = 12;
 const INITIAL_SPAWN_INTERVAL = 4000;
-const SHORT_SPAWN_INTERVAL = 1300; // ショートモードの初期供給間隔（序盤から速め）
+const SHORT_SPAWN_INTERVAL = 2000; // ショートモードの初期供給間隔
 const MIN_SPAWN_INTERVAL = 1000;
 const DUMMY_COUNT = 20;
 const BRAKE_DURATION = 5000;
