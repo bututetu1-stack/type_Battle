@@ -44,6 +44,9 @@ interface Telegraph {
   confirmAt: number;
 }
 
+// 生存判定: 脱落していない かつ 接続中（切断したプレイヤーは脱落扱い / Phase 4）。
+const isLive = (p: RoomPlayer) => p.alive && p.connected !== false;
+
 interface OnlineGameProps {
   roomId: string;
   uid: string;
@@ -119,9 +122,11 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '' });
   }, [seed, roomId, uid]);
 
-  // startAt に達したらゲーム開始。
+  // startAt に達したらゲーム開始。それまではカウントダウン（秒ごとにビープ）。
+  const lastBeepRef = useRef(99);
   useEffect(() => {
     if (started) return;
+    resumeAudio();
     const tick = () => {
       const remain = startAt - serverNow();
       if (remain <= 0) {
@@ -129,7 +134,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         startTimeRef.current = Date.now();
         sfx.start();
       } else {
-        setCountdown(Math.ceil(remain / 1000));
+        const sec = Math.ceil(remain / 1000);
+        setCountdown(sec);
+        if (sec !== lastBeepRef.current && sec <= 3) {
+          lastBeepRef.current = sec;
+          sfx.countdown();
+        }
       }
     };
     tick();
@@ -141,7 +151,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const topOut = useCallback(() => {
     if (!selfAliveRef.current) return;
     selfAliveRef.current = false;
-    const aliveCount = Object.values(playersRef.current).filter((p) => p.alive).length;
+    const aliveCount = Object.values(playersRef.current).filter(isLive).length;
     const myRank = Math.max(1, aliveCount);
     setRank(myRank);
     setSelfAlive(false);
@@ -151,7 +161,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
   // ターゲット選択（4モード / 仕様 §3.4）。
   const pickTarget = useCallback(() => {
-    const alive = Object.entries(playersRef.current).filter(([id, p]) => id !== uid && p.alive);
+    const alive = Object.entries(playersRef.current).filter(([id, p]) => id !== uid && isLive(p));
     if (alive.length === 0) return null;
     const mode = targetModeRef.current;
     if (mode === 'counter') {
@@ -345,12 +355,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // ホスト: 生存者が1人以下になったら決着へ。
   useEffect(() => {
     if (uid !== hostUid || status !== 'playing') return;
-    const aliveCount = Object.values(players).filter((p) => p.alive).length;
+    const aliveCount = Object.values(players).filter(isLive).length;
     if (aliveCount <= 1) finishGame(roomId);
   }, [players, status, uid, hostUid, roomId]);
 
   const others = Object.entries(players).filter(([id]) => id !== uid);
-  const aliveCount = Object.values(players).filter((p) => p.alive).length;
+  const aliveCount = Object.values(players).filter(isLive).length;
   const totalCount = Object.keys(players).length;
   const isDanger = backlog.length >= MAX_BACKLOG - 3;
   const totalIncoming = pending.reduce((s, e) => s + e.amount, 0);
@@ -365,11 +375,11 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // 決着画面
   if (status === 'finished') {
     const ranked = Object.values(players).slice().sort((a, b) => {
-      const ra = a.alive ? 0 : a.rank || 999;
-      const rb = b.alive ? 0 : b.rank || 999;
+      const ra = isLive(a) ? 0 : a.rank || 999;
+      const rb = isLive(b) ? 0 : b.rank || 999;
       return ra - rb;
     });
-    const winner = ranked.find((p) => p.alive) || ranked[0];
+    const winner = ranked.find(isLive) || ranked[0];
     const myRank = selfAlive ? 1 : rank;
     return (
       <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center justify-center p-6">
@@ -478,7 +488,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       <main className="flex-1 flex w-full max-w-7xl mx-auto p-4 gap-4 h-[calc(100vh-4rem)]">
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
           {others.slice(0, Math.ceil(others.length / 2)).map(([id, p]) => (
-            <MiniBoard key={id} height={p.backlog} max={MAX_BACKLOG} isKO={!p.alive} name={p.name} combo={p.combo} />
+            <MiniBoard key={id} height={p.backlog} max={MAX_BACKLOG} isKO={!isLive(p)} name={p.name} combo={p.combo} />
           ))}
         </div>
 
@@ -602,7 +612,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
           {others.slice(Math.ceil(others.length / 2)).map(([id, p]) => (
-            <MiniBoard key={id} height={p.backlog} max={MAX_BACKLOG} isKO={!p.alive} name={p.name} combo={p.combo} />
+            <MiniBoard key={id} height={p.backlog} max={MAX_BACKLOG} isKO={!isLive(p)} name={p.name} combo={p.combo} />
           ))}
         </div>
       </main>
