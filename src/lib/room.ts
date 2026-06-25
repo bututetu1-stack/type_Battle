@@ -36,6 +36,8 @@ export interface RoomPlayer {
   badges: number;
   rank: number; // 脱落時に確定（0=未確定）
   koBy: string; // 自分にトドメを刺した相手の uid（KOクレジット用）
+  lastItem: string; // 直近に使用したアイテム種別（演出用）
+  itemAt: number; // 直近にアイテムを使用した時刻
   connected: boolean;
   lastSeen: number;
   joinedAt: number;
@@ -78,6 +80,8 @@ function newPlayer(name: string, host: boolean): RoomPlayer {
     badges: 0,
     rank: 0,
     koBy: '',
+    lastItem: '',
+    itemAt: 0,
     connected: true,
     lastSeen: Date.now(),
     joinedAt: Date.now(),
@@ -141,7 +145,9 @@ export function subscribeRoom(roomId: string, cb: (snap: RoomSnapshot) => void):
 export function writePlayerSummary(
   roomId: string,
   uid: string,
-  summary: Partial<Pick<RoomPlayer, 'backlog' | 'combo' | 'kpm' | 'badges' | 'alive' | 'rank' | 'koBy'>>,
+  summary: Partial<
+    Pick<RoomPlayer, 'backlog' | 'combo' | 'kpm' | 'badges' | 'alive' | 'rank' | 'koBy' | 'lastItem' | 'itemAt'>
+  >,
 ): void {
   update(ref(db, `rooms/${roomId}/players/${uid}`), { ...summary, lastSeen: Date.now() }).catch(() => {});
 }

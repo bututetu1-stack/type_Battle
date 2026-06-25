@@ -51,6 +51,18 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   const [muted, setMuted] = useState(false);
   const [theme, setTheme] = useState('all');
   const [rapidActive, setRapidActive] = useState(false);
+  // エフェクト用
+  const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
+  const [shake, setShake] = useState(false);
+  const [useFlash, setUseFlash] = useState<ItemType | null>(null);
+  const centerRef = useRef<HTMLDivElement>(null);
+  const dummyRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const beamIdRef = useRef(0);
+  const addBeam = useCallback((x1: number, y1: number, x2: number, y2: number, color: string) => {
+    const id = beamIdRef.current++;
+    setBeams((b) => [...b, { id, x1, y1, x2, y2, color }]);
+    setTimeout(() => setBeams((b) => b.filter((x) => x.id !== id)), 700);
+  }, []);
   // カスタムモードの設定
   const [cfgInitial, setCfgInitial] = useState(INITIAL_SPAWN_INTERVAL);
   const [cfgMin, setCfgMin] = useState(MIN_SPAWN_INTERVAL);
@@ -104,13 +116,21 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     sfx.attack();
     setAttackFlash(amount);
     setHitDummy(target.id);
+    // 自分のボードから対象ダミーへビーム
+    const from = centerRef.current?.getBoundingClientRect();
+    const to = dummyRefs.current[target.id]?.getBoundingClientRect();
+    if (from && to) {
+      addBeam(from.left + from.width / 2, from.top + from.height * 0.35, to.left + to.width / 2, to.top + to.height / 2, '#fb923c');
+    }
     setTimeout(() => setAttackFlash(0), 600);
     setTimeout(() => setHitDummy((cur) => (cur === target.id ? null : cur)), 600);
-  }, []);
+  }, [addBeam]);
 
   // アイテムの効果を適用（所持状態のクリアは行わない）。
   const applyItem = useCallback(
     (item: ItemType) => {
+      setUseFlash(item);
+      setTimeout(() => setUseFlash(null), 900);
       if (item === 'shield') shieldRef.current = true;
       else if (item === 'brake') brakeUntilRef.current = Date.now() + BRAKE_DURATION;
       else if (item === 'clear')
@@ -178,6 +198,8 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   const gameOver = useCallback(() => {
     setGameState('gameover');
     sfx.gameover();
+    setShake(true);
+    setTimeout(() => setShake(false), 450);
   }, []);
 
   useEffect(() => {
@@ -318,8 +340,30 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   const survivors = DUMMY_COUNT + 1 - eliminatedCount;
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col selection:bg-cyan-900">
+    <div className={`min-h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
+
+      {/* 攻撃ビーム（自分→対象ダミー） */}
+      {beams.length > 0 && (
+        <svg className="fixed inset-0 w-full h-full pointer-events-none z-40">
+          {beams.map((b) => (
+            <g key={b.id} className="attack-beam">
+              <line x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} stroke={b.color} strokeWidth={4} strokeLinecap="round" />
+              <circle cx={b.x2} cy={b.y2} r={14} fill="none" stroke={b.color} strokeWidth={3} />
+              <circle cx={b.x1} cy={b.y1} r={5} fill={b.color} />
+            </g>
+          ))}
+        </svg>
+      )}
+
+      {/* アイテム発動演出 */}
+      {useFlash && (
+        <div className="fixed top-[8rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in zoom-in duration-200">
+          <div className="bg-yellow-500/95 text-black font-black px-4 py-1.5 rounded-full flex items-center gap-2 shadow-lg">
+            <span className="text-lg">{ITEM_META[useFlash].icon}</span> {ITEM_META[useFlash].name} 発動！
+          </div>
+        </div>
+      )}
 
       {/* 演出は上部に出して、打つべき単語に被らないようにする */}
       {attackFlash > 0 && (
@@ -370,11 +414,13 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       <main className="flex-1 flex w-full max-w-7xl mx-auto p-4 gap-4 h-[calc(100vh-4rem)]">
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
           {dummies.slice(0, 10).map((d) => (
-            <MiniBoard key={d.id} height={d.height} max={MAX_BACKLOG} isKO={d.isKO} hit={hitDummy === d.id} />
+            <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
+              <MiniBoard height={d.height} max={MAX_BACKLOG} isKO={d.isKO} hit={hitDummy === d.id} />
+            </div>
           ))}
         </div>
 
-        <div className="w-2/4 flex flex-col h-full relative">
+        <div ref={centerRef} className="w-2/4 flex flex-col h-full relative">
           {isDanger && gameState === 'playing' && (
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}
@@ -589,12 +635,30 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
 
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
           {dummies.slice(10, 20).map((d) => (
-            <MiniBoard key={d.id} height={d.height} max={MAX_BACKLOG} isKO={d.isKO} hit={hitDummy === d.id} />
+            <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
+              <MiniBoard height={d.height} max={MAX_BACKLOG} isKO={d.isKO} hit={hitDummy === d.id} />
+            </div>
           ))}
         </div>
       </main>
 
-      <style dangerouslySetInnerHTML={{ __html: `.mask-image-top{mask-image:linear-gradient(to bottom,transparent 0%,black 20%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 20%);}` }} />
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        .mask-image-top{mask-image:linear-gradient(to bottom,transparent 0%,black 20%);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,black 20%);}
+        @keyframes beamFade { 0% { opacity: 0; } 12% { opacity: 1; } 100% { opacity: 0; } }
+        .attack-beam { animation: beamFade 0.7s ease-out forwards; }
+        @keyframes screenShake {
+          0%, 100% { transform: translate(0, 0); }
+          20% { transform: translate(-5px, 3px); }
+          40% { transform: translate(5px, -3px); }
+          60% { transform: translate(-4px, -2px); }
+          80% { transform: translate(4px, 2px); }
+        }
+        .screen-shake { animation: screenShake 0.45s ease-in-out; }
+      `,
+        }}
+      />
     </div>
   );
 }

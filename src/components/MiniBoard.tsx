@@ -6,10 +6,22 @@ interface MiniBoardProps {
   combo?: number;
   highlight?: boolean; // 自分自身を強調
   hit?: boolean; // 直近に自分が攻撃した対象
+  incoming?: boolean; // 直近に自分を攻撃してきた相手
+  itemEmoji?: string; // 直近に使用したアイテムのアイコン
 }
 
 // 周囲プレイヤー（または solo のダミー）を表す小さな盤面ゲージ。
-export default function MiniBoard({ height, max, isKO, name, combo, highlight, hit }: MiniBoardProps) {
+export default function MiniBoard({
+  height,
+  max,
+  isKO,
+  name,
+  combo,
+  highlight,
+  hit,
+  incoming,
+  itemEmoji,
+}: MiniBoardProps) {
   if (isKO) {
     return (
       <div className="aspect-[3/4] bg-neutral-900/40 rounded-md border border-neutral-800 flex flex-col items-center justify-center relative overflow-hidden">
@@ -27,11 +39,13 @@ export default function MiniBoard({ height, max, isKO, name, combo, highlight, h
       className={`aspect-[3/4] rounded-md border p-1 flex flex-col justify-end transition-all duration-200 relative ${
         hit
           ? 'border-orange-400 ring-2 ring-orange-400/80 bg-orange-950/30 scale-105 shadow-lg shadow-orange-500/30'
-          : highlight
-            ? 'border-cyan-500/70 bg-cyan-950/20'
-            : dangerLevel > 0.7
-              ? 'bg-red-950/20 border-red-900/50'
-              : 'bg-neutral-900/50 border-neutral-800'
+          : incoming
+            ? 'border-red-500 ring-2 ring-red-500/80 bg-red-950/40 scale-105 shadow-lg shadow-red-500/40'
+            : highlight
+              ? 'border-cyan-500/70 bg-cyan-950/20'
+              : dangerLevel > 0.7
+                ? 'bg-red-950/20 border-red-900/50'
+                : 'bg-neutral-900/50 border-neutral-800'
       }`}
     >
       <div className="w-full flex gap-[1px] h-full items-end opacity-60">
@@ -47,6 +61,9 @@ export default function MiniBoard({ height, max, isKO, name, combo, highlight, h
       </div>
       {combo !== undefined && combo > 2 && (
         <div className="absolute top-0.5 right-0.5 text-[9px] font-bold text-cyan-300">{combo}c</div>
+      )}
+      {itemEmoji && (
+        <div className="absolute top-0.5 left-0.5 text-sm animate-in zoom-in duration-200 drop-shadow">{itemEmoji}</div>
       )}
       {name && (
         <div className="absolute bottom-0.5 inset-x-0 text-center text-[8px] text-gray-400 truncate px-1">{name}</div>
