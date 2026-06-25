@@ -36,22 +36,17 @@ export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 
         })}
       </div>
 
-      {/* ローマ字ガイド */}
-      <div className="flex justify-center items-center text-lg md:text-xl font-mono tracking-[0.2em]">
+      {/* ローマ字ガイド（寿司打方式: 入力したキーは1文字ずつ消える＝残りだけ表示） */}
+      <div className="flex justify-center items-center text-lg md:text-xl font-mono tracking-[0.2em] min-h-[1.6em]">
         {word.tokens.map((t, i) => {
-          if (i < tokenIndex) {
-            return (
-              <span key={i} className="text-gray-600">
-                {''.padEnd(t.romaji[0].length, '-')}
-              </span>
-            );
-          }
+          // 入力済みのトークンは消す（何も表示しない）
+          if (i < tokenIndex) return null;
           if (i === tokenIndex) {
             const target = t.romaji.find((r) => r.startsWith(currentTyping)) || t.romaji[0];
+            // 入力した分は消し、残りだけ表示する
             return (
-              <span key={i} className="flex">
-                <span className="text-cyan-300">{currentTyping}</span>
-                <span className="text-gray-400 opacity-70">{target.slice(currentTyping.length)}</span>
+              <span key={i} className="text-cyan-200">
+                {target.slice(currentTyping.length)}
               </span>
             );
           }

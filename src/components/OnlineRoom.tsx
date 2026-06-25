@@ -5,8 +5,10 @@ import {
   setupPresence,
   leaveRoom,
   startGame,
+  setRoomCategory,
   type RoomSnapshot,
 } from '../lib/room';
+import { THEMES } from '../lib/words';
 import OnlineGame from './OnlineGame';
 
 interface OnlineRoomProps {
@@ -70,6 +72,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         startAt={meta.startAt}
         status={meta.status}
         hostUid={meta.hostUid}
+        category={meta.category || 'all'}
         players={players}
         onExit={handleLeave}
       />
@@ -119,6 +122,27 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
               <span className={`w-2 h-2 rounded-full ${p.connected ? 'bg-green-500' : 'bg-gray-600'}`} />
             </div>
           ))}
+        </div>
+
+        {/* 出題テーマ（ホストが選択） */}
+        <div className="mb-6">
+          <div className="text-xs text-gray-500 mb-1.5">出題テーマ {isHost ? '（ホストが選択）' : ''}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {THEMES.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => isHost && setRoomCategory(roomId, t.id)}
+                disabled={!isHost}
+                className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
+                  (meta.category || 'all') === t.id
+                    ? 'bg-cyan-600 text-white'
+                    : 'bg-neutral-800 text-gray-400 ' + (isHost ? 'hover:bg-neutral-700' : 'opacity-60')
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* 操作 */}

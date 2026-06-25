@@ -299,8 +299,10 @@ function buildWord(entry: WordEntry, type: WordType, prefix: string): Word {
 }
 
 // 与えられた決定論的 RNG から新しい単語を生成する。
-export const generateWord = (rng: RNG): Word => {
-  const entry = WORD_POOL[Math.floor(rng() * WORD_POOL.length)];
+// theme を指定すると、そのテーマ（タグ）の語彙からのみ出題する。
+export const generateWord = (rng: RNG, theme: string = 'all'): Word => {
+  const pool = THEME_POOLS[theme] ?? WORD_POOL;
+  const entry = pool[Math.floor(rng() * pool.length)];
   const rand = rng();
   let type: WordType = 'normal';
   if (rand < 0.1) type = 'treasure'; // 10%でお宝
@@ -355,3 +357,91 @@ export const makeOjamaWordFrom = (display: string, reading: string): Word => ({
   type: 'ojama',
   tokens: tokenizeWord(reading),
 });
+
+// --- 出題テーマ（タグ） ---
+// 語彙をタグで分類し、テーマを選んで出題範囲を絞れるようにする。
+export interface Theme {
+  id: string;
+  label: string;
+}
+
+export const THEMES: Theme[] = [
+  { id: 'all', label: 'すべて' },
+  { id: 'greeting', label: 'あいさつ' },
+  { id: 'it', label: 'IT・ゲーム' },
+  { id: 'food', label: '食べ物' },
+  { id: 'nature', label: '自然・乗物' },
+  { id: 'school', label: '学校・生活' },
+  { id: 'idiom', label: 'ことわざ・長文' },
+];
+
+// テーマごとの語彙プール。'all' は全語彙（WORD_POOL）を使う。
+const THEME_POOLS: Record<string, WordEntry[]> = {
+  greeting: [
+    { display: 'ありがとう', reading: 'ありがとう' },
+    { display: 'こんにちは', reading: 'こんにちは' },
+    { display: '宜しく', reading: 'よろしく' },
+    { display: '頑張って', reading: 'がんばって' },
+    { display: 'お疲れ様', reading: 'おつかれさま' },
+    { display: '初めまして', reading: 'はじめまして' },
+  ],
+  it: [
+    { display: 'タイピング', reading: 'たいぴんぐ' },
+    { display: 'キーボード', reading: 'きーぼーど' },
+    { display: 'マウス', reading: 'まうす' },
+    { display: 'パソコン', reading: 'ぱそこん' },
+    { display: 'インターネット', reading: 'いんたーねっと' },
+    { display: 'プログラミング', reading: 'ぷろぐらみんぐ' },
+    { display: '技術者', reading: 'ぎじゅつしゃ' },
+    { display: '開発', reading: 'かいはつ' },
+    { display: '画面', reading: 'がめん' },
+    { display: '通信', reading: 'つうしん' },
+    { display: '対戦', reading: 'たいせん' },
+    { display: '連鎖', reading: 'れんさ' },
+    { display: '攻撃', reading: 'こうげき' },
+    { display: '逆転', reading: 'ぎゃくてん' },
+    { display: '勝利', reading: 'しょうり' },
+  ],
+  food: [
+    { display: 'お握り', reading: 'おにぎり' },
+    { display: 'ハンバーガー', reading: 'はんばーがー' },
+    { display: '拉麺', reading: 'らーめん' },
+    { display: '林檎', reading: 'りんご' },
+    { display: '蜜柑', reading: 'みかん' },
+    { display: '西瓜', reading: 'すいか' },
+    { display: '寿司', reading: 'すし' },
+    { display: '味噌汁', reading: 'みそしる' },
+    { display: '玉子焼き', reading: 'たまごやき' },
+    { display: '珈琲', reading: 'こーひー' },
+  ],
+  nature: [
+    { display: '太陽', reading: 'たいよう' },
+    { display: '宇宙', reading: 'うちゅう' },
+    { display: '青空', reading: 'あおぞら' },
+    { display: '新幹線', reading: 'しんかんせん' },
+    { display: '飛行機', reading: 'ひこうき' },
+    { display: '自転車', reading: 'じてんしゃ' },
+    { display: '電車', reading: 'でんしゃ' },
+    { display: '海', reading: 'うみ' },
+    { display: '山', reading: 'やま' },
+    { display: '川', reading: 'かわ' },
+    { display: '森林', reading: 'しんりん' },
+    { display: '稲妻', reading: 'いなずま' },
+  ],
+  school: [
+    { display: '小学校', reading: 'しょうがっこう' },
+    { display: '大学', reading: 'だいがく' },
+    { display: '図書館', reading: 'としょかん' },
+    { display: '宿題', reading: 'しゅくだい' },
+    { display: '友達', reading: 'ともだち' },
+    { display: '家族', reading: 'かぞく' },
+    { display: '音楽', reading: 'おんがく' },
+    { display: '映画', reading: 'えいが' },
+    { display: '物語', reading: 'ものがたり' },
+    { display: '挑戦', reading: 'ちょうせん' },
+    { display: '冒険', reading: 'ぼうけん' },
+    { display: '出発', reading: 'しゅっぱつ' },
+    { display: '集中', reading: 'しゅうちゅう' },
+  ],
+  idiom: LONG_WORDS,
+};

@@ -21,6 +21,7 @@ export interface RoomMeta {
   status: RoomStatus;
   startAt: number; // 同期開始時刻(ms, サーバ基準)。未開始は 0。
   seed: number; // 共通お題シード
+  category: string; // 出題テーマ（タグ）。'all' で全語彙
   maxPlayers: number;
   hostUid: string;
   createdAt: number;
@@ -96,6 +97,7 @@ export async function createRoom(uid: string, name: string): Promise<string> {
     status: 'waiting',
     startAt: 0,
     seed: randomSeed(),
+    category: 'all',
     maxPlayers: DEFAULT_MAX_PLAYERS,
     hostUid: uid,
     createdAt: Date.now(),
@@ -142,6 +144,11 @@ export function writePlayerSummary(
   summary: Partial<Pick<RoomPlayer, 'backlog' | 'combo' | 'kpm' | 'badges' | 'alive' | 'rank' | 'koBy'>>,
 ): void {
   update(ref(db, `rooms/${roomId}/players/${uid}`), { ...summary, lastSeen: Date.now() }).catch(() => {});
+}
+
+// ホスト操作: 出題テーマを変更（待機中）。
+export async function setRoomCategory(roomId: string, category: string): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { category });
 }
 
 // ホスト操作: カウントダウン付きで開始。startAt をサーバ基準の未来時刻に設定。

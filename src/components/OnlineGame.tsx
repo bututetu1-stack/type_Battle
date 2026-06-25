@@ -57,11 +57,12 @@ interface OnlineGameProps {
   startAt: number;
   status: RoomStatus;
   hostUid: string;
+  category: string;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, players, onExit }: OnlineGameProps) {
   const [started, setStarted] = useState(false);
   const [countdown, setCountdown] = useState(99);
   const [selfAlive, setSelfAlive] = useState(true);
@@ -104,6 +105,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const lastAttackerRef = useRef('');
   const shieldRef = useRef(false);
   const brakeUntilRef = useRef(0);
+  const categoryRef = useRef(category);
+  useEffect(() => {
+    categoryRef.current = category;
+  }, [category]);
   const pendingRef = useRef<Telegraph[]>([]);
   const updatePending = useCallback((next: Telegraph[]) => {
     pendingRef.current = next;
@@ -153,7 +158,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     const rng = mulberry32(seed >>> 0);
     wordRngRef.current = rng;
     itemRngRef.current = mulberry32((seed ^ 0x9e3779b9) >>> 0);
-    setBacklog([generateWord(rng), generateWord(rng), generateWord(rng)]);
+    const th = categoryRef.current;
+    setBacklog([generateWord(rng, th), generateWord(rng, th), generateWord(rng, th)]);
     // 新しいゲーム開始時に自分の状態をリセット（再戦対応）。
     writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '' });
   }, [seed, roomId, uid]);
@@ -423,7 +429,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             return prev;
           }
           const rng = wordRngRef.current;
-          return rng ? [...prev, generateWord(rng)] : prev;
+          return rng ? [...prev, generateWord(rng, categoryRef.current)] : prev;
         });
       }
       setSpawnInterval((prev) => Math.max(MIN_SPAWN_INTERVAL, prev * 0.98));

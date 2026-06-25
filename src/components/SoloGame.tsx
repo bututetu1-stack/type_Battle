@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause, ArrowLeft, Volume2, VolumeX, Bomb, Crown } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
-import { generateWord } from '../lib/words';
+import { generateWord, THEMES } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
 import type { Dummy, GameStatus, ItemType } from '../lib/types';
@@ -12,7 +12,7 @@ import AttackGauge from './AttackGauge';
 // --- 定数 ---
 const MAX_BACKLOG = 12;
 const INITIAL_SPAWN_INTERVAL = 4000;
-const SHORT_SPAWN_INTERVAL = 2000; // ショートモードの初期供給間隔
+const SHORT_SPAWN_INTERVAL = 1300; // ショートモードの初期供給間隔（序盤から速め）
 const MIN_SPAWN_INTERVAL = 1000;
 const DUMMY_COUNT = 20;
 const BRAKE_DURATION = 5000;
@@ -48,6 +48,11 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
   const [attackFlash, setAttackFlash] = useState(0);
   const [hitDummy, setHitDummy] = useState<number | null>(null);
   const [muted, setMuted] = useState(false);
+  const [theme, setTheme] = useState('all');
+  const themeRef = useRef(theme);
+  useEffect(() => {
+    themeRef.current = theme;
+  }, [theme]);
 
   const [dummies, setDummies] = useState<Dummy[]>(
     Array.from({ length: DUMMY_COUNT }).map((_, i) => ({ id: i, height: 0, isKO: false })),
@@ -135,7 +140,8 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
     shieldRef.current = false;
     brakeUntilRef.current = 0;
     setSeed(newSeed);
-    setBacklog([generateWord(wordRng), generateWord(wordRng), generateWord(wordRng)]);
+    const th = themeRef.current;
+    setBacklog([generateWord(wordRng, th), generateWord(wordRng, th), generateWord(wordRng, th)]);
     setTokenIndex(0);
     setCurrentTyping('');
     setCombo(0);
@@ -248,7 +254,7 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
             return prev;
           }
           const rng = wordRngRef.current;
-          return rng ? [...prev, generateWord(rng)] : prev;
+          return rng ? [...prev, generateWord(rng, themeRef.current)] : prev;
         });
       }
       setSpawnInterval((prev) => Math.max(MIN_SPAWN_INTERVAL, prev * 0.98));
@@ -432,7 +438,26 @@ export default function SoloGame({ onExit, fast = false }: { onExit: () => void;
             <div className="absolute inset-0 bg-neutral-950/80 backdrop-blur-sm flex flex-col items-center justify-center z-20 rounded-2xl">
               <Swords className="w-20 h-20 text-cyan-500 mb-6" />
               <h2 className="text-4xl font-black tracking-widest mb-2 text-white">TYPE ROYALE</h2>
-              <p className="text-gray-400 mb-8 font-mono">Press [SPACE] to Start</p>
+              <p className="text-gray-400 mb-6 font-mono">Press [SPACE] to Start</p>
+
+              {/* 出題テーマ選択 */}
+              <div className="mb-6 w-full max-w-sm">
+                <div className="text-xs text-gray-500 mb-1.5 text-center">出題テーマ</div>
+                <div className="flex flex-wrap gap-1.5 justify-center">
+                  {THEMES.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setTheme(t.id)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
+                        theme === t.id ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex gap-4 text-sm text-gray-500 bg-neutral-900/50 p-4 rounded-xl">
                 <div>🟦 通常単語</div>
                 <div>🟥 おじゃま単語</div>
