@@ -1,15 +1,33 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Swords, Zap, Trophy, AlertTriangle, Crown } from 'lucide-react';
 import { mulberry32, type RNG } from '../lib/rng';
-import { generateWord } from '../lib/words';
+import { generateWord, makeOjamaWord } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
-import { serverNow, writePlayerSummary, finishGame, type RoomPlayer, type RoomStatus } from '../lib/room';
+import {
+  serverNow,
+  writePlayerSummary,
+  finishGame,
+  sendAttack,
+  subscribeAttacks,
+  type RoomPlayer,
+  type RoomStatus,
+} from '../lib/room';
 import MiniBoard from './MiniBoard';
 
 const MAX_BACKLOG = 12;
 const INITIAL_SPAWN_INTERVAL = 4000;
 const MIN_SPAWN_INTERVAL = 1000;
 const WRITE_INTERVAL = 400; // サマリ書込のスロットリング
+const TELEGRAPH_DELAY = 1500; // 予告ゲージに溜まってから確定するまでの遅延(ms)
+const PINCH_RATIO = 0.7; // バックログがこの割合以上で「ピンチ」
+const PINCH_MULT = 1.5; // ピンチ時の攻撃倍率（仕様 §3.6 B）
+
+// 予告ゲージに溜まっている受信攻撃。
+interface Telegraph {
+  id: string;
+  amount: number;
+  confirmAt: number;
+}
 
 interface OnlineGameProps {
   roomId: string;
@@ -36,12 +54,20 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [keysTyped, setKeysTyped] = useState(0);
   const [spawnInterval, setSpawnInterval] = useState(INITIAL_SPAWN_INTERVAL);
   const [missFlash, setMissFlash] = useState(false);
+  const [pending, setPending] = useState<Telegraph[]>([]);
+  const [attackFlash, setAttackFlash] = useState(0); // 送信したおじゃま数の演出
 
   const startTimeRef = useRef(0);
   const wordRngRef = useRef<RNG | null>(null);
   const stateRef = useRef<PlayerState>({ backlog, tokenIndex, currentTyping, combo, gameState: 'playing' });
   const selfAliveRef = useRef(true);
   const playersRef = useRef(players);
+  // 予告ゲージは ref を真実の値として同期的に更新し、state は描画用にミラーする。
+  const pendingRef = useRef<Telegraph[]>([]);
+  const updatePending = useCallback((next: Telegraph[]) => {
+    pendingRef.current = next;
+    setPending(next);
+  }, []);
 
   useEffect(() => {
     stateRef.current = { backlog, tokenIndex, currentTyping, combo, gameState: 'playing' };
@@ -93,6 +119,75 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     writePlayerSummary(roomId, uid, { alive: false, rank: myRank, backlog: MAX_BACKLOG });
   }, [roomId, uid]);
 
+  // 連鎖マイルストーン攻撃: 相殺 → 余剰を相手へ送信（仕様 §3.1/§3.3/§3.6B）。
+  const launchAttack = useCallback(
+    (comboVal: number) => {
+      let amount = Math.floor(comboVal / 5);
+      if (amount <= 0) return;
+      // ピンチ時倍率（自分が瀕死なほど一撃が重い）
+      if (stateRef.current.backlog.length / MAX_BACKLOG >= PINCH_RATIO) {
+        amount = Math.round(amount * PINCH_MULT);
+      }
+      // まず受信予告と 1:1 相殺（確定が近い順から削る）
+      let remaining = amount;
+      const sorted = [...pendingRef.current].sort((a, b) => a.confirmAt - b.confirmAt);
+      for (const e of sorted) {
+        if (remaining <= 0) break;
+        const cut = Math.min(remaining, e.amount);
+        e.amount -= cut;
+        remaining -= cut;
+      }
+      updatePending(sorted.filter((e) => e.amount > 0));
+
+      setAttackFlash(amount);
+      setTimeout(() => setAttackFlash(0), 600);
+
+      // 相殺しきれなかった余剰のみ、生存中のランダムな相手へ送る
+      if (remaining > 0) {
+        const targets = Object.entries(playersRef.current).filter(([id, p]) => id !== uid && p.alive);
+        if (targets.length > 0) {
+          const [targetId] = targets[Math.floor(Math.random() * targets.length)];
+          sendAttack(roomId, targetId, uid, remaining);
+        }
+      }
+    },
+    [roomId, uid, updatePending],
+  );
+
+  // 受信した攻撃を予告ゲージへ。
+  useEffect(() => {
+    if (!started) return;
+    const unsub = subscribeAttacks(roomId, uid, (ev) => {
+      updatePending([...pendingRef.current, { id: ev.id, amount: ev.amount, confirmAt: Date.now() + TELEGRAPH_DELAY }]);
+    });
+    return () => unsub();
+  }, [started, roomId, uid, updatePending]);
+
+  // 予告ゲージの確定処理: 遅延を過ぎた分をおじゃま単語としてバックログ末尾に挿入。
+  useEffect(() => {
+    if (!started) return;
+    const id = setInterval(() => {
+      if (!selfAliveRef.current || pendingRef.current.length === 0) return;
+      const now = Date.now();
+      const due = pendingRef.current.filter((e) => e.confirmAt <= now);
+      if (due.length === 0) return;
+      const total = due.reduce((s, e) => s + e.amount, 0);
+      updatePending(pendingRef.current.filter((e) => e.confirmAt > now));
+      if (total > 0) {
+        setBacklog((prev) => {
+          const next = [...prev];
+          for (let i = 0; i < total; i++) next.push(makeOjamaWord());
+          if (next.length > MAX_BACKLOG) {
+            topOut();
+            return next.slice(0, MAX_BACKLOG);
+          }
+          return next;
+        });
+      }
+    }, 100);
+    return () => clearInterval(id);
+  }, [started, updatePending, topOut]);
+
   // 入力処理
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -112,7 +207,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         setCombo(newCombo);
         setMaxCombo((m) => Math.max(m, newCombo));
         setKeysTyped((k) => k + 1);
-        // NOTE: 連鎖マイルストーンでの相手への攻撃送信は Phase 2 で実装。
+        // 連鎖マイルストーン（5,10,15…）で攻撃発生。
+        if (newCombo >= 5 && newCombo % 5 === 0) launchAttack(newCombo);
       } else if (result.nextState) {
         setTokenIndex(result.nextState.tokenIndex);
         setCurrentTyping(result.nextState.currentTyping);
@@ -121,7 +217,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [started]);
+  }, [started, launchAttack]);
 
   // ベース供給＆加速ループ
   useEffect(() => {
@@ -166,6 +262,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const aliveCount = Object.values(players).filter((p) => p.alive).length;
   const totalCount = Object.keys(players).length;
   const isDanger = backlog.length >= MAX_BACKLOG - 3;
+  const totalIncoming = pending.reduce((s, e) => s + e.amount, 0);
 
   // 決着画面
   if (status === 'finished') {
@@ -208,6 +305,15 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   return (
     <div className="min-h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col">
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
+
+      {/* 攻撃送信演出 */}
+      {attackFlash > 0 && (
+        <div className="fixed top-1/3 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="text-4xl font-black italic text-orange-400 drop-shadow-[0_0_15px_rgba(251,146,60,0.8)] flex items-center gap-2">
+            <Swords className="w-9 h-9" /> ATTACK ×{attackFlash}!
+          </div>
+        </div>
+      )}
 
       {/* カウントダウン */}
       {!started && (
@@ -258,6 +364,19 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}
           <div className="flex-1 flex flex-col items-center justify-end pb-8 relative z-10">
+            {/* 予告ゲージ（受信おじゃま）。確定までに打ち返すと相殺できる。 */}
+            {totalIncoming > 0 && (
+              <div className="absolute left-0 bottom-8 top-1/4 flex flex-col items-center justify-end gap-1">
+                <div className="text-xs font-bold text-red-400 mb-1 animate-pulse">⚠ {totalIncoming}</div>
+                <div className="w-3 flex-1 bg-neutral-900 rounded-full overflow-hidden border border-red-900/50 flex flex-col-reverse">
+                  {Array.from({ length: Math.min(totalIncoming, MAX_BACKLOG) }).map((_, i) => (
+                    <div key={i} className="w-full flex-1 bg-red-500 border-t border-neutral-950/60" />
+                  ))}
+                </div>
+                <div className="text-[9px] text-gray-500">着弾</div>
+              </div>
+            )}
+
             <div className="mb-8 text-center h-16 flex items-end justify-center">
               {combo > 2 && (
                 <div className="text-3xl font-black italic text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.6)] flex items-center gap-2">

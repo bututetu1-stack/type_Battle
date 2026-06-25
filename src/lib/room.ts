@@ -6,7 +6,9 @@ import {
   update,
   get,
   remove,
+  push,
   onValue,
+  onChildAdded,
   onDisconnect,
   serverTimestamp,
 } from 'firebase/database';
@@ -151,6 +153,37 @@ export async function startGame(roomId: string): Promise<void> {
 // 決着: ホストが finished へ遷移。
 export async function finishGame(roomId: string): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { status: 'finished' });
+}
+
+// --- 攻撃（おじゃま送受信 / Phase 2）---
+
+export interface AttackEvent {
+  id: string;
+  from: string;
+  amount: number;
+}
+
+// 対象プレイヤーへおじゃまを送信（/attacks/{targetUid} に push）。
+export function sendAttack(roomId: string, targetUid: string, fromUid: string, amount: number): void {
+  if (amount <= 0) return;
+  push(ref(db, `rooms/${roomId}/attacks/${targetUid}`), {
+    from: fromUid,
+    amount,
+    at: serverTimestamp(),
+  }).catch(() => {});
+}
+
+// 自分宛ての攻撃を購読。受信したらコールバックし、即座にノードを削除（consume）。
+export function subscribeAttacks(roomId: string, uid: string, cb: (ev: AttackEvent) => void): () => void {
+  const aRef = ref(db, `rooms/${roomId}/attacks/${uid}`);
+  const unsub = onChildAdded(aRef, (snap) => {
+    const val = snap.val();
+    if (val && typeof val.amount === 'number') {
+      cb({ id: snap.key || '', from: val.from || '', amount: val.amount });
+    }
+    remove(snap.ref).catch(() => {});
+  });
+  return unsub;
 }
 
 // 退室: 自分のノードを削除。空になればルームごと削除。

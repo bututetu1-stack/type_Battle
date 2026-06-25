@@ -87,3 +87,16 @@ export const generateWord = (rng: RNG): Word => {
     tokens: tokenizeWord(text),
   };
 };
+
+// 受信したおじゃま用の単語を生成する（常に type='ojama'）。
+// 攻撃由来でクライアントごとに発生するため、決定論シードとは別に Math.random で選ぶ。
+export const makeOjamaWord = (): Word => {
+  const text = WORD_POOL[Math.floor(Math.random() * WORD_POOL.length)];
+  return {
+    id: `o${idCounter++}`,
+    text,
+    type: 'ojama',
+    tokens: tokenizeWord(text),
+  };
+};
+
