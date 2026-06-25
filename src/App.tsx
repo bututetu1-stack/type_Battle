@@ -1,78 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles } from 'lucide-react';
+import { Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause } from 'lucide-react';
+import { mulberry32, randomSeed, type RNG } from './lib/rng';
+import { generateWord } from './lib/words';
+import type { Dummy, GameStatus, ItemType, Word, WordType } from './lib/types';
 
-// --- 定数・辞書データ ---
+// --- 定数 ---
 const MAX_BACKLOG = 12;
 const INITIAL_SPAWN_INTERVAL = 4000;
 const MIN_SPAWN_INTERVAL = 1000;
+const DUMMY_COUNT = 20;
+const BRAKE_DURATION = 5000; // ブレーキアイテムの効果時間(ms)
 
-// タイピングのお題プール
-const WORD_POOL = [
-  'ありがとう', 'こんにちは', 'たいぴんぐ', 'ばとるろわいやる', 'ぱそこん',
-  'きーぼーど', 'まうす', 'いんたーねっと', 'ぷろぐらみんぐ', 'えんじにあ',
-  'てとます', 'ぷよぷよ', 'すまーとふぉん', 'あぷりけーしょん',
-  'しょうがっこう', 'だいがく', 'おにぎり', 'はんばーがー', 'らーめん',
-  'たいよう', 'うちゅう', 'あおぞら', 'しんかんせん', 'ひこうき',
-  'りんご', 'みかん', 'すいか', 'がんばって', 'れべるあっぷ', 'あいてむ',
-];
-
-// ローマ字入力マッピング（柔軟な入力に対応）
-const ROMAJI_MAP: Record<string, string[]> = {
-  'あ': ['a'], 'い': ['i'], 'う': ['u', 'wu'], 'え': ['e'], 'お': ['o'],
-  'か': ['ka', 'ca'], 'き': ['ki'], 'く': ['ku', 'cu', 'qu'], 'け': ['ke'], 'こ': ['ko', 'co'],
-  'さ': ['sa'], 'し': ['shi', 'si', 'ci'], 'す': ['su'], 'せ': ['se', 'ce'], 'そ': ['so'],
-  'た': ['ta'], 'ち': ['chi', 'ti'], 'つ': ['tsu', 'tu'], 'て': ['te'], 'と': ['to'],
-  'な': ['na'], 'に': ['ni'], 'ぬ': ['nu'], 'ね': ['ne'], 'の': ['no'],
-  'は': ['ha'], 'ひ': ['hi'], 'ふ': ['fu', 'hu'], 'へ': ['he'], 'ほ': ['ho'],
-  'ま': ['ma'], 'み': ['mi'], 'む': ['mu'], 'め': ['me'], 'も': ['mo'],
-  'や': ['ya'], 'ゆ': ['yu'], 'よ': ['yo'],
-  'ら': ['ra'], 'り': ['ri'], 'る': ['ru'], 'れ': ['re'], 'ろ': ['ro'],
-  'わ': ['wa'], 'を': ['wo'], 'ん': ['nn', 'xn'],
-  'が': ['ga'], 'ぎ': ['gi'], 'ぐ': ['gu'], 'げ': ['ge'], 'ご': ['go'],
-  'ざ': ['za'], 'じ': ['ji', 'zi'], 'ず': ['zu'], 'ぜ': ['ze'], 'ぞ': ['zo'],
-  'だ': ['da'], 'ぢ': ['di'], 'づ': ['du'], 'で': ['de'], 'ど': ['do'],
-  'ば': ['ba'], 'び': ['bi'], 'ぶ': ['bu'], 'べ': ['be'], 'ぼ': ['bo'],
-  'ぱ': ['pa'], 'ぴ': ['pi'], 'ぷ': ['pu'], 'ぺ': ['pe'], 'ぽ': ['po'],
-  'きゃ': ['kya'], 'きゅ': ['kyu'], 'きょ': ['kyo'],
-  'しゃ': ['sha', 'sya'], 'しゅ': ['shu', 'syu'], 'しょ': ['sho', 'syo'],
-  'ちゃ': ['cha', 'tya', 'cya'], 'ちゅ': ['chu', 'tyu', 'cyu'], 'ちょ': ['cho', 'tyo', 'cyo'],
-  'にゃ': ['nya'], 'にゅ': ['nyu'], 'にょ': ['nyo'],
-  'ひゃ': ['hya'], 'ひゅ': ['hyu'], 'ひょ': ['hyo'],
-  'みゃ': ['mya'], 'みゅ': ['myu'], 'みょ': ['myo'],
-  'りゃ': ['rya'], 'りゅ': ['ryu'], 'りょ': ['ryo'],
-  'ぎゃ': ['gya'], 'ぎゅ': ['gyu'], 'ぎょ': ['gyo'],
-  'じゃ': ['ja', 'jya', 'zya'], 'じゅ': ['ju', 'jyu', 'zyu'], 'じょ': ['jo', 'jyo', 'zyo'],
-  'びゃ': ['bya'], 'びゅ': ['byu'], 'びょ': ['byo'],
-  'ぴゃ': ['pya'], 'ぴゅ': ['pyu'], 'ぴょ': ['pyo'],
-  'ふぁ': ['fa'], 'ふぃ': ['fi'], 'ふぇ': ['fe'], 'ふぉ': ['fo'],
-  'てぃ': ['thi'], 'でぃ': ['dhi'],
-  'ー': ['-'],
-  'っ': ['xtsu', 'xtu', 'ltsu', 'ltu'],
-  'ぁ': ['xa', 'la'], 'ぃ': ['xi', 'li'], 'ぅ': ['xu', 'lu'], 'ぇ': ['xe', 'le'], 'ぉ': ['xo', 'lo'],
-  'ゃ': ['xya', 'lya'], 'ゅ': ['xyu', 'lyu'], 'ょ': ['xyo', 'lyo'],
+// アイテム定義（表示用メタ）
+const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
+  shield: { name: 'シールド', desc: '次の供給を1回無効化' },
+  clear: { name: 'おじゃま一掃', desc: 'バックログのおじゃまを消す' },
+  brake: { name: 'ブレーキ', desc: '供給を5秒停止' },
 };
-
-// --- 型定義 ---
-type GameStatus = 'start' | 'playing' | 'gameover';
-type WordType = 'normal' | 'ojama' | 'treasure';
-
-interface Token {
-  kana: string;
-  romaji: string[];
-}
-
-interface Word {
-  id: string;
-  text: string;
-  type: WordType;
-  tokens: Token[];
-}
-
-interface Dummy {
-  id: number;
-  height: number;
-  isKO: boolean;
-}
 
 interface PlayerState {
   backlog: Word[];
@@ -89,43 +33,6 @@ interface ProcessResult {
   nextState?: PlayerState;
 }
 
-// 単語をトークン（判定単位）に分割する関数
-const tokenizeWord = (word: string): Token[] => {
-  const tokens: Token[] = [];
-  let i = 0;
-  while (i < word.length) {
-    const char = word[i];
-    const nextChar = word[i + 1] || '';
-    if (ROMAJI_MAP[char + nextChar]) {
-      tokens.push({ kana: char + nextChar, romaji: ROMAJI_MAP[char + nextChar] });
-      i += 2;
-    } else if (ROMAJI_MAP[char]) {
-      tokens.push({ kana: char, romaji: ROMAJI_MAP[char] });
-      i += 1;
-    } else {
-      tokens.push({ kana: char, romaji: [char] });
-      i += 1;
-    }
-  }
-  return tokens;
-};
-
-// 新しい単語オブジェクトを生成する関数
-const generateWord = (): Word => {
-  const text = WORD_POOL[Math.floor(Math.random() * WORD_POOL.length)];
-  const rand = Math.random();
-  let type: WordType = 'normal';
-  if (rand < 0.1) type = 'treasure'; // 10%でお宝
-  else if (rand < 0.3) type = 'ojama'; // 20%でおじゃま（ダミー効果）
-
-  return {
-    id: Math.random().toString(36).substring(2, 11),
-    text,
-    type,
-    tokens: tokenizeWord(text),
-  };
-};
-
 export default function App() {
   const [gameState, setGameState] = useState<GameStatus>('start'); // 'start', 'playing', 'gameover'
 
@@ -134,23 +41,50 @@ export default function App() {
   const [tokenIndex, setTokenIndex] = useState(0);
   const [currentTyping, setCurrentTyping] = useState('');
   const [combo, setCombo] = useState(0);
+  const [maxCombo, setMaxCombo] = useState(0);
+  const [score, setScore] = useState(0);
   const [keysTyped, setKeysTyped] = useState(0);
   const [startTime, setStartTime] = useState<number | null>(null);
   const [spawnInterval, setSpawnInterval] = useState(INITIAL_SPAWN_INTERVAL);
+  const [seed, setSeed] = useState(0);
+
+  // 攻撃・アイテム・バッジ
+  const [playerKOs, setPlayerKOs] = useState(0); // 自分の攻撃で倒した数 → バッジ
+  const [heldItem, setHeldItem] = useState<ItemType | null>(null);
 
   // 演出用ステート
   const [missFlash, setMissFlash] = useState(false);
   const [itemFlash, setItemFlash] = useState(false);
+  const [attackFlash, setAttackFlash] = useState(0); // 直近に送ったおじゃま数（0で非表示）
 
   // ダミープレイヤーの状態 (20人)
   const [dummies, setDummies] = useState<Dummy[]>(
-    Array.from({ length: 20 }).map((_, i) => ({ id: i, height: 0, isKO: false })),
+    Array.from({ length: DUMMY_COUNT }).map((_, i) => ({ id: i, height: 0, isKO: false })),
   );
 
+  // --- ハンドラ内から最新値を参照するための ref 群 ---
   const stateRef = useRef<PlayerState>({ backlog, tokenIndex, currentTyping, combo, gameState });
   useEffect(() => {
     stateRef.current = { backlog, tokenIndex, currentTyping, combo, gameState };
   }, [backlog, tokenIndex, currentTyping, combo, gameState]);
+
+  const dummiesRef = useRef(dummies);
+  useEffect(() => {
+    dummiesRef.current = dummies;
+  }, [dummies]);
+
+  const heldItemRef = useRef(heldItem);
+  useEffect(() => {
+    heldItemRef.current = heldItem;
+  }, [heldItem]);
+
+  // お題生成用 RNG（シード由来）とアイテム抽選用 RNG（別系列）。
+  const wordRngRef = useRef<RNG | null>(null);
+  const itemRngRef = useRef<RNG | null>(null);
+
+  // アイテム効果用フラグ（描画に関与しないので ref で保持）。
+  const shieldRef = useRef(false);
+  const brakeUntilRef = useRef(0);
 
   // 打鍵判定コアロジック (再帰的に次トークン判定も行う)
   const processKey = useCallback((key: string, state: PlayerState): ProcessResult => {
@@ -213,28 +147,98 @@ export default function App() {
     }
   }, []);
 
+  // 連鎖マイルストーン攻撃: ランダムな生存ダミーへ amount 個のおじゃまを送る。
+  // 上限を超えたら撃墜し、自分のKO(=バッジ)を加算（仕様 §3.1 / §3.5）。
+  const fireAttack = useCallback((amount: number) => {
+    const alive = dummiesRef.current.filter((d) => !d.isKO);
+    if (alive.length === 0) return;
+    const target = alive[Math.floor(Math.random() * alive.length)];
+    const willKO = target.height + amount > MAX_BACKLOG;
+
+    setDummies((prev) =>
+      prev.map((d) =>
+        d.id === target.id
+          ? willKO
+            ? { ...d, height: 0, isKO: true }
+            : { ...d, height: d.height + amount }
+          : d,
+      ),
+    );
+    if (willKO) setPlayerKOs((k) => k + 1);
+
+    setAttackFlash(amount);
+    setTimeout(() => setAttackFlash(0), 600);
+  }, []);
+
+  // お宝単語クリアでアイテムを抽選獲得（独立 RNG を使用）。
+  const grantItem = useCallback(() => {
+    const rng = itemRngRef.current;
+    const items: ItemType[] = ['shield', 'clear', 'brake'];
+    const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
+    setHeldItem(pick);
+    setItemFlash(true);
+    setTimeout(() => setItemFlash(false), 1000);
+  }, []);
+
+  // 保持中アイテムを使用（Enter キー）。
+  const useItem = useCallback(() => {
+    const item = heldItemRef.current;
+    if (!item) return;
+    if (item === 'shield') {
+      shieldRef.current = true;
+    } else if (item === 'brake') {
+      brakeUntilRef.current = Date.now() + BRAKE_DURATION;
+    } else if (item === 'clear') {
+      // 先頭(現在のお題)は残し、それ以降のおじゃま単語を取り除く。
+      setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1).filter((w) => w.type !== 'ojama')]));
+    }
+    setHeldItem(null);
+  }, []);
+
   const startGame = useCallback(() => {
-    setBacklog([generateWord(), generateWord(), generateWord()]);
+    const newSeed = randomSeed();
+    const wordRng = mulberry32(newSeed);
+    // アイテム抽選はお題列とは別系列にして、プレイ操作で単語列がずれないようにする。
+    const itemRng = mulberry32((newSeed ^ 0x9e3779b9) >>> 0);
+    wordRngRef.current = wordRng;
+    itemRngRef.current = itemRng;
+    shieldRef.current = false;
+    brakeUntilRef.current = 0;
+
+    setSeed(newSeed);
+    setBacklog([generateWord(wordRng), generateWord(wordRng), generateWord(wordRng)]);
     setTokenIndex(0);
     setCurrentTyping('');
     setCombo(0);
+    setMaxCombo(0);
+    setScore(0);
     setKeysTyped(0);
+    setPlayerKOs(0);
+    setHeldItem(null);
     setStartTime(Date.now());
     setSpawnInterval(INITIAL_SPAWN_INTERVAL);
     setGameState('playing');
     setDummies((prev) => prev.map((d) => ({ ...d, height: Math.floor(Math.random() * 5), isKO: false })));
   }, []);
 
+  const gameOver = useCallback(() => {
+    setGameState('gameover');
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const { gameState } = stateRef.current;
 
-      if (gameState === 'start' && e.key === ' ') {
+      if ((gameState === 'start' || gameState === 'gameover') && e.key === ' ') {
+        e.preventDefault();
         startGame();
         return;
       }
-      if (gameState === 'gameover' && e.key === ' ') {
-        startGame();
+
+      // プレイ中: Enter で保持アイテムを使用。
+      if (gameState === 'playing' && e.key === 'Enter') {
+        e.preventDefault();
+        useItem();
         return;
       }
 
@@ -249,15 +253,24 @@ export default function App() {
         setMissFlash(true);
         setTimeout(() => setMissFlash(false), 150);
       } else if (result.wordCleared && result.nextState) {
+        const newCombo = result.nextState.combo;
         setBacklog(result.nextState.backlog);
         setTokenIndex(0);
         setCurrentTyping('');
-        setCombo(result.nextState.combo);
+        setCombo(newCombo);
+        setMaxCombo((m) => Math.max(m, newCombo));
         setKeysTyped((prev) => prev + 1);
+        // スコア: 基本点 + 連鎖ボーナス
+        setScore((s) => s + 100 + newCombo * 10);
 
+        // 連鎖マイルストーン(5,10,15,…)で攻撃発生（5連鎖ごとに送る数+1）。
+        if (newCombo >= 5 && newCombo % 5 === 0) {
+          fireAttack(newCombo / 5);
+        }
+
+        // お宝単語クリアでアイテム獲得。
         if (result.clearedType === 'treasure') {
-          setItemFlash(true);
-          setTimeout(() => setItemFlash(false), 1000);
+          grantItem();
         }
       } else if (result.nextState) {
         setTokenIndex(result.nextState.tokenIndex);
@@ -268,11 +281,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [processKey, startGame]);
-
-  const gameOver = useCallback(() => {
-    setGameState('gameover');
-  }, []);
+  }, [processKey, startGame, useItem, fireAttack, grantItem]);
 
   // 敵のダミー更新ループ
   useEffect(() => {
@@ -297,13 +306,22 @@ export default function App() {
 
     let timerId: ReturnType<typeof setTimeout>;
     const loop = () => {
-      setBacklog((prev) => {
-        if (prev.length >= MAX_BACKLOG) {
-          gameOver();
-          return prev;
-        }
-        return [...prev, generateWord()];
-      });
+      const now = Date.now();
+      if (now < brakeUntilRef.current) {
+        // ブレーキ中: 供給をスキップ。
+      } else if (shieldRef.current) {
+        // シールド: 1回分の供給を無効化して消費。
+        shieldRef.current = false;
+      } else {
+        setBacklog((prev) => {
+          if (prev.length >= MAX_BACKLOG) {
+            gameOver();
+            return prev;
+          }
+          const rng = wordRngRef.current;
+          return rng ? [...prev, generateWord(rng)] : prev;
+        });
+      }
 
       // 加速（最小間隔まで徐々に短くする）
       setSpawnInterval((prev) => Math.max(MIN_SPAWN_INTERVAL, prev * 0.98));
@@ -387,6 +405,8 @@ export default function App() {
   };
 
   const isDanger = backlog.length >= MAX_BACKLOG - 3;
+  const eliminatedCount = dummies.filter((d) => d.isKO).length;
+  const survivors = DUMMY_COUNT + 1 - eliminatedCount; // 自分を含む生存者数
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col selection:bg-cyan-900">
@@ -396,6 +416,15 @@ export default function App() {
           missFlash ? 'bg-red-500/20' : 'bg-transparent'
         }`}
       />
+
+      {/* 攻撃発生演出 */}
+      {attackFlash > 0 && (
+        <div className="fixed top-1/3 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-200">
+          <div className="text-4xl font-black italic text-orange-400 drop-shadow-[0_0_15px_rgba(251,146,60,0.8)] flex items-center gap-2">
+            <Swords className="w-9 h-9" /> ATTACK ×{attackFlash}!
+          </div>
+        </div>
+      )}
 
       {/* アイテム獲得演出 */}
       {itemFlash && (
@@ -414,7 +443,11 @@ export default function App() {
             TYPE ROYALE<span className="text-xs ml-2 text-gray-500">PROTOTYPE</span>
           </h1>
         </div>
-        <div className="flex gap-8">
+        <div className="flex gap-6 md:gap-8">
+          <div className="flex flex-col items-center">
+            <span className="text-xs text-gray-500">SCORE</span>
+            <span className="font-mono text-xl font-bold text-cyan-300">{score}</span>
+          </div>
           <div className="flex flex-col items-center">
             <span className="text-xs text-gray-500">KPM</span>
             <span className="font-mono text-xl font-bold">{calculateKPM()}</span>
@@ -422,13 +455,13 @@ export default function App() {
           <div className="flex flex-col items-center">
             <span className="text-xs text-gray-500">K.O.</span>
             <span className="font-mono text-xl font-bold flex items-center gap-1">
-              <Trophy className="w-4 h-4 text-yellow-500" /> {dummies.filter((d) => d.isKO).length}
+              <Trophy className="w-4 h-4 text-yellow-500" /> {playerKOs}
             </span>
           </div>
           <div className="flex flex-col items-center">
             <span className="text-xs text-gray-500">BADGE</span>
             <span className="font-mono text-xl font-bold flex items-center gap-1">
-              <Shield className="w-4 h-4 text-blue-400" /> 0
+              <Shield className="w-4 h-4 text-blue-400" /> {Math.min(playerKOs, 4)}
             </span>
           </div>
         </div>
@@ -451,6 +484,31 @@ export default function App() {
           )}
 
           <div className="flex-1 flex flex-col items-center justify-end pb-8 relative z-10">
+            {/* 生存者カウンタ */}
+            {gameState === 'playing' && (
+              <div className="absolute top-2 right-0 text-right">
+                <div className="text-xs text-gray-500">ALIVE</div>
+                <div className="font-mono text-2xl font-bold text-gray-300">
+                  {survivors}
+                  <span className="text-sm text-gray-600"> / {DUMMY_COUNT + 1}</span>
+                </div>
+              </div>
+            )}
+
+            {/* 保持アイテム表示 */}
+            {gameState === 'playing' && heldItem && (
+              <div className="absolute top-2 left-0">
+                <div className="text-xs text-gray-500 mb-1">ITEM</div>
+                <div className="flex items-center gap-2 bg-neutral-900/80 border border-yellow-600/40 rounded-lg px-3 py-2">
+                  <ItemIcon type={heldItem} />
+                  <div className="leading-tight">
+                    <div className="text-sm font-bold text-yellow-200">{ITEM_META[heldItem].name}</div>
+                    <div className="text-[10px] text-gray-500">[Enter] で使用</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 予告ゲージ (左脇) */}
             <div className="absolute left-0 bottom-8 top-1/4 w-3 bg-neutral-900 rounded-full overflow-hidden border border-white/5">
               <div
@@ -521,6 +579,9 @@ export default function App() {
                 <div>🟥 おじゃま単語</div>
                 <div>🟨 お宝単語</div>
               </div>
+              <p className="text-xs text-gray-600 mt-4 max-w-sm text-center">
+                ノーミスで打ち切ると連鎖UP。5連鎖ごとに敵へおじゃまを送って撃墜！ お宝(🟨)を打つとアイテム獲得 → [Enter] で使用。
+              </p>
             </div>
           )}
 
@@ -530,15 +591,13 @@ export default function App() {
                 TOP OUT
               </h2>
               <p className="text-red-300 mb-8">おじゃまブロックがあふれました</p>
-              <div className="bg-black/40 p-6 rounded-xl flex gap-8 mb-8 border border-red-500/30">
-                <div className="text-center">
-                  <div className="text-xs text-red-400/80">KPM</div>
-                  <div className="text-3xl font-mono">{calculateKPM()}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xs text-red-400/80">KEYS</div>
-                  <div className="text-3xl font-mono">{keysTyped}</div>
-                </div>
+              <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-8 border border-red-500/30">
+                <Stat label="SCORE" value={score} />
+                <Stat label="MAX COMBO" value={maxCombo} />
+                <Stat label="K.O." value={playerKOs} />
+                <Stat label="KPM" value={calculateKPM()} />
+                <Stat label="KEYS" value={keysTyped} />
+                <Stat label="SEED" value={seed} small />
               </div>
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
             </div>
@@ -566,6 +625,21 @@ export default function App() {
     </div>
   );
 }
+
+// 結果画面の数値表示
+const Stat = ({ label, value, small }: { label: string; value: number; small?: boolean }) => (
+  <div className="text-center">
+    <div className="text-xs text-red-400/80">{label}</div>
+    <div className={`font-mono ${small ? 'text-lg' : 'text-3xl'}`}>{value}</div>
+  </div>
+);
+
+// アイテムアイコン
+const ItemIcon = ({ type }: { type: ItemType }) => {
+  if (type === 'shield') return <Shield className="w-6 h-6 text-blue-300" />;
+  if (type === 'clear') return <Wind className="w-6 h-6 text-cyan-300" />;
+  return <Pause className="w-6 h-6 text-green-300" />;
+};
 
 // 周囲のダミープレイヤー用ミニボードコンポーネント
 const DummyBoard = ({ data }: { data: Dummy }) => {
