@@ -1,17 +1,17 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Swords, Zap, Trophy, AlertTriangle, Crown, Shield, Wind, Pause, Sparkles,
-  Target, RotateCcw, LogOut, Volume2, VolumeX,
+  Target, RotateCcw, LogOut, Volume2, VolumeX, Bomb,
 } from 'lucide-react';
 import { mulberry32, type RNG } from '../lib/rng';
-import { generateWord, makeOjamaWord } from '../lib/words';
+import { generateWord, makeOjamaWord, makeOjamaWordFrom, randomLongWord } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import {
   serverNow, writePlayerSummary, finishGame, resetRoom, sendAttack, subscribeAttacks,
   type RoomPlayer, type RoomStatus,
 } from '../lib/room';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
-import type { ItemType, TargetMode } from '../lib/types';
+import type { ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
@@ -29,6 +29,7 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   shield: { name: 'シールド', desc: '次の自動供給を1回無効化' },
   clear: { name: 'おじゃま一掃', desc: 'バックログのおじゃまを消す' },
   brake: { name: 'ブレーキ', desc: '自動供給を5秒間ストップ' },
+  longbomb: { name: 'ロング送信', desc: '相手に長い単語を送りつける' },
 };
 
 const TARGET_MODES: { mode: TargetMode; label: string }[] = [
@@ -42,6 +43,7 @@ interface Telegraph {
   id: string;
   amount: number;
   confirmAt: number;
+  word?: { display: string; reading: string }; // ロング送信の単語
 }
 
 // 生存判定: 脱落していない かつ 接続中（切断したプレイヤーは脱落扱い / Phase 4）。
@@ -206,6 +208,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           sfx.ko();
         } else {
           pushToast(`${p.name} 脱落`, 'in');
+          sfx.eliminate();
         }
       }
     }
@@ -271,17 +274,33 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   );
 
   // アイテム効果適用（所持状態のクリアは行わない）。
-  const applyItem = useCallback((item: ItemType) => {
-    if (item === 'shield') shieldRef.current = true;
-    else if (item === 'brake') brakeUntilRef.current = Date.now() + BRAKE_DURATION;
-    else if (item === 'clear')
-      setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1).filter((w) => w.type !== 'ojama')]));
-  }, []);
+  const applyItem = useCallback(
+    (item: ItemType) => {
+      if (item === 'shield') shieldRef.current = true;
+      else if (item === 'brake') brakeUntilRef.current = Date.now() + BRAKE_DURATION;
+      else if (item === 'clear')
+        setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1).filter((w) => w.type !== 'ojama')]));
+      else if (item === 'longbomb') {
+        // ロング送信: ターゲットに長い単語を1個送りつける。
+        const targetId = pickTarget();
+        if (targetId) {
+          const lw = randomLongWord();
+          sendAttack(roomId, targetId, uid, 1, lw);
+          fireBeam(targetId);
+          const name = playersRef.current[targetId]?.name || '相手';
+          setAttackFlash({ amount: 1, name: `${name} に長文 📨` });
+          setTimeout(() => setAttackFlash(null), 800);
+          sfx.attack();
+        }
+      }
+    },
+    [pickTarget, fireBeam, roomId, uid],
+  );
 
   const grantItem = useCallback(() => {
     if (heldItemRef.current) applyItem(heldItemRef.current); // 既存を自動発動してスタック
     const rng = itemRngRef.current;
-    const items: ItemType[] = ['shield', 'clear', 'brake'];
+    const items: ItemType[] = ['shield', 'clear', 'brake', 'longbomb'];
     const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
     setHeldItem(pick);
     sfx.item();
@@ -292,6 +311,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const useItem = useCallback(() => {
     const item = heldItemRef.current;
     if (!item) return;
+    sfx.use();
     applyItem(item);
     setHeldItem(null);
   }, [applyItem]);
@@ -309,8 +329,11 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     const unsub = subscribeAttacks(roomId, uid, (ev) => {
       if (ev.from) lastAttackerRef.current = ev.from;
       const fromName = playersRef.current[ev.from]?.name || '相手';
-      pushToast(`${fromName} から +${ev.amount}`, 'in');
-      updatePending([...pendingRef.current, { id: ev.id, amount: ev.amount, confirmAt: Date.now() + TELEGRAPH_DELAY }]);
+      pushToast(ev.word ? `${fromName} から長文 📨` : `${fromName} から +${ev.amount}`, 'in');
+      updatePending([
+        ...pendingRef.current,
+        { id: ev.id, amount: ev.amount, confirmAt: Date.now() + TELEGRAPH_DELAY, word: ev.word },
+      ]);
     });
     return () => unsub();
   }, [started, roomId, uid, updatePending, pushToast]);
@@ -323,12 +346,15 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       const now = Date.now();
       const due = pendingRef.current.filter((e) => e.confirmAt <= now);
       if (due.length === 0) return;
-      const total = due.reduce((s, e) => s + e.amount, 0);
+      const words: Word[] = [];
+      for (const e of due) {
+        if (e.word) words.push(makeOjamaWordFrom(e.word.display, e.word.reading));
+        else for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord());
+      }
       updatePending(pendingRef.current.filter((e) => e.confirmAt > now));
-      if (total > 0) {
+      if (words.length > 0) {
         setBacklog((prev) => {
-          const next = [...prev];
-          for (let i = 0; i < total; i++) next.push(makeOjamaWord());
+          const next = [...prev, ...words];
           if (next.length > MAX_BACKLOG) {
             topOut();
             return next.slice(0, MAX_BACKLOG);
@@ -517,27 +543,26 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         ))}
       </div>
 
+      {/* 演出は上部に出して、打つべき単語に被らないようにする */}
       {attackFlash && (
-        <div className="fixed top-1/3 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <div className="text-4xl font-black italic text-orange-400 drop-shadow-[0_0_15px_rgba(251,146,60,0.8)] flex flex-col items-center gap-1">
+        <div className="fixed top-[4.5rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="text-3xl font-black italic text-orange-400 drop-shadow-[0_0_15px_rgba(251,146,60,0.8)] flex items-center gap-2">
             {attackFlash.amount > 0 ? (
-              <span className="flex items-center gap-2">
-                <Swords className="w-9 h-9" /> ATTACK ×{attackFlash.amount}!
-              </span>
+              <>
+                <Swords className="w-7 h-7" /> ATTACK ×{attackFlash.amount}!
+                {attackFlash.name && <span className="text-base text-orange-200 not-italic">→ {attackFlash.name}</span>}
+              </>
             ) : (
-              <span className="text-cyan-300 text-3xl">相殺！</span>
-            )}
-            {attackFlash.name && attackFlash.amount > 0 && (
-              <span className="text-base text-orange-200 not-italic">→ {attackFlash.name}</span>
+              <span className="text-cyan-300">相殺！</span>
             )}
           </div>
         </div>
       )}
 
       {itemFlash && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none animate-in fade-in zoom-in duration-300">
-          <div className="text-5xl font-black text-yellow-300 drop-shadow-[0_0_20px_rgba(250,204,21,0.8)] flex items-center gap-4">
-            <Sparkles className="w-12 h-12" /> ITEM GET! <Sparkles className="w-12 h-12" />
+        <div className="fixed top-[4.5rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="text-3xl font-black text-yellow-300 drop-shadow-[0_0_20px_rgba(250,204,21,0.8)] flex items-center gap-3">
+            <Sparkles className="w-8 h-8" /> ITEM GET! <Sparkles className="w-8 h-8" />
           </div>
         </div>
       )}
@@ -618,20 +643,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               </div>
             </div>
 
-            {/* 保持アイテム */}
-            {heldItem && (
-              <div className="absolute top-1 left-0">
-                <div className="flex items-center gap-2 bg-neutral-900/80 border border-yellow-600/40 rounded-lg px-3 py-2">
-                  <ItemIcon type={heldItem} />
-                  <div className="leading-tight">
-                    <div className="text-sm font-bold text-yellow-200">{ITEM_META[heldItem].name}</div>
-                    <div className="text-[11px] text-gray-300">{ITEM_META[heldItem].desc}</div>
-                    <div className="text-[10px] text-gray-500 mt-0.5">[Enter] で使用</div>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* 予告ゲージ（受信おじゃま） */}
             {totalIncoming > 0 && (
               <div className="absolute left-0 bottom-8 top-1/3 flex flex-col items-center justify-end gap-1">
@@ -657,7 +668,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               <div className="flex flex-col-reverse gap-2 mb-4 overflow-hidden">
                 {backlog
                   .slice(1)
-                  .reverse()
                   .map((w) => (
                     <div
                       key={w.id}
@@ -676,6 +686,17 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   ))}
               </div>
 
+              {/* 保持アイテム（打鍵中に確認しやすいよう単語のすぐ上に表示） */}
+              {heldItem && (
+                <div className="flex justify-center mb-2">
+                  <div className="flex items-center gap-2 bg-neutral-900/90 border border-yellow-600/50 rounded-full px-3 py-1 shadow-lg shadow-yellow-900/30">
+                    <ItemIcon type={heldItem} />
+                    <span className="text-xs font-bold text-yellow-200">{ITEM_META[heldItem].name}</span>
+                    <span className="text-[10px] text-gray-400 hidden sm:inline">{ITEM_META[heldItem].desc}</span>
+                    <span className="text-[10px] text-cyan-300 font-bold">[Enter]</span>
+                  </div>
+                </div>
+              )}
               {word && (
                 <div
                   className={`p-6 rounded-xl border-2 shadow-2xl mb-4 ${
@@ -743,7 +764,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 }
 
 const ItemIcon = ({ type }: { type: ItemType }) => {
-  if (type === 'shield') return <Shield className="w-6 h-6 text-blue-300" />;
-  if (type === 'clear') return <Wind className="w-6 h-6 text-cyan-300" />;
-  return <Pause className="w-6 h-6 text-green-300" />;
+  if (type === 'shield') return <Shield className="w-5 h-5 text-blue-300" />;
+  if (type === 'clear') return <Wind className="w-5 h-5 text-cyan-300" />;
+  if (type === 'brake') return <Pause className="w-5 h-5 text-green-300" />;
+  return <Bomb className="w-5 h-5 text-red-300" />;
 };

@@ -175,16 +175,22 @@ export interface AttackEvent {
   id: string;
   from: string;
   amount: number;
+  word?: { display: string; reading: string }; // ロング送信の単語（任意）
 }
 
 // 対象プレイヤーへおじゃまを送信（/attacks/{targetUid} に push）。
-export function sendAttack(roomId: string, targetUid: string, fromUid: string, amount: number): void {
+// word を渡すと「ロング送信」（指定の長い単語を1個挿入させる）になる。
+export function sendAttack(
+  roomId: string,
+  targetUid: string,
+  fromUid: string,
+  amount: number,
+  word?: { display: string; reading: string },
+): void {
   if (amount <= 0) return;
-  push(ref(db, `rooms/${roomId}/attacks/${targetUid}`), {
-    from: fromUid,
-    amount,
-    at: serverTimestamp(),
-  }).catch(() => {});
+  const payload: Record<string, unknown> = { from: fromUid, amount, at: serverTimestamp() };
+  if (word) payload.word = word;
+  push(ref(db, `rooms/${roomId}/attacks/${targetUid}`), payload).catch(() => {});
 }
 
 // 自分宛ての攻撃を購読。受信したらコールバックし、即座にノードを削除（consume）。
@@ -193,7 +199,7 @@ export function subscribeAttacks(roomId: string, uid: string, cb: (ev: AttackEve
   const unsub = onChildAdded(aRef, (snap) => {
     const val = snap.val();
     if (val && typeof val.amount === 'number') {
-      cb({ id: snap.key || '', from: val.from || '', amount: val.amount });
+      cb({ id: snap.key || '', from: val.from || '', amount: val.amount, word: val.word });
     }
     remove(snap.ref).catch(() => {});
   });

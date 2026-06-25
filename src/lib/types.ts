@@ -1,6 +1,6 @@
 // アプリ全体で共有する型定義。
 
-export type GameStatus = 'start' | 'playing' | 'gameover';
+export type GameStatus = 'start' | 'playing' | 'gameover' | 'win';
 
 export type WordType = 'normal' | 'ojama' | 'treasure';
 
@@ -26,7 +26,7 @@ export interface Dummy {
 }
 
 // お宝単語クリアで獲得できるアイテム種別。
-export type ItemType = 'shield' | 'clear' | 'brake';
+export type ItemType = 'shield' | 'clear' | 'brake' | 'longbomb';
 
 // 攻撃ターゲティング（仕様 §3.4）。
 export type TargetMode = 'random' | 'finish' | 'counter' | 'strong';

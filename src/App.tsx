@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Swords, User, Globe, Loader2 } from 'lucide-react';
+import { Swords, User, Globe, Loader2, Zap } from 'lucide-react';
 import { ensureSignedIn } from './lib/firebase';
 import SoloGame from './components/SoloGame';
 import Lobby from './components/Lobby';
@@ -13,6 +13,7 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [name, setName] = useState('');
   const [roomId, setRoomId] = useState<string | null>(null);
+  const [soloFast, setSoloFast] = useState(false);
 
   // オンライン用に匿名サインイン（バックグラウンドで先行実行）。
   useEffect(() => {
@@ -22,7 +23,7 @@ export default function App() {
   }, []);
 
   if (view === 'solo') {
-    return <SoloGame onExit={() => setView('home')} />;
+    return <SoloGame fast={soloFast} onExit={() => setView('home')} />;
   }
 
   if (view === 'lobby') {
@@ -63,10 +64,22 @@ export default function App() {
 
       <div className="flex flex-col gap-4 w-full max-w-xs">
         <button
-          onClick={() => setView('solo')}
+          onClick={() => {
+            setSoloFast(false);
+            setView('solo');
+          }}
           className="bg-neutral-800 hover:bg-neutral-700 rounded-xl px-6 py-4 font-bold flex items-center justify-center gap-3 transition-colors"
         >
           <User className="w-5 h-5" /> ソロ練習
+        </button>
+        <button
+          onClick={() => {
+            setSoloFast(true);
+            setView('solo');
+          }}
+          className="bg-amber-700/80 hover:bg-amber-600 rounded-xl px-6 py-4 font-bold flex items-center justify-center gap-3 transition-colors"
+        >
+          <Zap className="w-5 h-5" /> ショートモード <span className="text-xs text-amber-200/80">(高速)</span>
         </button>
         <button
           onClick={() => setView('lobby')}

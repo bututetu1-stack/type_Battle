@@ -313,3 +313,34 @@ export const makeOjamaWord = (): Word => {
   const entry = WORD_POOL[Math.floor(Math.random() * WORD_POOL.length)];
   return buildWord(entry, 'ojama', 'o');
 };
+
+// アイテム「ロング送信」で相手に送りつける長めの単語。
+export const LONG_WORDS: WordEntry[] = [
+  { display: '電光石火', reading: 'でんこうせっか' },
+  { display: '臨機応変', reading: 'りんきおうへん' },
+  { display: '七転八起', reading: 'しちてんばっき' },
+  { display: '国際連合', reading: 'こくさいれんごう' },
+  { display: '試行錯誤', reading: 'しこうさくご' },
+  { display: '質疑応答', reading: 'しつぎおうとう' },
+  { display: '一致団結', reading: 'いっちだんけつ' },
+  { display: '油断大敵', reading: 'ゆだんたいてき' },
+  { display: 'コミュニケーション', reading: 'こみゅにけーしょん' },
+  { display: 'インフォメーション', reading: 'いんふぉめーしょん' },
+  { display: 'プロフェッショナル', reading: 'ぷろふぇっしょなる' },
+  { display: 'オリンピック', reading: 'おりんぴっく' },
+];
+
+// ロング送信用の単語をランダムに選ぶ（表示と読みのペア）。
+export const randomLongWord = (): { display: string; reading: string } => {
+  const e = LONG_WORDS[Math.floor(Math.random() * LONG_WORDS.length)];
+  return { display: e.display, reading: e.reading };
+};
+
+// 指定の表示・読みからおじゃま単語を生成（受信したロング送信の挿入用）。
+export const makeOjamaWordFrom = (display: string, reading: string): Word => ({
+  id: `o${idCounter++}`,
+  display,
+  reading,
+  type: 'ojama',
+  tokens: tokenizeWord(reading),
+});
