@@ -1015,30 +1015,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </div>
       )}
 
-      {/* 発動中アイテムの残り時間カウントダウン（右側・目線の高さで常に見える位置に） */}
-      {activeEffects.length > 0 && (
-        <div className="fixed top-1/2 right-3 -translate-y-1/2 z-40 flex flex-col items-stretch gap-1.5 w-52 pointer-events-none">
-          {activeEffects.map((e) => {
-            const dur = ITEM_DURATION[e.type] ?? 1;
-            const remain = Math.max(0, e.until - nowTick);
-            const frac = Math.max(0, Math.min(1, remain / dur));
-            return (
-              <div key={e.type} className="w-full bg-neutral-900/95 border border-white/15 rounded-lg px-3 py-1.5 flex items-center gap-2 shadow-xl">
-                <span className="text-2xl leading-none">{ITEM_EMOJI[e.type]}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-baseline mb-0.5">
-                    <span className="text-xs font-bold text-gray-100 whitespace-nowrap">{ITEM_META[e.type].name}</span>
-                    <span className="text-sm font-mono font-black text-white tabular-nums">{(remain / 1000).toFixed(1)}<span className="text-[10px] text-gray-400">s</span></span>
-                  </div>
-                  <div className="w-full h-2.5 rounded-full bg-neutral-700 overflow-hidden">
-                    <div className={`h-full ${e.color} transition-[width] duration-150`} style={{ width: `${frac * 100}%` }} />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {!selfAlive && status === 'playing' && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 bg-red-950/80 border border-red-500/40 rounded-lg px-6 py-2 text-center">
@@ -1222,7 +1198,30 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               )}
             </div>
 
-            <div className="w-full max-w-lg mt-2">
+            {/* 発動中アイテムの残り時間カウントダウン（保持アイテムの下に表示） */}
+            {activeEffects.length > 0 && (
+              <div className="w-full max-w-lg mt-3 flex flex-col gap-1">
+                {activeEffects.map((e) => {
+                  const dur = ITEM_DURATION[e.type] ?? 1;
+                  const remain = Math.max(0, e.until - nowTick);
+                  const frac = Math.max(0, Math.min(1, remain / dur));
+                  return (
+                    <div key={e.type} className="bg-neutral-900/90 border border-white/15 rounded-lg px-3 py-1 flex items-center gap-2">
+                      <span className="text-lg leading-none">{ITEM_EMOJI[e.type]}</span>
+                      <span className="text-[11px] font-bold text-gray-100 whitespace-nowrap w-20 shrink-0">{ITEM_META[e.type].name}</span>
+                      <div className="flex-1 h-2.5 rounded-full bg-neutral-700 overflow-hidden">
+                        <div className={`h-full ${e.color} transition-[width] duration-150`} style={{ width: `${frac * 100}%` }} />
+                      </div>
+                      <span className="text-xs font-mono font-black text-white tabular-nums w-10 text-right">
+                        {(remain / 1000).toFixed(1)}<span className="text-[9px] text-gray-400">s</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="w-full max-w-lg mt-4">
               <div className="text-[10px] text-gray-500 mb-0.5">
                 {isBoss ? 'あなたのHP（満タンで討伐される）' : '自分のバックログ（満タンで脱落）'}
               </div>
