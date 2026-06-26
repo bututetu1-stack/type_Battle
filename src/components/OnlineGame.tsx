@@ -43,6 +43,16 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   regen: { name: '再生', desc: 'ボス: 自分のHPを回復' },
   rally: { name: '総攻撃', desc: '挑戦者: ボスへ即時の大攻撃' },
   focus: { name: '会心', desc: '挑戦者: 次のボスへの攻撃を倍化' },
+  barrier: { name: 'バリア', desc: '次の被弾を1回まるごと防ぐ' },
+  freeze: { name: 'フリーズ', desc: '5秒間 着弾予告と自動供給を停止' },
+  purge: { name: '大掃除', desc: 'バックログのおじゃまを全消去' },
+  guard: { name: 'ガード', desc: '次の自動供給を2回ぶん防ぐ' },
+  snipe: { name: '狙撃', desc: '狙った相手へ即+3' },
+  burst: { name: 'バースト', desc: '全ての相手へ一斉に+2' },
+  heavy: { name: '強撃', desc: '連鎖に応じた大攻撃を即送信' },
+  flood: { name: 'フラッド', desc: '相手へ大量(+4)のおじゃま' },
+  drain: { name: 'ドレイン', desc: '自分を2減らし相手へ+2' },
+  mirror: { name: 'ミラー', desc: '不利なほど強い反撃を送る' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡',
@@ -60,10 +70,21 @@ const ITEM_EMOJI: Record<ItemType, string> = {
   regen: '💚',
   rally: '⚔',
   focus: '🎯',
+  barrier: '🛡️',
+  freeze: '🧊',
+  purge: '🧹',
+  guard: '🧱',
+  snipe: '🎯',
+  burst: '💥',
+  heavy: '🔨',
+  flood: '🌊',
+  drain: '🩸',
+  mirror: '🪞',
 };
 const RAPID_DURATION = 8000;
 const KEEP_DURATION = 10000;
 const PARRY_DURATION = 8000; // 受け流し（被攻撃を他プレイヤーへ逸らす）の効果時間
+const FREEZE_DURATION = 5000; // フリーズ（着弾予告と自動供給を停止）の効果時間
 
 // 時間制限つきアイテムの効果時間（カウントダウンゲージ用）。
 const ITEM_DURATION: Partial<Record<ItemType, number>> = {
@@ -71,6 +92,7 @@ const ITEM_DURATION: Partial<Record<ItemType, number>> = {
   rapid: RAPID_DURATION,
   keep: KEEP_DURATION,
   parry: PARRY_DURATION,
+  freeze: FREEZE_DURATION,
 };
 
 const TARGET_MODES: { mode: TargetMode; label: string }[] = [
@@ -138,6 +160,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [shake, setShake] = useState(false);
   const [damageFlash, setDamageFlash] = useState(false); // 被弾時の赤フラッシュ
   const [useFlash, setUseFlash] = useState<ItemType | null>(null); // 自分のアイテム発動演出
+  const [parryFx, setParryFx] = useState(false); // 受け流し成功エフェクト
 
   const centerRef = useRef<HTMLDivElement>(null);
   const boardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -159,6 +182,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const rapidUntilRef = useRef(0);
   const keepUntilRef = useRef(0);
   const parryUntilRef = useRef(0);
+  const freezeUntilRef = useRef(0); // フリーズ（着弾予告/供給停止）
+  const barrierRef = useRef(false); // バリア（次の被弾を1回防ぐ）
+  const guardCountRef = useRef(0); // ガード（自動供給を複数回防ぐ）
   const focusNextRef = useRef(false); // 会心: 次のボスへの攻撃を倍化
   const attackProgressRef = useRef(0);
   const categoryRef = useRef(category);
@@ -241,6 +267,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     keepUntilRef.current = 0;
     rapidUntilRef.current = 0;
     parryUntilRef.current = 0;
+    freezeUntilRef.current = 0;
+    barrierRef.current = false;
+    guardCountRef.current = 0;
     // 新しいゲーム開始時に自分の状態をリセット（再戦対応）。
     writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '' });
   }, [seed, roomId, uid]);
@@ -458,8 +487,69 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         // 挑戦者: 次のボスへの攻撃を倍化。
         focusNextRef.current = true;
       }
+      // --- 防御 ---
+      else if (item === 'barrier') barrierRef.current = true;
+      else if (item === 'freeze') freezeUntilRef.current = Date.now() + FREEZE_DURATION;
+      else if (item === 'guard') guardCountRef.current = 2;
+      else if (item === 'purge') {
+        setBacklog((prev) => prev.filter((w) => w.type !== 'ojama'));
+        setTokenIndex(0);
+        setCurrentTyping('');
+      }
+      // --- 攻撃 ---
+      else if (item === 'snipe') {
+        const t = pickTarget();
+        if (t) {
+          sendAttack(roomId, t, uid, 3);
+          fireBeam(t);
+          setAttackFlash({ amount: 3, name: `${playersRef.current[t]?.name || '相手'} を狙撃` });
+          setTimeout(() => setAttackFlash(null), 800);
+          sfx.attack();
+        }
+      } else if (item === 'heavy') {
+        sendAmount(Math.min(Math.max(2, Math.floor(stateRef.current.combo / 3)), 6));
+      } else if (item === 'burst') {
+        // 全ての相手へ一斉に +2。
+        const opponents = bossMode
+          ? isBoss
+            ? Object.keys(playersRef.current).filter((id) => id !== bossUid && isLive(playersRef.current[id]))
+            : isLive(playersRef.current[bossUid])
+              ? [bossUid]
+              : []
+          : Object.entries(playersRef.current)
+              .filter(([id, p]) => id !== uid && isLive(p))
+              .map(([id]) => id);
+        for (const id of opponents) {
+          sendAttack(roomId, id, uid, 2);
+          fireBeam(id);
+        }
+        setAttackFlash({ amount: 2, name: 'バースト！ 全体+2' });
+        setTimeout(() => setAttackFlash(null), 800);
+        sfx.attack();
+      }
+      // --- 妨害 ---
+      else if (item === 'flood') {
+        const t = pickTarget();
+        if (t) {
+          sendAttack(roomId, t, uid, 4);
+          fireBeam(t);
+          setAttackFlash({ amount: 4, name: `${playersRef.current[t]?.name || '相手'} へフラッド` });
+          setTimeout(() => setAttackFlash(null), 800);
+          sfx.attack();
+        }
+      } else if (item === 'drain') {
+        setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1, Math.max(1, prev.length - 2))]));
+        const t = pickTarget();
+        if (t) {
+          sendAttack(roomId, t, uid, 2);
+          fireBeam(t);
+          sfx.attack();
+        }
+      } else if (item === 'mirror') {
+        sendAmount(Math.min(Math.max(1, Math.floor(stateRef.current.backlog.length / 3)), 6));
+      }
     },
-    [pickTarget, fireBeam, roomId, uid, bossUid],
+    [pickTarget, fireBeam, roomId, uid, bossUid, bossMode, isBoss, sendAmount],
   );
 
   const grantItem = useCallback(() => {
@@ -467,13 +557,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     const rng = itemRngRef.current;
     let items: ItemType[];
     if (bossMode && isBoss) {
-      // ボス専用アイテム＋自衛系。
-      items = ['meteor', 'quake', 'regen', 'brake', 'keep', 'clear'];
+      // ボス専用＋自衛系＋全体攻撃。
+      items = ['meteor', 'quake', 'regen', 'brake', 'keep', 'clear', 'barrier', 'freeze', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'mirror'];
     } else if (bossMode) {
-      // 挑戦者: 攻撃協力系を多めに。
-      items = ['shield', 'clear', 'brake', 'rapid', 'keep', 'parry', 'rally', 'focus', 'longbomb'];
+      // 挑戦者: 攻撃協力系を多めに＋追加アイテム。
+      items = ['shield', 'clear', 'brake', 'rapid', 'keep', 'parry', 'rally', 'focus', 'longbomb', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror'];
     } else {
-      items = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'parry'];
+      items = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'parry', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror'];
     }
     const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
     setHeldItem(pick);
@@ -521,6 +611,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     const id = setInterval(() => {
       if (!selfAliveRef.current || pendingRef.current.length === 0) return;
       const now = Date.now();
+      if (now < freezeUntilRef.current) return; // フリーズ中は確定を保留
       const due = pendingRef.current.filter((e) => e.confirmAt <= now);
       if (due.length === 0) return;
       updatePending(pendingRef.current.filter((e) => e.confirmAt > now));
@@ -538,7 +629,17 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           } else {
             pushToast(`受け流し！ +${deflect}`, 'item');
           }
+          sfx.parry();
+          setParryFx(true);
+          setTimeout(() => setParryFx(false), 500);
         }
+        return;
+      }
+      // バリア中は、今回の被弾をまるごと1回防ぐ。
+      if (barrierRef.current) {
+        barrierRef.current = false;
+        pushToast('バリアで防御！', 'item');
+        sfx.use();
         return;
       }
       const words: Word[] = [];
@@ -618,8 +719,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     let timerId: ReturnType<typeof setTimeout>;
     const loop = () => {
       const now = Date.now();
-      if (now < brakeUntilRef.current) {
-        /* ブレーキ中 */
+      if (now < brakeUntilRef.current || now < freezeUntilRef.current) {
+        /* ブレーキ / フリーズ中は供給停止 */
+      } else if (guardCountRef.current > 0) {
+        guardCountRef.current -= 1; // ガード: 複数回ぶん供給を無効化
       } else if (shieldRef.current) {
         shieldRef.current = false;
       } else {
@@ -710,6 +813,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       { type: 'rapid', until: rapidUntilRef.current, color: 'bg-yellow-400' },
       { type: 'keep', until: keepUntilRef.current, color: 'bg-fuchsia-500' },
       { type: 'parry', until: parryUntilRef.current, color: 'bg-violet-500' },
+      { type: 'freeze', until: freezeUntilRef.current, color: 'bg-sky-400' },
     ] as { type: ItemType; until: number; color: string }[]
   ).filter((e) => nowTick > 0 && e.until > nowTick);
 
@@ -785,6 +889,16 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         style={{ boxShadow: 'inset 0 0 140px 40px rgba(239,68,68,0.55)' }}
       />
 
+      {/* 受け流し成功エフェクト（シアンの衝撃波リング＋PARRY!） */}
+      {parryFx && (
+        <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
+          <div className="parry-ring rounded-full border-4 border-cyan-300" />
+          <div className="absolute parry-label text-4xl font-black italic text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,0.9)]">
+            PARRY!
+          </div>
+        </div>
+      )}
+
       {/* 攻撃/被弾ビーム */}
       {beams.length > 0 && (
         <svg className="fixed inset-0 w-full h-full pointer-events-none z-40">
@@ -857,9 +971,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </div>
       )}
 
-      {/* 発動中アイテムの残り時間カウントダウン（大きく目立つ位置に） */}
+      {/* 発動中アイテムの残り時間カウントダウン（右側・目線の高さで常に見える位置に） */}
       {activeEffects.length > 0 && (
-        <div className="fixed top-[7rem] left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-1.5 w-64 pointer-events-none">
+        <div className="fixed top-1/2 right-3 -translate-y-1/2 z-40 flex flex-col items-stretch gap-1.5 w-52 pointer-events-none">
           {activeEffects.map((e) => {
             const dur = ITEM_DURATION[e.type] ?? 1;
             const remain = Math.max(0, e.until - nowTick);
@@ -1124,6 +1238,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           80% { transform: translate(4px, 2px); }
         }
         .screen-shake { animation: screenShake 0.45s ease-in-out; }
+        @keyframes parryRing { 0% { width: 40px; height: 40px; opacity: 0.9; } 100% { width: 360px; height: 360px; opacity: 0; } }
+        .parry-ring { width: 40px; height: 40px; animation: parryRing 0.5s ease-out forwards; box-shadow: 0 0 24px rgba(34,211,238,0.8); }
+        @keyframes parryLabel { 0% { transform: scale(0.6); opacity: 0; } 30% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+        .parry-label { animation: parryLabel 0.5s ease-out forwards; }
       `,
         }}
       />
@@ -1137,5 +1255,6 @@ const ItemIcon = ({ type }: { type: ItemType }) => {
   if (type === 'brake') return <Pause className="w-5 h-5 text-green-300" />;
   if (type === 'longbomb') return <Bomb className="w-5 h-5 text-red-300" />;
   if (type === 'keep') return <Lock className="w-5 h-5 text-fuchsia-300" />;
-  return <Zap className="w-5 h-5 text-yellow-300" />;
+  if (type === 'rapid') return <Zap className="w-5 h-5 text-yellow-300" />;
+  return <span className="text-base leading-none">{ITEM_EMOJI[type]}</span>;
 };

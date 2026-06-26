@@ -76,6 +76,12 @@ export const sfx = {
     blip(330, 0.1, 'triangle', 0.05);
     blip(196, 0.16, 'triangle', 0.05, 0.07);
   },
+  // 受け流し成功: 金属的でキラッとした上昇音。
+  parry: () => {
+    blip(1200, 0.06, 'square', 0.05);
+    blip(1600, 0.06, 'sine', 0.05, 0.04);
+    blip(2100, 0.12, 'triangle', 0.05, 0.08);
+  },
   countdown: () => blip(600, 0.08, 'sine', 0.05),
   start: () => {
     blip(523, 0.1, 'sine', 0.06);
