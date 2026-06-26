@@ -172,16 +172,17 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   // 指定量を攻撃: まず受信予告と相殺 → 余剰をターゲットへ。
   const fireAttack = useCallback((amount: number) => {
     if (amount <= 0) return;
-    // 相殺
+    // 相殺（ただし長文＝ロング送信は相殺対象外で必ず着弾する）。
     let remaining = amount;
     const sorted = [...pendingRef.current].sort((a, b) => a.confirmAt - b.confirmAt);
     for (const e of sorted) {
       if (remaining <= 0) break;
+      if (e.word) continue; // 長文は打ち消せない
       const cut = Math.min(remaining, e.amount);
       e.amount -= cut;
       remaining -= cut;
     }
-    updatePending(sorted.filter((e) => e.amount > 0));
+    updatePending(sorted.filter((e) => e.amount > 0 || e.word));
     sfx.attack();
     if (remaining <= 0) {
       setAttackFlash({ amount: 0, name: '相殺！' });
@@ -404,9 +405,34 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
           pushToast(`${user.name} が ${ITEM_META[item].name} 使用`, 'item');
         }
       }
+
+      // テトリス99のように、CPU同士も撃ち合う（自分以外の攻防を可視化）。
+      if (alive.length >= 2 && Math.random() < 0.6) {
+        const a = alive[Math.floor(Math.random() * alive.length)];
+        let b = alive[Math.floor(Math.random() * alive.length)];
+        if (b.id === a.id) b = alive[(alive.indexOf(a) + 1) % alive.length];
+        if (b.id !== a.id) {
+          const willKO = b.height + 1 > MAX_BACKLOG;
+          setDummies((prev) =>
+            prev.map((d) =>
+              d.id === b.id ? (willKO ? { ...d, height: 0, isKO: true, combo: 0 } : { ...d, height: d.height + 1 }) : d,
+            ),
+          );
+          if (willKO) sfx.eliminate();
+          const from = dummyRefs.current[a.id]?.getBoundingClientRect();
+          const to = dummyRefs.current[b.id]?.getBoundingClientRect();
+          if (from && to) {
+            addBeam(
+              from.left + from.width / 2, from.top + from.height / 2,
+              to.left + to.width / 2, to.top + to.height / 2,
+              '#94a3b8', // CPU同士は中立的なグレーで自分の攻撃(オレンジ)と区別
+            );
+          }
+        }
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [gameState, fireIncoming, pushToast, updatePending]);
+  }, [gameState, fireIncoming, pushToast, updatePending, addBeam]);
 
   // --- 受信予告の確定処理（時間が来たらおじゃまをバックログへ） ---
   useEffect(() => {

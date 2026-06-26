@@ -287,11 +287,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       const sorted = [...pendingRef.current].sort((a, b) => a.confirmAt - b.confirmAt);
       for (const e of sorted) {
         if (remaining <= 0) break;
+        if (e.word) continue; // 長文（ロング送信）は相殺対象外で必ず着弾する
         const cut = Math.min(remaining, e.amount);
         e.amount -= cut;
         remaining -= cut;
       }
-      updatePending(sorted.filter((e) => e.amount > 0));
+      updatePending(sorted.filter((e) => e.amount > 0 || e.word));
       sfx.attack();
       if (remaining > 0) {
         const targetId = pickTarget();
@@ -516,6 +517,27 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     // 全滅(=1人プレイのトップアウト)か、2人以上で残り1人になったら決着。
     if (aliveCount === 0 || (total >= 2 && aliveCount <= 1)) finishGame(roomId);
   }, [players, status, uid, hostUid, roomId, started]);
+
+  // テトリス99のように、他プレイヤー同士の攻防も可視化（自分以外の撃ち合い）。
+  // 実データの全攻撃は購読していないため、生存中の他プレイヤー間にそれっぽい
+  // ビームを散らすアンビエント表現（自分を狙うビームは出さない）。
+  useEffect(() => {
+    if (!started || status !== 'playing') return;
+    const id = setInterval(() => {
+      const aliveOthers = Object.entries(playersRef.current).filter(([oid, p]) => oid !== uid && isLive(p));
+      if (aliveOthers.length < 2 || Math.random() > 0.6) return;
+      const a = aliveOthers[Math.floor(Math.random() * aliveOthers.length)];
+      let b = aliveOthers[Math.floor(Math.random() * aliveOthers.length)];
+      if (b[0] === a[0]) b = aliveOthers[(aliveOthers.indexOf(a) + 1) % aliveOthers.length];
+      if (b[0] === a[0]) return;
+      const from = boardRefs.current[a[0]]?.getBoundingClientRect();
+      const to = boardRefs.current[b[0]]?.getBoundingClientRect();
+      if (from && to) {
+        addBeam(from.left + from.width / 2, from.top + from.height / 2, to.left + to.width / 2, to.top + to.height / 2, '#94a3b8');
+      }
+    }, 1300);
+    return () => clearInterval(id);
+  }, [started, status, uid, addBeam]);
 
   const others = Object.entries(players).filter(([id]) => id !== uid);
   const aliveCount = Object.values(players).filter(isLive).length;

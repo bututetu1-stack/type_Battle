@@ -328,52 +328,45 @@ export const makeOjamaWord = (): Word => {
 
 // アイテム「ロング送信」で相手に送りつける長文（読みは14文字以上）。
 // 1個でも打ち切るのに時間がかかる“重い”お邪魔として機能する。
-// ことわざ・慣用句。ことわざはことわざとして言い切る形にする
-// （「石の上にも三年という」ではなく「石の上にも三年」で終わらせる）。
-export const LONG_WORDS: WordEntry[] = [
-  { display: '継続は力なり', reading: 'けいぞくはちからなり' },
-  { display: '千里の道も一歩から', reading: 'せんりのみちもいっぽから' },
-  { display: '思い立ったが吉日', reading: 'おもいたったがきちじつ' },
-  { display: '郷に入っては郷に従え', reading: 'ごうにいってはごうにしたがえ' },
-  { display: '石の上にも三年', reading: 'いしのうえにもさんねん' },
-  { display: '早起きは三文の徳', reading: 'はやおきはさんもんのとく' },
-  { display: '猫の手も借りたい', reading: 'ねこのてもかりたい' },
-  { display: '猿も木から落ちる', reading: 'さるもきからおちる' },
-  { display: '塵も積もれば山となる', reading: 'ちりもつもればやまとなる' },
-  { display: '花より団子', reading: 'はなよりだんご' },
-  { display: '時は金なり', reading: 'ときはかねなり' },
-  { display: '能ある鷹は爪を隠す', reading: 'のうあるたかはつめをかくす' },
-  { display: '急がば回れ', reading: 'いそがばまわれ' },
-  { display: '旅の恥はかき捨て', reading: 'たびのはじはかきすて' },
-  { display: '鬼の居ぬ間に洗濯', reading: 'おにのいぬまにせんたく' },
-  { display: '寝る子は育つ', reading: 'ねるこはそだつ' },
-  { display: '健全な精神は健全な肉体に宿る', reading: 'けんぜんなせいしんはけんぜんなにくたいにやどる' },
-  { display: '二兎を追う者は一兎をも得ず', reading: 'にとをおうものはいっとをもえず' },
-  { display: '出る杭は打たれる', reading: 'でるくいはうたれる' },
-  { display: '知らぬが仏', reading: 'しらぬがほとけ' },
-  { display: '馬の耳に念仏', reading: 'うまのみみにねんぶつ' },
-  { display: '棚から牡丹餅', reading: 'たなからぼたもち' },
-  { display: '石橋を叩いて渡る', reading: 'いしばしをたたいてわたる' },
-  { display: '百聞は一見に如かず', reading: 'ひゃくぶんはいっけんにしかず' },
-  { display: '灯台下暗し', reading: 'とうだいもとくらし' },
-  { display: '善は急げ', reading: 'ぜんはいそげ' },
-  { display: '笑う門には福来る', reading: 'わらうかどにはふくきたる' },
-  { display: '失敗は成功のもと', reading: 'しっぱいはせいこうのもと' },
-  { display: '初心忘るべからず', reading: 'しょしんわするべからず' },
-  { display: '虎穴に入らずんば虎子を得ず', reading: 'こけつにいらずんばこじをえず' },
-  { display: '隣の芝生は青い', reading: 'となりのしばふはあおい' },
-  { display: '七転び八起き', reading: 'ななころびやおき' },
-  { display: '急いては事を仕損じる', reading: 'せいてはことをしそんじる' },
-  { display: '一寸先は闇', reading: 'いっすんさきはやみ' },
-  { display: '転ばぬ先の杖', reading: 'ころばぬさきのつえ' },
-  { display: '備えあれば憂いなし', reading: 'そなえあればうれいなし' },
-  { display: '好きこそ物の上手なれ', reading: 'すきこそもののじょうずなれ' },
-  { display: '果報は寝て待て', reading: 'かほうはねてまて' },
+// ロング送信（長文アイテム）専用の長文。読みは14文字以上の普通の文章。
+// ことわざは「言い切り形」にして長文ではなくなったため、長文ジャンルからは外し、
+// 専用の長文をここで生成して送る。
+export const LONG_SENTENCES: WordEntry[] = [
+  { display: '今日はとても良い天気で散歩日和だ', reading: 'きょうはとてもよいてんきでさんぽびよりだ' },
+  { display: '図書館で借りた本を期限までに返す', reading: 'としょかんでかりたほんをきげんまでにかえす' },
+  { display: '明日の会議の資料を今夜中に作る', reading: 'あしたのかいぎのしりょうをこんやじゅうにつくる' },
+  { display: '週末は家族と一緒に映画を見に行く', reading: 'しゅうまつはかぞくといっしょにえいがをみにいく' },
+  { display: '健康のために毎朝早起きして運動する', reading: 'けんこうのためにまいあさはやおきしてうんどうする' },
+  { display: '電車が遅れたので約束に間に合わない', reading: 'でんしゃがおくれたのでやくそくにまにあわない' },
+  { display: '夏休みの宿題を計画的に進めていく', reading: 'なつやすみのしゅくだいをけいかくてきにすすめていく' },
+  { display: '雨が降りそうなので傘を持って出かける', reading: 'あめがふりそうなのでかさをもってでかける' },
+  { display: '期末試験に向けて毎日少しずつ勉強する', reading: 'きまつしけんにむけてまいにちすこしずつべんきょうする' },
+  { display: '友達と待ち合わせて買い物に出かけた', reading: 'ともだちとまちあわせてかいものにでかけた' },
+  { display: '締め切りが近いので集中して仕上げる', reading: 'しめきりがちかいのでしゅうちゅうしてしあげる' },
+  { display: '朝ごはんをしっかり食べて学校へ行く', reading: 'あさごはんをしっかりたべてがっこうへいく' },
+  { display: '部屋を片付けてから友達を家に呼ぶ', reading: 'へやをかたづけてからともだちをいえによぶ' },
+  { display: '新しい言葉を覚えるのは時間がかかる', reading: 'あたらしいことばをおぼえるのはじかんがかかる' },
+  { display: '夕食の後に家族みんなで散歩をする', reading: 'ゆうしょくのあとにかぞくみんなでさんぽをする' },
+  { display: '仕事の合間に温かいお茶で一息つく', reading: 'しごとのあいまにあたたかいおちゃでひといきつく' },
+  { display: '週末の天気が良ければ山に登りたい', reading: 'しゅうまつのてんきがよければやまにのぼりたい' },
+  { display: '自転車で通学する途中に猫を見かけた', reading: 'じてんしゃでつうがくするとちゅうにねこをみかけた' },
+  { display: '引っ越しの準備で荷物をまとめている', reading: 'ひっこしのじゅんびでにもつをまとめている' },
+  { display: '試合に勝つために毎日練習を続ける', reading: 'しあいにかつためにまいにちれんしゅうをつづける' },
+  { display: '雪が積もったので朝早く雪かきをした', reading: 'ゆきがつもったのであさはやくゆきかきをした' },
+  { display: '誕生日に欲しかった本を買ってもらう', reading: 'たんじょうびにほしかったほんをかってもらう' },
+  { display: '庭に咲いた花に毎朝水をあげている', reading: 'にわにさいたはなにまいあさみずをあげている' },
+  { display: '窓を開けて朝の涼しい風を入れる', reading: 'まどをあけてあさのすずしいかぜをいれる' },
+  { display: '駅まで歩いて電車に乗り換える', reading: 'えきまであるいてでんしゃにのりかえる' },
+  { display: '本屋で面白そうな小説を見つけた', reading: 'ほんやでおもしろそうなしょうせつをみつけた' },
+  { display: '台所で夕飯の支度を急いでする', reading: 'だいどころでゆうはんのしたくをいそいでする' },
+  { display: '紅茶に砂糖を入れてゆっくり飲む', reading: 'こうちゃにさとうをいれてゆっくりのむ' },
+  { display: '朝市で新鮮な野菜をたくさん買った', reading: 'あさいちでしんせんなやさいをたくさんかった' },
+  { display: '公園を散歩しながら音楽を聴いた', reading: 'こうえんをさんぽしながらおんがくをきいた' },
 ];
 
-// ロング送信用の単語をランダムに選ぶ（表示と読みのペア）。
+// ロング送信用の長文をランダムに選ぶ（表示と読みのペア）。
 export const randomLongWord = (): { display: string; reading: string } => {
-  const e = LONG_WORDS[Math.floor(Math.random() * LONG_WORDS.length)];
+  const e = LONG_SENTENCES[Math.floor(Math.random() * LONG_SENTENCES.length)];
   return { display: e.display, reading: e.reading };
 };
 
@@ -393,8 +386,8 @@ export interface Theme {
   label: string;
 }
 
-// 通常出題は「単語のみ」。長文(ことわざ等)はロング送信アイテム専用にするため
-// テーマには含めない（LONG_WORDS は makeOjamaWordFrom 経由でのみ出現）。
+// 通常出題は「単語のみ」。長文はロング送信アイテム専用にするためテーマには
+// 含めない（LONG_SENTENCES は makeOjamaWordFrom 経由でのみ出現）。
 export const THEMES: Theme[] = [
   { id: 'all', label: 'すべて' },
   { id: 'greeting', label: 'あいさつ' },
@@ -672,5 +665,4 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: '約束', reading: 'やくそく' },
     { display: '節約', reading: 'せつやく' },
   ],
-  idiom: LONG_WORDS,
 };
