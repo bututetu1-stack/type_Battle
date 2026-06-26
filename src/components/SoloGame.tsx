@@ -4,7 +4,7 @@ import {
   Volume2, VolumeX, Bomb, Crown, Target,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
-import { generateWord, makeOjamaWord, THEMES } from '../lib/words';
+import { generateWord, makeOjamaWord, makeOjamaWordFrom, randomLongWord, THEMES } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
 import type { Dummy, GameStatus, ItemType, TargetMode, Word } from '../lib/types';
@@ -42,7 +42,7 @@ const TARGET_MODES: { mode: TargetMode; label: string }[] = [
   { mode: 'strong', label: '強敵' },
 ];
 
-interface Telegraph { id: number; amount: number; confirmAt: number; }
+interface Telegraph { id: number; amount: number; confirmAt: number; word?: { display: string; reading: string }; }
 
 const CPU_NAMES = [
   'タイピー', 'カナ丸', 'ローマ', 'ことだま', 'はやて', 'シフト', 'エンター', 'スペース',
@@ -383,12 +383,26 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
         pushToast(`${attacker.name} から攻撃 +${amount}`, 'in');
       }
 
-      // 一部のCPUがアイテムを使用（演出のみ：ミニボードに絵文字）。
+      // 一部のCPUがアイテムを使用。多くは演出のみ（ミニボードに絵文字）だが、
+      // ロング送信を引いた時は実際にプレイヤーへ長文（ことわざ）を送りつける。
       if (Math.random() < 0.15) {
         const user = alive[Math.floor(Math.random() * alive.length)];
         const item = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
         setDummies((prev) => prev.map((d) => (d.id === user.id ? { ...d, lastItem: item, itemAt: Date.now() } : d)));
-        pushToast(`${user.name} が ${ITEM_META[item].name} 使用`, 'item');
+        const incomingNew = pendingRef.current.reduce((s, e) => s + e.amount, 0);
+        if (item === 'longbomb' && incomingNew < 6) {
+          const lw = randomLongWord();
+          lastAttackerRef.current = user.id;
+          setDummies((prev) => prev.map((d) => (d.id === user.id ? { ...d, atk: (d.atk ?? 0) + 1 } : d)));
+          updatePending([
+            ...pendingRef.current,
+            { id: telegraphIdRef.current++, amount: 1, confirmAt: Date.now() + TELEGRAPH_DELAY, word: lw },
+          ]);
+          fireIncoming(user.id);
+          pushToast(`${user.name} から長文 📨`, 'in');
+        } else {
+          pushToast(`${user.name} が ${ITEM_META[item].name} 使用`, 'item');
+        }
       }
     }, 1000);
     return () => clearInterval(interval);
@@ -404,7 +418,10 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       if (due.length === 0) return;
       updatePending(pendingRef.current.filter((e) => e.confirmAt > now));
       const words: Word[] = [];
-      for (const e of due) for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord());
+      for (const e of due) {
+        if (e.word) words.push(makeOjamaWordFrom(e.word.display, e.word.reading));
+        else for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord());
+      }
       if (words.length === 0) return;
       setBacklog((prev) => {
         const next = [...prev, ...words];
