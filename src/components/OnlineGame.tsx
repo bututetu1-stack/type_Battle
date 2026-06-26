@@ -33,6 +33,10 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   longbomb: { name: 'ロング送信', desc: '相手に長文(相殺不可)を送りつける' },
   rapid: { name: '連射', desc: '8秒間 1クリアごとに1攻撃' },
   keep: { name: '連鎖キープ', desc: '10秒間ミスしても連鎖が切れない' },
+  shrink: { name: '短縮', desc: '溜まったワードを全て短い単語に変換' },
+  parry: { name: '受け流し', desc: '一定時間 被攻撃を他の相手に逸らす' },
+  gaugedown: { name: 'ゲージ短縮', desc: '攻撃の発射間隔を1減らす(恒久)' },
+  totem: { name: '不死のトーテム', desc: '一定時間 上限超過しても脱落しない' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡',
@@ -41,6 +45,10 @@ const ITEM_EMOJI: Record<ItemType, string> = {
   longbomb: '📨',
   rapid: '⚡',
   keep: '🔒',
+  shrink: '✂',
+  parry: '🪃',
+  gaugedown: '⏬',
+  totem: '🗿',
 };
 const RAPID_DURATION = 8000;
 const KEEP_DURATION = 10000;

@@ -226,6 +226,95 @@ export const WORD_POOL: WordEntry[] = [
   { display: 'フンコロガシ', reading: 'ふんころがし' },
   { display: 'ピストル', reading: 'ぴすとる' },
   { display: 'アイマスク', reading: 'あいますく' },
+  // 追加語彙 4
+  { display: '腕時計', reading: 'うでどけい' },
+  { display: '観覧車', reading: 'かんらんしゃ' },
+  { display: '時間割', reading: 'じかんわり' },
+  { display: '万華鏡', reading: 'まんげきょう' },
+  { display: '雑誌', reading: 'ざっし' },
+  { display: '新聞紙', reading: 'しんぶんし' },
+  { display: '消防士', reading: 'しょうぼうし' },
+  { display: '看護師', reading: 'かんごし' },
+  { display: '美容院', reading: 'びよういん' },
+  { display: '歯医者', reading: 'はいしゃ' },
+  { display: '郵便局', reading: 'ゆうびんきょく' },
+  { display: '交差点', reading: 'こうさてん' },
+  { display: '横断歩道', reading: 'おうだんほどう' },
+  { display: '駐車場', reading: 'ちゅうしゃじょう' },
+  { display: '自動販売機', reading: 'じどうはんばいき' },
+  { display: '観光地', reading: 'かんこうち' },
+  { display: '温泉旅行', reading: 'おんせんりょこう' },
+  { display: '記念撮影', reading: 'きねんさつえい' },
+  { display: '花火大会', reading: 'はなびたいかい' },
+  { display: '夏祭り', reading: 'なつまつり' },
+  { display: '冬将軍', reading: 'ふゆしょうぐん' },
+  { display: '木枯らし', reading: 'こがらし' },
+  { display: '紅葉狩り', reading: 'もみじがり' },
+  { display: '雪だるま', reading: 'ゆきだるま' },
+  { display: '鏡餅', reading: 'かがみもち' },
+  { display: '初詣', reading: 'はつもうで' },
+  { display: '門松', reading: 'かどまつ' },
+  { display: '年賀状', reading: 'ねんがじょう' },
+  { display: '走馬灯', reading: 'そうまとう' },
+  { display: '提灯', reading: 'ちょうちん' },
+  { display: '風鈴', reading: 'ふうりん' },
+  { display: '扇風機', reading: 'せんぷうき' },
+  { display: '麦茶', reading: 'むぎちゃ' },
+  { display: '蚊取り線香', reading: 'かとりせんこう' },
+  { display: '冷蔵庫', reading: 'れいぞうこ' },
+  { display: '洗濯機', reading: 'せんたくき' },
+  { display: '掃除機', reading: 'そうじき' },
+  { display: '目覚まし時計', reading: 'めざましどけい' },
+  { display: '懐中電灯', reading: 'かいちゅうでんとう' },
+  { display: '双眼鏡', reading: 'そうがんきょう' },
+  { display: '顕微鏡', reading: 'けんびきょう' },
+  { display: '天体望遠鏡', reading: 'てんたいぼうえんきょう' },
+  { display: '実験器具', reading: 'じっけんきぐ' },
+  { display: '化石発掘', reading: 'かせきはっくつ' },
+  { display: '恐竜時代', reading: 'きょうりゅうじだい' },
+  { display: '深海魚', reading: 'しんかいぎょ' },
+  { display: '北極星', reading: 'ほっきょくせい' },
+  { display: '流れ星', reading: 'ながれぼし' },
+  { display: '三日月', reading: 'みかづき' },
+  { display: '満月', reading: 'まんげつ' },
+  { display: '日食', reading: 'にっしょく' },
+  { display: '潮干狩り', reading: 'しおひがり' },
+  { display: '砂時計', reading: 'すなどけい' },
+  { display: '羅針盤', reading: 'らしんばん' },
+  { display: '宝の地図', reading: 'たからのちず' },
+  { display: '冒険者', reading: 'ぼうけんしゃ' },
+  { display: '迷路', reading: 'めいろ' },
+  { display: '謎解き', reading: 'なぞとき' },
+  { display: '暗号', reading: 'あんごう' },
+  { display: '合言葉', reading: 'あいことば' },
+  { display: '秘密基地', reading: 'ひみつきち' },
+  { display: '隠れ家', reading: 'かくれが' },
+  { display: '屋根裏部屋', reading: 'やねうらべや' },
+  { display: '展望台', reading: 'てんぼうだい' },
+  { display: '吊り橋', reading: 'つりばし' },
+  { display: '滑り台', reading: 'すべりだい' },
+  { display: '砂場', reading: 'すなば' },
+  { display: '鉄棒', reading: 'てつぼう' },
+  { display: '一輪車', reading: 'いちりんしゃ' },
+  { display: '竹馬', reading: 'たけうま' },
+  { display: '折り紙', reading: 'おりがみ' },
+  { display: '紙飛行機', reading: 'かみひこうき' },
+  { display: '凧揚げ', reading: 'たこあげ' },
+  { display: '影踏み', reading: 'かげふみ' },
+  { display: '鬼ごっこ', reading: 'おにごっこ' },
+  { display: '宝探し', reading: 'たからさがし' },
+  { display: '探検隊', reading: 'たんけんたい' },
+  { display: '集合写真', reading: 'しゅうごうしゃしん' },
+  { display: '優先順位', reading: 'ゆうせんじゅんい' },
+  { display: '臨機応変', reading: 'りんきおうへん' },
+  { display: '一石二鳥', reading: 'いっせきにちょう' },
+  { display: '十人十色', reading: 'じゅうにんといろ' },
+  { display: '七転八起', reading: 'しちてんはっき' },
+  { display: '電光石火', reading: 'でんこうせっか' },
+  { display: '完全燃焼', reading: 'かんぜんねんしょう' },
+  { display: '油断大敵', reading: 'ゆだんたいてき' },
+  { display: '一期一会', reading: 'いちごいちえ' },
+  { display: '不言実行', reading: 'ふげんじっこう' },
 ];
 
 // ローマ字入力マッピング（柔軟な入力に対応）
@@ -295,6 +384,76 @@ export const tokenizeWord = (reading: string): Token[] => {
   return tokens;
 };
 
+// --- 振り仮名（ルビ）セグメント生成 ---
+// 漢字部分にだけ振り仮名を付けるため、display を「漢字ラン / かな・記号ラン」に分け、
+// reading を手がかりに各漢字ランの読みを切り出す。
+export interface RubySeg {
+  text: string;
+  rt?: string; // 漢字ランのみ読みを持つ
+}
+
+// CJK 漢字（＋反復記号など）か判定する。
+const isKanjiChar = (ch: string): boolean => {
+  const c = ch.codePointAt(0) ?? 0;
+  return (
+    (c >= 0x4e00 && c <= 0x9fff) || // CJK統合漢字
+    (c >= 0x3400 && c <= 0x4dbf) || // 拡張A
+    ch === '々' ||
+    ch === '〆' ||
+    ch === 'ヶ' ||
+    ch === 'ヵ'
+  );
+};
+
+// カタカナ→ひらがな（reading[ひらがな]と照合するため）。
+const kataToHira = (s: string): string =>
+  s.replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+
+// display と reading から、漢字部分にだけ rt（振り仮名）を付けたセグメント列を返す。
+// ひらがな・カタカナ・記号には rt を付けない。
+export function buildRuby(display: string, reading: string): RubySeg[] {
+  // 同種文字（漢字 / 非漢字）が続く範囲をランにまとめる。
+  const runs: { text: string; kanji: boolean }[] = [];
+  for (const ch of display) {
+    const kanji = isKanjiChar(ch);
+    const last = runs[runs.length - 1];
+    if (last && last.kanji === kanji) last.text += ch;
+    else runs.push({ text: ch, kanji });
+  }
+
+  const segs: RubySeg[] = [];
+  let ri = 0; // reading 内のポインタ
+  for (let i = 0; i < runs.length; i++) {
+    const run = runs[i];
+    if (!run.kanji) {
+      // かな/記号ランは reading 上をそのまま進める（カタカナはひらがな化して照合）。
+      const hira = kataToHira(run.text);
+      if (reading.startsWith(hira, ri)) ri += hira.length;
+      segs.push({ text: run.text });
+    } else {
+      // 次のかなランの位置を手がかりに、この漢字ランの読みを切り出す。
+      const next = runs[i + 1];
+      let furi: string;
+      if (next) {
+        const nextHira = kataToHira(next.text);
+        const idx = reading.indexOf(nextHira, ri);
+        if (idx >= 0) {
+          furi = reading.slice(ri, idx);
+          ri = idx;
+        } else {
+          furi = reading.slice(ri);
+          ri = reading.length;
+        }
+      } else {
+        furi = reading.slice(ri);
+        ri = reading.length;
+      }
+      segs.push({ text: run.text, rt: furi || undefined });
+    }
+  }
+  return segs;
+}
+
 // 単語IDの連番カウンタ（React の key 用。シードに依存せず常に一意）。
 let idCounter = 0;
 
@@ -310,9 +469,16 @@ function buildWord(entry: WordEntry, type: WordType, prefix: string): Word {
 
 // 与えられた決定論的 RNG から新しい単語を生成する。
 // theme を指定すると、そのテーマ（タグ）の語彙からのみ出題する。
-export const generateWord = (rng: RNG, theme: string = 'all'): Word => {
+// recent に直近出題した表示テキストを渡すと、それらを避けて選ぶ（連続/近接重複の防止）。
+export const generateWord = (rng: RNG, theme: string = 'all', recent: string[] = []): Word => {
   const pool = THEME_POOLS[theme] ?? WORD_POOL;
-  const entry = pool[Math.floor(rng() * pool.length)];
+  let entry = pool[Math.floor(rng() * pool.length)];
+  // 直近に出た単語と被ったら数回まで引き直す（プールが十分大きいときのみ）。
+  if (recent.length > 0 && pool.length > recent.length + 1) {
+    for (let i = 0; i < 8 && recent.includes(entry.display); i++) {
+      entry = pool[Math.floor(rng() * pool.length)];
+    }
+  }
   const rand = rng();
   let type: WordType = 'normal';
   if (rand < 0.1) type = 'treasure'; // 10%でお宝
@@ -324,6 +490,15 @@ export const generateWord = (rng: RNG, theme: string = 'all'): Word => {
 export const makeOjamaWord = (): Word => {
   const entry = WORD_POOL[Math.floor(Math.random() * WORD_POOL.length)];
   return buildWord(entry, 'ojama', 'o');
+};
+
+// 3〜4文字の短い単語プール（アイテム「短縮」用）。
+const SHORT_POOL: WordEntry[] = WORD_POOL.filter((w) => w.reading.length >= 3 && w.reading.length <= 4);
+
+// 短い単語を生成（アイテム「短縮」でバックログを軽くするのに使う）。
+export const makeShortWord = (type: WordType = 'normal'): Word => {
+  const entry = SHORT_POOL[Math.floor(Math.random() * SHORT_POOL.length)];
+  return buildWord(entry, type, 's');
 };
 
 // アイテム「ロング送信」で相手に送りつける長文（読みは14文字以上）。
@@ -362,6 +537,25 @@ export const LONG_SENTENCES: WordEntry[] = [
   { display: '紅茶に砂糖を入れてゆっくり飲む', reading: 'こうちゃにさとうをいれてゆっくりのむ' },
   { display: '朝市で新鮮な野菜をたくさん買った', reading: 'あさいちでしんせんなやさいをたくさんかった' },
   { display: '公園を散歩しながら音楽を聴いた', reading: 'こうえんをさんぽしながらおんがくをきいた' },
+  { display: '休日は早起きしてパンを焼くのが楽しみだ', reading: 'きゅうじつははやおきしてぱんをやくのがたのしみだ' },
+  { display: '彼は約束の時間にいつも遅れてくる', reading: 'かれはやくそくのじかんにいつもおくれてくる' },
+  { display: '図書館は静かで集中できる良い場所だ', reading: 'としょかんはしずかでしゅうちゅうできるよいばしょだ' },
+  { display: '初めての街で道に迷ってしまった', reading: 'はじめてのまちでみちにまよってしまった' },
+  { display: '夜空にきれいな星がたくさん輝いている', reading: 'よぞらにきれいなほしがたくさんかがやいている' },
+  { display: '料理が得意な友人に作り方を教わる', reading: 'りょうりがとくいなゆうじんにつくりかたをおそわる' },
+  { display: '長い坂道を自転車で一気に駆け下りた', reading: 'ながいさかみちをじてんしゃでいっきにかけおりた' },
+  { display: '春になると庭の桜が一斉に咲き始める', reading: 'はるになるとにわのさくらがいっせいにさきはじめる' },
+  { display: '大切な書類を机の引き出しにしまった', reading: 'たいせつなしょるいをつくえのひきだしにしまった' },
+  { display: '海辺で拾った貝殻を箱に集めている', reading: 'うみべでひろったかいがらをはこにあつめている' },
+  { display: '雨上がりの空に大きな虹がかかった', reading: 'あめあがりのそらにおおきなにじがかかった' },
+  { display: '弟と協力して庭に小屋を作っている', reading: 'おとうとときょうりょくしてにわにこやをつくっている' },
+  { display: '美味しい匂いに誘われて店に入った', reading: 'おいしいにおいにさそわれてみせにはいった' },
+  { display: '宿題を終わらせてからゲームで遊ぶ', reading: 'しゅくだいをおわらせてからげーむであそぶ' },
+  { display: '遠くの山々が朝日に赤く染まっている', reading: 'とおくのやまやまがあさひにあかくそまっている' },
+  { display: '毎週日曜は祖母の家に遊びに行く', reading: 'まいしゅうにちようはそぼのいえにあそびにいく' },
+  { display: '冷たい川の水に足をつけて涼んだ', reading: 'つめたいかわのみずにあしをつけてすずんだ' },
+  { display: '電車の窓から流れる景色を眺めていた', reading: 'でんしゃのまどからながれるけしきをながめていた' },
+  { display: '熱心に練習した曲をみんなの前で弾く', reading: 'ねっしんにれんしゅうしたきょくをみんなのまえでひく' },
 ];
 
 // ロング送信用の長文をランダムに選ぶ（表示と読みのペア）。

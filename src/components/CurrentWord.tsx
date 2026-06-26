@@ -1,4 +1,5 @@
 import type { Word } from '../lib/types';
+import { buildRuby } from '../lib/words';
 
 interface CurrentWordProps {
   word: Word;
@@ -10,20 +11,30 @@ interface CurrentWordProps {
 // 現在のお題の内側表示: 漢字＋ふりがな(ruby) / かな進捗 / ローマ字ガイド。
 // 外枠カード（種別ごとの色）は親側で付ける。
 export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 'text-cyan-400' }: CurrentWordProps) {
-  const hasKanji = word.display !== word.reading;
+  // 漢字部分にだけ振り仮名を付けたセグメント列。長文でも各セグメントが
+  // 独立して折り返せるので、まとめてルビを振った時の縦並びバグが起きない。
+  const segs = buildRuby(word.display, word.reading);
 
   return (
     <>
-      {/* 漢字＋ふりがな */}
-      <div className="flex justify-center mb-3">
-        <ruby className="text-3xl md:text-4xl font-bold tracking-wide ruby-word">
-          {word.display}
-          {hasKanji && <rt className="text-[0.55rem] text-gray-400 font-normal">{word.reading}</rt>}
-        </ruby>
+      {/* 漢字＋ふりがな（漢字のみルビ・横並びで折り返し可能） */}
+      <div className="flex flex-wrap justify-center items-end gap-x-0.5 gap-y-1 mb-3 leading-tight">
+        {segs.map((s, i) =>
+          s.rt ? (
+            <ruby key={i} className="text-3xl md:text-4xl font-bold tracking-wide">
+              {s.text}
+              <rt className="text-[0.55rem] text-gray-400 font-normal">{s.rt}</rt>
+            </ruby>
+          ) : (
+            <span key={i} className="text-3xl md:text-4xl font-bold tracking-wide">
+              {s.text}
+            </span>
+          ),
+        )}
       </div>
 
-      {/* かな（打鍵進捗のハイライト） */}
-      <div className="flex justify-center items-center text-xl md:text-2xl font-bold tracking-widest mb-3">
+      {/* かな（打鍵進捗のハイライト）。長文でも折り返せるようにする。 */}
+      <div className="flex flex-wrap justify-center items-center text-xl md:text-2xl font-bold tracking-widest mb-3">
         {word.tokens.map((t, i) => {
           let colorClass = 'text-gray-500';
           if (i < tokenIndex) colorClass = 'text-white/90 drop-shadow-[0_0_6px_rgba(255,255,255,0.7)]';
@@ -37,7 +48,7 @@ export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 
       </div>
 
       {/* ローマ字ガイド: 入力済みは薄く残し、次に打つ1文字だけを強調する */}
-      <div className="flex justify-center items-center text-lg md:text-xl font-mono tracking-[0.15em] min-h-[1.6em]">
+      <div className="flex flex-wrap justify-center items-center text-lg md:text-xl font-mono tracking-[0.15em] min-h-[1.6em]">
         {word.tokens.map((t, i) => {
           // そのトークンに表示する綴り（入力中トークンは入力に合う候補を使う）
           const str = i === tokenIndex ? t.romaji.find((r) => r.startsWith(currentTyping)) || t.romaji[0] : t.romaji[0];

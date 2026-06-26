@@ -31,7 +31,17 @@ export interface Dummy {
 }
 
 // お宝単語クリアで獲得できるアイテム種別。
-export type ItemType = 'shield' | 'clear' | 'brake' | 'longbomb' | 'rapid' | 'keep';
+export type ItemType =
+  | 'shield'
+  | 'clear'
+  | 'brake'
+  | 'longbomb'
+  | 'rapid'
+  | 'keep'
+  | 'shrink' // 溜まったワードを全て短い単語に変換
+  | 'parry' // 一定時間、被攻撃を他の相手に受け流す
+  | 'gaugedown' // 攻撃ゲージの発射間隔を1減らす（一人一個・恒久）
+  | 'totem'; // 一定時間ワード上限超過を無効化（不死のトーテム）
 
 // 攻撃ターゲティング（仕様 §3.4）。
 export type TargetMode = 'random' | 'finish' | 'counter' | 'strong';

@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause, ArrowLeft,
-  Volume2, VolumeX, Bomb, Crown, Target, Lock,
+  Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
-import { generateWord, makeOjamaWord, makeOjamaWordFrom, randomLongWord, THEMES } from '../lib/words';
+import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, THEMES } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
 import type { Dummy, GameStatus, ItemType, TargetMode, Word } from '../lib/types';
@@ -22,7 +22,20 @@ const BRAKE_DURATION = 5000;
 const ATTACK_CAP = 5; // 1回の攻撃量の上限（即死コンボ防止）
 const RAPID_DURATION = 8000; // 連射アイテムの効果時間
 const KEEP_DURATION = 10000; // 連鎖キープ（ミスで連鎖が切れない）の効果時間
+const PARRY_DURATION = 8000; // 受け流し（被攻撃を逸らす）の効果時間
+const TOTEM_DURATION = 12000; // 不死のトーテム（上限超過無効）の効果時間
+const ATTACK_THRESHOLD = 5; // 何クリアごとに攻撃を発射するか（初期値）
 const TELEGRAPH_DELAY = 1500; // CPU攻撃の着弾予告→確定までの猶予
+const CFG_KEY = 'typeRoyale.custom'; // カスタム設定の保存キー
+
+// 時間制限つきアイテムの効果時間（カウントダウンゲージ用）。
+const ITEM_DURATION: Partial<Record<ItemType, number>> = {
+  brake: BRAKE_DURATION,
+  rapid: RAPID_DURATION,
+  keep: KEEP_DURATION,
+  parry: PARRY_DURATION,
+  totem: TOTEM_DURATION,
+};
 
 const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> = {
   shield: { name: 'シールド', icon: '🛡', desc: '次の自動供給を1回無効化' },
@@ -31,11 +44,36 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   longbomb: { name: 'ロング送信', icon: '📨', desc: '敵に長文(相殺不可)を送る' },
   rapid: { name: '連射', icon: '⚡', desc: '8秒間 1クリアごとに1攻撃' },
   keep: { name: '連鎖キープ', icon: '🔒', desc: '10秒間ミスしても連鎖が切れない' },
+  shrink: { name: '短縮', icon: '✂', desc: '溜まったワードを全て短い単語に変換' },
+  parry: { name: '受け流し', icon: '🪃', desc: '8秒間 被攻撃を他の相手へ逸らす' },
+  gaugedown: { name: 'ゲージ短縮', icon: '⏬', desc: '攻撃が4クリアごとに発射(恒久・一個まで)' },
+  totem: { name: '不死のトーテム', icon: '🗿', desc: '12秒間 上限超過しても脱落しない(自動発動)' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡', clear: '🌀', brake: '⏸', longbomb: '📨', rapid: '⚡', keep: '🔒',
+  shrink: '✂', parry: '🪃', gaugedown: '⏬', totem: '🗿',
 };
-const ALL_ITEMS: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep'];
+const ALL_ITEMS: ItemType[] = [
+  'shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'shrink', 'parry', 'gaugedown', 'totem',
+];
+
+// カスタム設定の永続化（タイトルに戻ってもリセットされない）。
+interface CustomCfg { initial: number; min: number; accel: number; theme: string; }
+function loadCfg(): CustomCfg {
+  try {
+    const raw = localStorage.getItem(CFG_KEY);
+    if (raw) {
+      const o = JSON.parse(raw);
+      return {
+        initial: typeof o.initial === 'number' ? o.initial : INITIAL_SPAWN_INTERVAL,
+        min: typeof o.min === 'number' ? o.min : MIN_SPAWN_INTERVAL,
+        accel: typeof o.accel === 'number' ? o.accel : DEFAULT_ACCEL,
+        theme: typeof o.theme === 'string' ? o.theme : 'all',
+      };
+    }
+  } catch { /* localStorage 不可環境は既定値 */ }
+  return { initial: INITIAL_SPAWN_INTERVAL, min: MIN_SPAWN_INTERVAL, accel: DEFAULT_ACCEL, theme: 'all' };
+}
 
 const TARGET_MODES: { mode: TargetMode; label: string }[] = [
   { mode: 'random', label: 'ランダム' },
@@ -52,7 +90,8 @@ const CPU_NAMES = [
   'ブレーキ', 'ラピッド', 'ボム', 'ターゲット', 'ロイヤル',
 ];
 
-export default function SoloGame({ onExit, custom = false }: { onExit: () => void; custom?: boolean }) {
+export default function SoloGame({ onExit }: { onExit: () => void }) {
+  const initialCfg = loadCfg();
   const [gameState, setGameState] = useState<GameStatus>('start');
 
   const [backlog, setBacklog] = useState<PlayerState['backlog']>([]);
@@ -75,9 +114,9 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   const [hitDummy, setHitDummy] = useState<number | null>(null);
   const [incomingDummy, setIncomingDummy] = useState<number | null>(null);
   const [muted, setMuted] = useState(false);
-  const [theme, setTheme] = useState('all');
-  const [rapidActive, setRapidActive] = useState(false);
-  const [keepActive, setKeepActive] = useState(false);
+  const [theme, setTheme] = useState(initialCfg.theme);
+  const [attackThreshold, setAttackThreshold] = useState(ATTACK_THRESHOLD); // ゲージ短縮で 5→4
+  const [nowTick, setNowTick] = useState(0); // カウントダウン描画用の時刻（効果の発動中判定にも使う）
   const [attackProgress, setAttackProgress] = useState(0); // 次の攻撃までのゲージ（ミスで減らない）
   const [targetMode, setTargetMode] = useState<TargetMode>('random');
   // 受信予告（CPUからの攻撃）
@@ -106,20 +145,43 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 1700);
   }, []);
 
-  // カスタムモードの設定
-  const [cfgInitial, setCfgInitial] = useState(INITIAL_SPAWN_INTERVAL);
-  const [cfgMin, setCfgMin] = useState(MIN_SPAWN_INTERVAL);
-  const [cfgAccel, setCfgAccel] = useState(DEFAULT_ACCEL);
+  // カスタムモードの設定（永続化された値で初期化）
+  const [cfgInitial, setCfgInitial] = useState(initialCfg.initial);
+  const [cfgMin, setCfgMin] = useState(initialCfg.min);
+  const [cfgAccel, setCfgAccel] = useState(initialCfg.accel);
+  // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
+  useEffect(() => {
+    try {
+      localStorage.setItem(CFG_KEY, JSON.stringify({ initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme }));
+    } catch { /* 保存不可環境は無視 */ }
+  }, [cfgInitial, cfgMin, cfgAccel, theme]);
   const accelRef = useRef(DEFAULT_ACCEL);
   const minRef = useRef(MIN_SPAWN_INTERVAL);
   const rapidUntilRef = useRef(0);
   const keepUntilRef = useRef(0);
+  const parryUntilRef = useRef(0);
+  const totemUntilRef = useRef(0);
+  const attackThresholdRef = useRef(ATTACK_THRESHOLD);
+  const gaugeDownObtainedRef = useRef(false); // ゲージ短縮は一人一個まで
   const attackProgressRef = useRef(0);
+  const recentRef = useRef<string[]>([]); // 直近に出した単語（連続/近接重複の回避）
   const themeRef = useRef(theme);
   useEffect(() => { themeRef.current = theme; }, [theme]);
   const targetModeRef = useRef(targetMode);
   useEffect(() => { targetModeRef.current = targetMode; }, [targetMode]);
   const lastAttackerRef = useRef<number | null>(null);
+
+  // 直近の単語履歴に追加（末尾8件まで保持）。
+  const pushRecent = useCallback((display: string) => {
+    recentRef.current = [...recentRef.current, display].slice(-8);
+  }, []);
+  // 重複を避けつつ次の単語を生成して履歴に積む。
+  const nextWord = useCallback((): Word => {
+    const rng = wordRngRef.current!;
+    const w = generateWord(rng, themeRef.current, recentRef.current);
+    pushRecent(w.display);
+    return w;
+  }, [pushRecent]);
   const pendingRef = useRef<Telegraph[]>([]);
   const updatePending = useCallback((next: Telegraph[]) => {
     pendingRef.current = next;
@@ -231,21 +293,95 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       else if (item === 'longbomb') fireAttack(6); // 敵CPUへの大ダメージ攻撃
       else if (item === 'rapid') {
         rapidUntilRef.current = Date.now() + RAPID_DURATION;
-        setRapidActive(true);
-        setTimeout(() => setRapidActive(false), RAPID_DURATION);
       } else if (item === 'keep') {
         keepUntilRef.current = Date.now() + KEEP_DURATION;
-        setKeepActive(true);
-        setTimeout(() => setKeepActive(false), KEEP_DURATION);
+      } else if (item === 'shrink') {
+        // 溜まっているワード（処理待ちの山）を全て短い単語に変換して打ちやすくする。
+        // いま打っている先頭(index 0)はそのまま残す。
+        setBacklog((prev) => prev.map((w, i) => (i === 0 ? w : makeShortWord(w.type))));
+      } else if (item === 'parry') {
+        parryUntilRef.current = Date.now() + PARRY_DURATION;
+      } else if (item === 'gaugedown') {
+        attackThresholdRef.current = Math.max(4, attackThresholdRef.current - 1);
+        setAttackThreshold(attackThresholdRef.current);
+      } else if (item === 'totem') {
+        totemUntilRef.current = Date.now() + TOTEM_DURATION;
       }
     },
     [fireAttack],
   );
 
+  // 受け流し: 確定したおじゃまをプレイヤーに入れず、ランダムな敵CPUへ逸らす。
+  const deflectToCpu = useCallback(
+    (amount: number) => {
+      if (amount <= 0) return;
+      const alive = dummiesRef.current.filter((d) => !d.isKO);
+      if (alive.length === 0) return;
+      const target = alive[Math.floor(Math.random() * alive.length)];
+      const willKO = target.height + amount > MAX_BACKLOG;
+      setDummies((prev) =>
+        prev.map((d) =>
+          d.id === target.id ? (willKO ? { ...d, height: 0, isKO: true } : { ...d, height: d.height + amount }) : d,
+        ),
+      );
+      if (willKO) {
+        setPlayerKOs((k) => k + 1);
+        pushToast(`${target.name} を撃破！`, 'ko');
+        sfx.ko();
+      }
+      setHitDummy(target.id);
+      setTimeout(() => setHitDummy((cur) => (cur === target.id ? null : cur)), 600);
+      const from = centerRef.current?.getBoundingClientRect();
+      const to = dummyRefs.current[target.id]?.getBoundingClientRect();
+      if (from && to) {
+        addBeam(from.left + from.width / 2, from.top + from.height * 0.35, to.left + to.width / 2, to.top + to.height / 2, '#a78bfa');
+      }
+    },
+    [addBeam, pushToast],
+  );
+
+  // 上限超過時の保護。トーテム発動中なら無効化、所持中なら自動発動、無ければ脱落。
+  const overflowProtect = useCallback((): 'protected' | 'gameover' => {
+    if (Date.now() < totemUntilRef.current) return 'protected';
+    if (heldItemRef.current === 'totem') {
+      totemUntilRef.current = Date.now() + TOTEM_DURATION;
+      setHeldItem(null);
+      setUseFlash('totem');
+      setTimeout(() => setUseFlash(null), 900);
+      sfx.use();
+      pushToast('不死のトーテム発動！', 'item');
+      return 'protected';
+    }
+    return 'gameover';
+  }, [pushToast]);
+
   const grantItem = useCallback(() => {
     if (heldItemRef.current) applyItem(heldItemRef.current); // 既存を自動発動してスタック
     const rng = itemRngRef.current;
-    const pick = rng ? ALL_ITEMS[Math.floor(rng() * ALL_ITEMS.length)] : ALL_ITEMS[0];
+    const r = rng ? rng() : Math.random();
+    // 不利度（バックログが多いほど高い）。短縮・ゲージ短縮は不利な人ほど出やすくする。
+    const ratio = Math.min(1, stateRef.current.backlog.length / MAX_BACKLOG);
+    const weighted: { item: ItemType; w: number }[] = [];
+    for (const it of ALL_ITEMS) {
+      if (it === 'gaugedown') {
+        if (gaugeDownObtainedRef.current) continue; // 一人一個まで
+        weighted.push({ item: it, w: 0.25 + ratio * 1.0 }); // 低確率・不利ほど出やすい
+      } else if (it === 'shrink') {
+        weighted.push({ item: it, w: 0.5 + ratio * 1.8 }); // 不利ほど出やすい
+      } else if (it === 'totem') {
+        weighted.push({ item: it, w: 0.7 });
+      } else {
+        weighted.push({ item: it, w: 1 });
+      }
+    }
+    const total = weighted.reduce((s, x) => s + x.w, 0);
+    let acc = r * total;
+    let pick: ItemType = weighted[0].item;
+    for (const x of weighted) {
+      acc -= x.w;
+      if (acc <= 0) { pick = x.item; break; }
+    }
+    if (pick === 'gaugedown') gaugeDownObtainedRef.current = true; // 以降は出さない
     setHeldItem(pick);
     sfx.item();
     setItemFlash(true);
@@ -278,8 +414,8 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     lastAttackerRef.current = null;
     updatePending([]);
     setSeed(newSeed);
-    const th = themeRef.current;
-    setBacklog([generateWord(wordRng, th), generateWord(wordRng, th), generateWord(wordRng, th)]);
+    recentRef.current = [];
+    setBacklog([nextWord(), nextWord(), nextWord()]);
     setTokenIndex(0);
     setCurrentTyping('');
     setCombo(0);
@@ -289,21 +425,24 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     setPlayerKOs(0);
     setHeldItem(null);
     setStartTime(Date.now());
-    accelRef.current = custom ? cfgAccel : DEFAULT_ACCEL;
-    minRef.current = custom ? cfgMin : MIN_SPAWN_INTERVAL;
+    accelRef.current = cfgAccel;
+    minRef.current = cfgMin;
     rapidUntilRef.current = 0;
-    setRapidActive(false);
     keepUntilRef.current = 0;
-    setKeepActive(false);
+    parryUntilRef.current = 0;
+    totemUntilRef.current = 0;
+    attackThresholdRef.current = ATTACK_THRESHOLD;
+    setAttackThreshold(ATTACK_THRESHOLD);
+    gaugeDownObtainedRef.current = false;
     attackProgressRef.current = 0;
     setAttackProgress(0);
-    setSpawnInterval(custom ? cfgInitial : INITIAL_SPAWN_INTERVAL);
+    setSpawnInterval(cfgInitial);
     setGameState('playing');
     setDummies((prev) =>
       prev.map((d) => ({ ...d, height: Math.floor(Math.random() * 5), isKO: false, combo: 0, atk: 0, lastItem: undefined, itemAt: undefined })),
     );
     sfx.start();
-  }, [custom, cfgInitial, cfgMin, cfgAccel, updatePending]);
+  }, [cfgInitial, cfgMin, cfgAccel, updatePending, nextWord]);
 
   const gameOver = useCallback(() => {
     setGameState('gameover');
@@ -345,11 +484,11 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
         setKeysTyped((prev) => prev + 1);
         setScore((s) => s + 100 + newCombo * 10);
         sfx.clear();
-        // ゲージはクリア数で進む（ミスでは減らない）。5クリアごとに発射し、
+        // ゲージはクリア数で進む（ミスでは減らない）。threshold クリアごとに発射し、
         // 攻撃量は現在の連鎖に応じて決まる（連鎖が低くても最低1は撃てる）。
         attackProgressRef.current += 1;
-        if (attackProgressRef.current >= 5) {
-          attackProgressRef.current -= 5;
+        if (attackProgressRef.current >= attackThresholdRef.current) {
+          attackProgressRef.current -= attackThresholdRef.current;
           fireAttack(Math.min(Math.max(1, Math.floor(newCombo / 5)), ATTACK_CAP));
         }
         setAttackProgress(attackProgressRef.current);
@@ -465,6 +604,16 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       const due = pendingRef.current.filter((e) => e.confirmAt <= now);
       if (due.length === 0) return;
       updatePending(pendingRef.current.filter((e) => e.confirmAt > now));
+      // 受け流し中は、確定したおじゃまを自分に入れずランダムな敵CPUへ逸らす。
+      if (now < parryUntilRef.current) {
+        let deflect = 0;
+        for (const e of due) deflect += e.word ? 2 : e.amount;
+        if (deflect > 0) {
+          deflectToCpu(deflect);
+          pushToast(`受け流し！ +${deflect}`, 'item');
+        }
+        return;
+      }
       const words: Word[] = [];
       for (const e of due) {
         if (e.word) words.push(makeOjamaWordFrom(e.word.display, e.word.reading));
@@ -474,6 +623,7 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       setBacklog((prev) => {
         const next = [...prev, ...words];
         if (next.length >= MAX_BACKLOG) {
+          if (overflowProtect() === 'protected') return next.slice(0, MAX_BACKLOG - 1);
           gameOver();
           return next.slice(0, MAX_BACKLOG);
         }
@@ -481,7 +631,7 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       });
     }, 100);
     return () => clearInterval(id);
-  }, [gameState, gameOver, updatePending]);
+  }, [gameState, gameOver, updatePending, deflectToCpu, pushToast, overflowProtect]);
 
   // 全CPUを倒したら勝利（ソロの勝利条件）。
   useEffect(() => {
@@ -505,11 +655,11 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       } else {
         setBacklog((prev) => {
           if (prev.length >= MAX_BACKLOG) {
+            if (overflowProtect() === 'protected') return prev.slice(0, MAX_BACKLOG - 1);
             gameOver();
             return prev;
           }
-          const rng = wordRngRef.current;
-          return rng ? [...prev, generateWord(rng, themeRef.current)] : prev;
+          return wordRngRef.current ? [...prev, nextWord()] : prev;
         });
       }
       setSpawnInterval((prev) => Math.max(minRef.current, prev * accelRef.current));
@@ -517,7 +667,14 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     };
     timerId = setTimeout(loop, spawnInterval);
     return () => clearTimeout(timerId);
-  }, [gameState, spawnInterval, gameOver]);
+  }, [gameState, spawnInterval, gameOver, overflowProtect, nextWord]);
+
+  // --- カウントダウン描画用の時刻ティック ---
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+    const id = setInterval(() => setNowTick(Date.now()), 150);
+    return () => clearInterval(id);
+  }, [gameState]);
 
   const calculateKPM = () => {
     if (!startTime || keysTyped === 0) return 0;
@@ -554,6 +711,17 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   const survivors = DUMMY_COUNT + 1 - eliminatedCount;
   const totalIncoming = pending.reduce((s, e) => s + e.amount, 0);
 
+  // 発動中の時間制限アイテム（残り時間カウントダウン表示用）。
+  const activeEffects: { type: ItemType; until: number; color: string }[] = (
+    [
+      { type: 'brake', until: brakeUntilRef.current, color: 'bg-green-500' },
+      { type: 'rapid', until: rapidUntilRef.current, color: 'bg-yellow-400' },
+      { type: 'keep', until: keepUntilRef.current, color: 'bg-fuchsia-500' },
+      { type: 'parry', until: parryUntilRef.current, color: 'bg-violet-500' },
+      { type: 'totem', until: totemUntilRef.current, color: 'bg-amber-400' },
+    ] as { type: ItemType; until: number; color: string }[]
+  ).filter((e) => nowTick > 0 && e.until > nowTick);
+
   return (
     <div className={`min-h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
@@ -562,6 +730,23 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
         className={`fixed inset-0 pointer-events-none z-40 transition-opacity duration-150 ${damageFlash ? 'opacity-100' : 'opacity-0'}`}
         style={{ boxShadow: 'inset 0 0 140px 40px rgba(239,68,68,0.55)' }}
       />
+
+      {/* 不死のトーテム発動中エフェクト（金色のオーラ＋舞い上がる粒子） */}
+      {gameState === 'playing' && nowTick < totemUntilRef.current && (
+        <div className="fixed inset-0 pointer-events-none z-40 overflow-hidden totem-aura">
+          <div className="absolute inset-0" style={{ boxShadow: 'inset 0 0 160px 50px rgba(250,204,21,0.45)' }} />
+          {Array.from({ length: 14 }).map((_, i) => (
+            <span
+              key={i}
+              className="totem-particle absolute text-yellow-300/90"
+              style={{ left: `${(i * 7 + 5) % 100}%`, animationDelay: `${(i % 7) * 0.22}s`, fontSize: `${10 + (i % 4) * 4}px` }}
+            >
+              ✦
+            </span>
+          ))}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-7xl opacity-80 totem-emblem">🗿</div>
+        </div>
+      )}
 
       {/* 攻撃/被弾ビーム */}
       {beams.length > 0 && (
@@ -635,7 +820,7 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
           </button>
           <Swords className="text-cyan-400" />
           <h1 className="text-xl font-bold tracking-widest text-gray-200">
-            TYPE ROYALE<span className="text-xs ml-2 text-gray-500">{custom ? 'CUSTOM' : 'SOLO'}</span>
+            TYPE ROYALE<span className="text-xs ml-2 text-gray-500">SOLO</span>
           </h1>
         </div>
         <div className="flex gap-6 md:gap-8">
@@ -681,18 +866,24 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
           )}
 
           <div className="flex-1 flex flex-col items-center justify-end pb-8 relative z-10">
-            {(rapidActive || keepActive) && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex gap-2">
-                {rapidActive && (
-                  <div className="bg-yellow-500/90 text-black text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
-                    <Zap className="w-4 h-4" /> 連射中！
-                  </div>
-                )}
-                {keepActive && (
-                  <div className="bg-fuchsia-500/90 text-white text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
-                    <Lock className="w-4 h-4" /> 連鎖キープ中！
-                  </div>
-                )}
+            {/* 発動中アイテムの残り時間カウントダウン */}
+            {activeEffects.length > 0 && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1">
+                {activeEffects.map((e) => {
+                  const dur = ITEM_DURATION[e.type] ?? 1;
+                  const remain = Math.max(0, e.until - nowTick);
+                  const frac = Math.max(0, Math.min(1, remain / dur));
+                  return (
+                    <div key={e.type} className="bg-neutral-900/90 border border-white/10 rounded-full pl-2 pr-3 py-0.5 flex items-center gap-1.5 shadow-lg">
+                      <span className="text-sm">{ITEM_EMOJI[e.type]}</span>
+                      <span className="text-[10px] font-bold text-gray-200 whitespace-nowrap">{ITEM_META[e.type].name}</span>
+                      <div className="w-12 h-1.5 rounded-full bg-neutral-700 overflow-hidden">
+                        <div className={`h-full ${e.color} transition-[width] duration-150`} style={{ width: `${frac * 100}%` }} />
+                      </div>
+                      <span className="text-[9px] font-mono text-gray-400 w-6 text-right">{(remain / 1000).toFixed(1)}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
             {gameState === 'playing' && (
@@ -797,46 +988,56 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
             </div>
 
             <div className="mt-3">
-              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={Math.min(playerKOs, 4)} />
+              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={Math.min(playerKOs, 4)} threshold={attackThreshold} />
             </div>
           </div>
 
           {gameState === 'start' && (
-            <div className="absolute inset-0 bg-neutral-950/80 backdrop-blur-sm flex flex-col items-center justify-center z-20 rounded-2xl overflow-y-auto py-8">
+            <div className="absolute inset-0 bg-neutral-950/80 backdrop-blur-sm z-20 rounded-2xl overflow-y-auto">
+              {/* min-h-full + justify-center で、収まる時は中央・はみ出す時は上から
+                  スクロールできる（上部が見切れる問題の対策）。 */}
+              <div className="min-h-full flex flex-col items-center justify-center w-full py-8 px-2">
               <Swords className="w-20 h-20 text-cyan-500 mb-6" />
               <h2 className="text-4xl font-black tracking-widest mb-2 text-white">TYPE ROYALE</h2>
               <p className="text-gray-400 mb-6 font-mono">Press [SPACE] to Start</p>
 
-              {/* カスタムモードの設定 */}
-              {custom && (
-                <div className="mb-6 w-full max-w-sm bg-neutral-900/60 border border-amber-700/40 rounded-xl p-4">
+              {/* カスタム設定（ソロは常に設定変更可能） */}
+              <div className="mb-6 w-full max-w-sm bg-neutral-900/60 border border-amber-700/40 rounded-xl p-4">
                   <div className="text-xs text-amber-300 font-bold mb-3 flex items-center gap-1">
                     <Zap className="w-3.5 h-3.5" /> カスタム設定
                   </div>
-                  <label className="block text-[11px] text-gray-400 mb-3">
+                  <div className="block text-[11px] text-gray-400 mb-3">
                     初期供給間隔: <span className="text-cyan-300 font-mono">{(cfgInitial / 1000).toFixed(1)}秒</span>
-                    <input
-                      type="range"
-                      min={500}
-                      max={6000}
-                      step={100}
-                      value={cfgInitial}
-                      onChange={(e) => setCfgInitial(Number(e.target.value))}
-                      className="w-full accent-cyan-500"
-                    />
-                  </label>
-                  <label className="block text-[11px] text-gray-400 mb-3">
+                    <div className="flex items-center gap-2">
+                      <StepBtn onClick={() => setCfgInitial((v) => Math.max(500, v - 100))}>−0.1</StepBtn>
+                      <input
+                        type="range"
+                        min={500}
+                        max={6000}
+                        step={100}
+                        value={cfgInitial}
+                        onChange={(e) => setCfgInitial(Number(e.target.value))}
+                        className="flex-1 accent-cyan-500"
+                      />
+                      <StepBtn onClick={() => setCfgInitial((v) => Math.min(6000, v + 100))}>＋0.1</StepBtn>
+                    </div>
+                  </div>
+                  <div className="block text-[11px] text-gray-400 mb-3">
                     最短間隔: <span className="text-cyan-300 font-mono">{(cfgMin / 1000).toFixed(1)}秒</span>
-                    <input
-                      type="range"
-                      min={300}
-                      max={3000}
-                      step={100}
-                      value={cfgMin}
-                      onChange={(e) => setCfgMin(Number(e.target.value))}
-                      className="w-full accent-cyan-500"
-                    />
-                  </label>
+                    <div className="flex items-center gap-2">
+                      <StepBtn onClick={() => setCfgMin((v) => Math.max(300, v - 100))}>−0.1</StepBtn>
+                      <input
+                        type="range"
+                        min={300}
+                        max={3000}
+                        step={100}
+                        value={cfgMin}
+                        onChange={(e) => setCfgMin(Number(e.target.value))}
+                        className="flex-1 accent-cyan-500"
+                      />
+                      <StepBtn onClick={() => setCfgMin((v) => Math.min(3000, v + 100))}>＋0.1</StepBtn>
+                    </div>
+                  </div>
                   <label className="block text-[11px] text-gray-400">
                     加速の強さ: <span className="text-cyan-300 font-mono">×{cfgAccel.toFixed(2)}</span>
                     <span className="text-gray-600"> （小さいほど速く加速 / 1.00で加速なし）</span>
@@ -851,7 +1052,6 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
                     />
                   </label>
                 </div>
-              )}
 
               {/* 出題テーマ選択 */}
               <div className="mb-6 w-full max-w-sm">
@@ -905,12 +1105,13 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
                     <span className="text-cyan-400 font-bold">下の青ゲージ（バックログ）</span> … 自分の処理待ちの山。満タンでトップアウト＝敗北。
                   </div>
                   <div>
-                    <span className="text-orange-300 font-bold">攻撃チャージ</span> … 5連鎖ごとに発射。表示の「+N」がその時送る攻撃量。
+                    <span className="text-orange-300 font-bold">攻撃チャージ</span> … 一定クリアごとに発射（ゲージ短縮で短くなる）。表示の「+N」がその時送る攻撃量。
                   </div>
                   <div>
                     <span className="text-cyan-300 font-bold">連鎖(COMBO)</span> … ノーミスで打ち切った連続数。長いほど攻撃が増える。
                   </div>
                 </div>
+              </div>
               </div>
             </div>
           )}
@@ -981,6 +1182,16 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
           80% { transform: translate(4px, 2px); }
         }
         .screen-shake { animation: screenShake 0.45s ease-in-out; }
+        @keyframes totemAura { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
+        .totem-aura { animation: totemAura 1.4s ease-in-out infinite; }
+        @keyframes totemRise {
+          0% { transform: translateY(20vh) scale(0.6); opacity: 0; }
+          15% { opacity: 1; }
+          100% { transform: translateY(-110vh) scale(1.1); opacity: 0; }
+        }
+        .totem-particle { bottom: -3vh; animation: totemRise 2.2s linear infinite; }
+        @keyframes totemPulse { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 0.7; } 50% { transform: translate(-50%,-50%) scale(1.15); opacity: 1; } }
+        .totem-emblem { animation: totemPulse 1.2s ease-in-out infinite; filter: drop-shadow(0 0 18px rgba(250,204,21,0.8)); }
       `,
         }}
       />
@@ -1010,5 +1221,20 @@ const ItemIcon = ({ type }: { type: ItemType }) => {
   if (type === 'brake') return <Pause className="w-5 h-5 text-green-300" />;
   if (type === 'longbomb') return <Bomb className="w-5 h-5 text-red-300" />;
   if (type === 'keep') return <Lock className="w-5 h-5 text-fuchsia-300" />;
+  if (type === 'shrink') return <Scissors className="w-5 h-5 text-emerald-300" />;
+  if (type === 'parry') return <Shield className="w-5 h-5 text-violet-300" />;
+  if (type === 'gaugedown') return <ArrowDownToLine className="w-5 h-5 text-orange-300" />;
+  if (type === 'totem') return <span className="text-base leading-none">🗿</span>;
   return <Zap className="w-5 h-5 text-yellow-300" />;
 };
+
+// カスタム設定の ±0.1秒 ステップボタン。
+const StepBtn = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-cyan-300 text-xs font-mono font-bold shrink-0"
+  >
+    {children}
+  </button>
+);
