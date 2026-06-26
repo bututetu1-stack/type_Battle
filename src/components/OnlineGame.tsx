@@ -11,7 +11,7 @@ import {
   type RoomPlayer, type RoomStatus,
 } from '../lib/room';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
-import type { ItemType, TargetMode, Word } from '../lib/types';
+import type { GameMode, ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
@@ -25,6 +25,7 @@ const PINCH_RATIO = 0.7;
 const PINCH_MULT = 1.5;
 const BRAKE_DURATION = 5000;
 const ATTACK_CAP = 5; // 1回の攻撃で送れるおじゃまの上限（即死コンボ防止）
+const BOSS_MAX_BACKLOG = 26; // ボスのバックログ上限（＝ボスのHP。多対一なので高め）
 
 const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   shield: { name: 'シールド', desc: '次の自動供給を1回無効化' },
@@ -37,6 +38,11 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   parry: { name: '受け流し', desc: '一定時間 被攻撃を他の相手に逸らす' },
   gaugedown: { name: 'ゲージ短縮', desc: '攻撃の発射間隔を1減らす(恒久)' },
   totem: { name: '不死のトーテム', desc: '一定時間 上限超過しても脱落しない' },
+  meteor: { name: 'メテオ', desc: 'ボス: 全挑戦者へ一斉攻撃' },
+  quake: { name: '地割れ', desc: 'ボス: 最も危険な挑戦者へトドメ' },
+  regen: { name: '再生', desc: 'ボス: 自分のHPを回復' },
+  rally: { name: '総攻撃', desc: '挑戦者: ボスへ即時の大攻撃' },
+  focus: { name: '会心', desc: '挑戦者: 次のボスへの攻撃を倍化' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡',
@@ -49,6 +55,11 @@ const ITEM_EMOJI: Record<ItemType, string> = {
   parry: '🪃',
   gaugedown: '⏬',
   totem: '🗿',
+  meteor: '🌠',
+  quake: '🌋',
+  regen: '💚',
+  rally: '⚔',
+  focus: '🎯',
 };
 const RAPID_DURATION = 8000;
 const KEEP_DURATION = 10000;
@@ -87,11 +98,17 @@ interface OnlineGameProps {
   status: RoomStatus;
   hostUid: string;
   category: string;
+  mode: GameMode;
+  bossUid: string;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, players, onExit }: OnlineGameProps) {
+  // ボスモード関連の派生フラグ。
+  const bossMode = mode === 'boss';
+  const isBoss = bossMode && uid === bossUid;
+  const selfMax = isBoss ? BOSS_MAX_BACKLOG : MAX_BACKLOG; // 自分の上限（ボスはHPが多い）
   const [started, setStarted] = useState(false);
   const [countdown, setCountdown] = useState(99);
   const [selfAlive, setSelfAlive] = useState(true);
@@ -142,6 +159,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const rapidUntilRef = useRef(0);
   const keepUntilRef = useRef(0);
   const parryUntilRef = useRef(0);
+  const focusNextRef = useRef(false); // 会心: 次のボスへの攻撃を倍化
   const attackProgressRef = useRef(0);
   const categoryRef = useRef(category);
   useEffect(() => {
@@ -263,8 +281,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     sfx.gameover();
     setShake(true);
     setTimeout(() => setShake(false), 500);
-    writePlayerSummary(roomId, uid, { alive: false, rank: myRank, backlog: MAX_BACKLOG, koBy: lastAttackerRef.current });
-  }, [roomId, uid]);
+    writePlayerSummary(roomId, uid, { alive: false, rank: myRank, backlog: selfMax, koBy: lastAttackerRef.current });
+  }, [roomId, uid, selfMax]);
 
   // 他プレイヤーの脱落を検知してトースト表示（自分の撃破なら強調）。
   useEffect(() => {
@@ -293,6 +311,19 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
   // ターゲット選択（4モード / 仕様 §3.4）。
   const pickTarget = useCallback(() => {
+    // ボスモード: 挑戦者は常にボスを狙い、ボスは挑戦者の中から狙う。
+    if (bossMode) {
+      if (isBoss) {
+        const challengers = Object.entries(playersRef.current).filter(([id, p]) => id !== bossUid && isLive(p));
+        if (challengers.length === 0) return null;
+        const m = targetModeRef.current;
+        if (m === 'finish' || m === 'strong')
+          return challengers.reduce((best, cur) => (cur[1].backlog > best[1].backlog ? cur : best))[0];
+        return challengers[Math.floor(Math.random() * challengers.length)][0];
+      }
+      // 挑戦者: ボスが生きていればボスを狙う。
+      return isLive(playersRef.current[bossUid]) ? bossUid : null;
+    }
     const alive = Object.entries(playersRef.current).filter(([id, p]) => id !== uid && isLive(p));
     if (alive.length === 0) return null;
     const mode = targetModeRef.current;
@@ -306,7 +337,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       return alive.reduce((best, cur) => (cur[1].badges > best[1].badges ? cur : best))[0];
     }
     return alive[Math.floor(Math.random() * alive.length)][0];
-  }, [uid]);
+  }, [uid, bossMode, isBoss, bossUid]);
 
   // 指定量を送る共通処理: 受信予告と相殺 → 余剰を相手へ。
   const sendAmount = useCallback(
@@ -346,13 +377,18 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     (comboVal: number) => {
       // 5クリアごとに発射。攻撃量は連鎖に応じる（連鎖が低くても最低1は撃てる）。
       let amount = Math.max(1, Math.floor(comboVal / 5));
-      if (stateRef.current.backlog.length / MAX_BACKLOG >= PINCH_RATIO) amount = Math.round(amount * PINCH_MULT);
+      if (stateRef.current.backlog.length / selfMax >= PINCH_RATIO) amount = Math.round(amount * PINCH_MULT);
       const badges = Object.values(playersRef.current).filter((p) => p.koBy === uid).length;
       amount = Math.round(amount * (1 + 0.25 * Math.min(badges, 4)));
       amount = Math.min(amount, ATTACK_CAP);
+      // 会心: 次のボスへの攻撃を倍化（上限を少し緩める）。
+      if (focusNextRef.current) {
+        focusNextRef.current = false;
+        amount = Math.min(amount * 2, ATTACK_CAP * 2);
+      }
       sendAmount(amount);
     },
-    [uid, sendAmount],
+    [uid, sendAmount, selfMax],
   );
 
   // アイテム効果適用（所持状態のクリアは行わない）。
@@ -384,21 +420,67 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         keepUntilRef.current = Date.now() + KEEP_DURATION;
       } else if (item === 'parry') {
         parryUntilRef.current = Date.now() + PARRY_DURATION;
+      } else if (item === 'meteor') {
+        // ボス: 全挑戦者へ一斉攻撃。
+        const challengers = Object.entries(playersRef.current).filter(([id, p]) => id !== bossUid && isLive(p));
+        for (const [id] of challengers) {
+          sendAttack(roomId, id, uid, 2);
+          fireBeam(id);
+        }
+        setAttackFlash({ amount: 2, name: `全挑戦者へメテオ 🌠` });
+        setTimeout(() => setAttackFlash(null), 800);
+        sfx.attack();
+      } else if (item === 'quake') {
+        // ボス: 最もバックログが多い挑戦者へトドメ。
+        const challengers = Object.entries(playersRef.current).filter(([id, p]) => id !== bossUid && isLive(p));
+        if (challengers.length > 0) {
+          const t = challengers.reduce((best, cur) => (cur[1].backlog > best[1].backlog ? cur : best));
+          sendAttack(roomId, t[0], uid, 5);
+          fireBeam(t[0]);
+          setAttackFlash({ amount: 5, name: `${t[1].name} へ地割れ 🌋` });
+          setTimeout(() => setAttackFlash(null), 800);
+          sfx.attack();
+        }
+      } else if (item === 'regen') {
+        // ボス: 自分のバックログ（HP）を回復。先頭は残す。
+        setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1, Math.max(1, prev.length - 6))]));
+        sfx.item();
+      } else if (item === 'rally') {
+        // 挑戦者: ボスへ即時の大攻撃。
+        if (isLive(playersRef.current[bossUid])) {
+          sendAttack(roomId, bossUid, uid, 3);
+          fireBeam(bossUid);
+          setAttackFlash({ amount: 3, name: `ボスへ総攻撃 ⚔` });
+          setTimeout(() => setAttackFlash(null), 800);
+          sfx.attack();
+        }
+      } else if (item === 'focus') {
+        // 挑戦者: 次のボスへの攻撃を倍化。
+        focusNextRef.current = true;
       }
     },
-    [pickTarget, fireBeam, roomId, uid],
+    [pickTarget, fireBeam, roomId, uid, bossUid],
   );
 
   const grantItem = useCallback(() => {
     if (heldItemRef.current) applyItem(heldItemRef.current); // 既存を自動発動してスタック
     const rng = itemRngRef.current;
-    const items: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'parry'];
+    let items: ItemType[];
+    if (bossMode && isBoss) {
+      // ボス専用アイテム＋自衛系。
+      items = ['meteor', 'quake', 'regen', 'brake', 'keep', 'clear'];
+    } else if (bossMode) {
+      // 挑戦者: 攻撃協力系を多めに。
+      items = ['shield', 'clear', 'brake', 'rapid', 'keep', 'parry', 'rally', 'focus', 'longbomb'];
+    } else {
+      items = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'parry'];
+    }
     const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
     setHeldItem(pick);
     sfx.item();
     setItemFlash(true);
     setTimeout(() => setItemFlash(false), 1000);
-  }, [applyItem]);
+  }, [applyItem, bossMode, isBoss]);
 
   const useItem = useCallback(() => {
     const item = heldItemRef.current;
@@ -467,16 +549,16 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       if (words.length > 0) {
         setBacklog((prev) => {
           const next = [...prev, ...words];
-          if (next.length > MAX_BACKLOG) {
+          if (next.length > selfMax) {
             topOut();
-            return next.slice(0, MAX_BACKLOG);
+            return next.slice(0, selfMax);
           }
           return next;
         });
       }
     }, 100);
     return () => clearInterval(id);
-  }, [started, updatePending, topOut, pickTarget, roomId, uid, fireBeam, pushToast]);
+  }, [started, updatePending, topOut, pickTarget, roomId, uid, fireBeam, pushToast, selfMax]);
 
   // カウントダウン描画用の時刻ティック。
   useEffect(() => {
@@ -542,7 +624,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         shieldRef.current = false;
       } else {
         setBacklog((prev) => {
-          if (prev.length >= MAX_BACKLOG) {
+          if (prev.length >= selfMax) {
             topOut();
             return prev;
           }
@@ -555,7 +637,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     };
     timerId = setTimeout(loop, spawnInterval);
     return () => clearTimeout(timerId);
-  }, [started, selfAlive, spawnInterval, topOut]);
+  }, [started, selfAlive, spawnInterval, topOut, selfMax]);
 
   // サマリのスロットリング書込（バッジも反映）。
   const summaryRef = useRef({ backlog: 0, combo: 0, kpm: 0, badges: 0 });
@@ -574,11 +656,20 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // 伝播しておらず、判定すると即終了→再戦できない不具合になるため。
   useEffect(() => {
     if (uid !== hostUid || status !== 'playing' || !started) return;
+    if (bossMode) {
+      // ボス討伐 or 挑戦者全滅で決着。
+      const boss = players[bossUid];
+      const bossDead = !boss || !isLive(boss);
+      const aliveChallengers = Object.entries(players).filter(([id, p]) => id !== bossUid && isLive(p)).length;
+      const challengerTotal = Object.keys(players).filter((id) => id !== bossUid).length;
+      if (bossDead || (challengerTotal >= 1 && aliveChallengers === 0)) finishGame(roomId);
+      return;
+    }
     const total = Object.keys(players).length;
     const aliveCount = Object.values(players).filter(isLive).length;
     // 全滅(=1人プレイのトップアウト)か、2人以上で残り1人になったら決着。
     if (aliveCount === 0 || (total >= 2 && aliveCount <= 1)) finishGame(roomId);
-  }, [players, status, uid, hostUid, roomId, started]);
+  }, [players, status, uid, hostUid, roomId, started, bossMode, bossUid]);
 
   // テトリス99のように、他プレイヤー同士の攻防も可視化（自分以外の撃ち合い）。
   // 実データの全攻撃は購読していないため、生存中の他プレイヤー間にそれっぽい
@@ -604,9 +695,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const others = Object.entries(players).filter(([id]) => id !== uid);
   const aliveCount = Object.values(players).filter(isLive).length;
   const totalCount = Object.keys(players).length;
-  const isDanger = backlog.length >= MAX_BACKLOG - 3;
+  const isDanger = backlog.length >= selfMax - 3;
   const totalIncoming = pending.reduce((s, e) => s + e.amount, 0);
   const isHost = uid === hostUid;
+  // ボスモード: ボスのHP（バックログ）情報。
+  const bossPlayer = bossMode ? players[bossUid] : undefined;
+  const bossAlive = bossMode ? !!bossPlayer && isLive(bossPlayer) : false;
+  const bossHp = bossPlayer ? Math.max(0, BOSS_MAX_BACKLOG - (bossPlayer.backlog || 0)) : 0;
 
   // 発動中の時間制限アイテム（残り時間カウントダウン表示用）。
   const activeEffects: { type: ItemType; until: number; color: string }[] = (
@@ -633,11 +728,19 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     });
     const winner = ranked.find(isLive) || ranked[0];
     const myRank = selfAlive ? 1 : rank;
+    // ボスモードの勝敗判定。
+    const bossWon = bossMode && bossAlive; // ボス生存＝ボスの勝ち
+    const bossTitle = bossMode ? (bossWon ? 'BOSS WIN' : 'BOSS DEFEATED') : 'RESULT';
+    const bossLine = bossMode
+      ? bossWon
+        ? `👑 ボス ${bossPlayer?.name ?? ''} の勝利！ 挑戦者は全滅`
+        : `⚔ 討伐成功！ 挑戦者チームの勝利（ボス: ${bossPlayer?.name ?? ''}）`
+      : `勝者: ${winner?.name ?? '—'}`;
     return (
       <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center justify-center p-6">
-        <Crown className="w-16 h-16 text-yellow-400 mb-4" />
-        <h2 className="text-3xl font-black tracking-widest mb-1">RESULT</h2>
-        <p className="text-yellow-300 mb-6 text-lg">勝者: {winner?.name ?? '—'}</p>
+        <Crown className={`w-16 h-16 mb-4 ${bossMode && !bossWon ? 'text-emerald-400' : 'text-yellow-400'}`} />
+        <h2 className="text-3xl font-black tracking-widest mb-1">{bossTitle}</h2>
+        <p className="text-yellow-300 mb-6 text-lg text-center">{bossLine}</p>
         <div className="bg-neutral-900/70 rounded-xl border border-white/10 w-full max-w-md mb-6 divide-y divide-white/5">
           {ranked.map((p, i) => (
             <div key={p.name + i} className="flex items-center justify-between px-4 py-2">
@@ -816,10 +919,11 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             <div key={id} ref={(el) => { boardRefs.current[id] = el; }}>
               <MiniBoard
                 height={p.backlog}
-                max={MAX_BACKLOG}
+                max={bossMode && id === bossUid ? BOSS_MAX_BACKLOG : MAX_BACKLOG}
                 isKO={!isLive(p)}
-                name={p.name}
+                name={bossMode && id === bossUid ? `👑 ${p.name}` : p.name}
                 combo={p.combo}
+                highlight={bossMode && id === bossUid}
                 hit={hitId === id}
                 incoming={incomingId === id}
                 itemEmoji={p.itemAt && Date.now() - p.itemAt < 1500 ? ITEM_EMOJI[p.lastItem as ItemType] : undefined}
@@ -833,23 +937,49 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}
           <div className="flex-1 flex flex-col items-center justify-end pb-8 relative z-10">
-            {/* ターゲットモード切替（[Tab]でも切替）。ソロと配置を統一（左上）。 */}
-            <div className="absolute top-1 left-0 flex flex-col items-start gap-1">
-              <div className="flex items-center gap-1 text-[10px] text-gray-500"><Target className="w-3 h-3" /> 狙い [Tab]</div>
-              <div className="flex gap-1">
-                {TARGET_MODES.map((t) => (
-                  <button
-                    key={t.mode}
-                    onClick={() => setTargetMode(t.mode)}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                      targetMode === t.mode ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
+            {/* ボスモードの状況表示（挑戦者にはボスHP、ボスには自分のHP）。 */}
+            {bossMode && started && (
+              isBoss ? (
+                <div className="absolute top-1 left-1/2 -translate-x-1/2 z-20 bg-red-900/80 border border-red-500/50 rounded-full px-4 py-1 text-sm font-black text-red-100 flex items-center gap-2 shadow-lg">
+                  <Crown className="w-4 h-4 text-yellow-300" /> あなたはBOSS · HP {Math.max(0, selfMax - backlog.length)}/{selfMax}
+                </div>
+              ) : (
+                <div className="absolute top-1 left-1/2 -translate-x-1/2 z-20 w-56">
+                  <div className="flex items-center justify-between text-[11px] mb-0.5">
+                    <span className="font-bold text-red-300 flex items-center gap-1">
+                      <Crown className="w-3.5 h-3.5 text-yellow-400" /> BOSS {bossPlayer?.name ?? ''}
+                    </span>
+                    <span className="font-mono text-red-200">{bossHp}/{BOSS_MAX_BACKLOG}</span>
+                  </div>
+                  <div className="w-full h-3 rounded-full bg-neutral-800 border border-red-900/60 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-[width] duration-200"
+                      style={{ width: `${(bossHp / BOSS_MAX_BACKLOG) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            )}
+
+            {/* ターゲットモード切替（[Tab]でも切替）。ボスモードの挑戦者は常にボスを狙うため非表示。 */}
+            {!(bossMode && !isBoss) && (
+              <div className="absolute top-1 left-0 flex flex-col items-start gap-1">
+                <div className="flex items-center gap-1 text-[10px] text-gray-500"><Target className="w-3 h-3" /> 狙い [Tab]</div>
+                <div className="flex gap-1">
+                  {TARGET_MODES.map((t) => (
+                    <button
+                      key={t.mode}
+                      onClick={() => setTargetMode(t.mode)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                        targetMode === t.mode ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* ALIVE 表示（ソロと配置を統一：右上） */}
             <div className="absolute top-2 right-0 text-right">
@@ -935,13 +1065,21 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             </div>
 
             <div className="w-full max-w-lg mt-2">
-              <div className="text-[10px] text-gray-500 mb-0.5">自分のバックログ（満タンで脱落）</div>
-              <div className="flex gap-1">
-                {Array.from({ length: MAX_BACKLOG }).map((_, i) => (
+              <div className="text-[10px] text-gray-500 mb-0.5">
+                {isBoss ? 'あなたのHP（満タンで討伐される）' : '自分のバックログ（満タンで脱落）'}
+              </div>
+              <div className="flex gap-0.5">
+                {Array.from({ length: selfMax }).map((_, i) => (
                   <div
                     key={i}
                     className={`h-2 flex-1 rounded-sm ${
-                      i < backlog.length ? (i >= MAX_BACKLOG - 3 ? 'bg-red-500' : 'bg-cyan-500') : 'bg-neutral-800'
+                      i < backlog.length
+                        ? i >= selfMax - 3
+                          ? 'bg-red-500'
+                          : isBoss
+                            ? 'bg-amber-500'
+                            : 'bg-cyan-500'
+                        : 'bg-neutral-800'
                     }`}
                   />
                 ))}
@@ -959,10 +1097,11 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             <div key={id} ref={(el) => { boardRefs.current[id] = el; }}>
               <MiniBoard
                 height={p.backlog}
-                max={MAX_BACKLOG}
+                max={bossMode && id === bossUid ? BOSS_MAX_BACKLOG : MAX_BACKLOG}
                 isKO={!isLive(p)}
-                name={p.name}
+                name={bossMode && id === bossUid ? `👑 ${p.name}` : p.name}
                 combo={p.combo}
+                highlight={bossMode && id === bossUid}
                 hit={hitId === id}
                 incoming={incomingId === id}
                 itemEmoji={p.itemAt && Date.now() - p.itemAt < 1500 ? ITEM_EMOJI[p.lastItem as ItemType] : undefined}

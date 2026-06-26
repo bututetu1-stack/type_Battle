@@ -48,10 +48,17 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   parry: { name: '受け流し', icon: '🪃', desc: '8秒間 被攻撃を他の相手へ逸らす' },
   gaugedown: { name: 'ゲージ短縮', icon: '⏬', desc: '攻撃が4クリアごとに発射(恒久・一個まで)' },
   totem: { name: '不死のトーテム', icon: '🗿', desc: '12秒間 上限超過しても脱落しない(自動発動)' },
+  // ボスモード専用（ソロでは出現しない）。
+  meteor: { name: 'メテオ', icon: '🌠', desc: 'ボス: 全挑戦者へ一斉攻撃' },
+  quake: { name: '地割れ', icon: '🌋', desc: 'ボス: 最も危険な挑戦者へトドメ' },
+  regen: { name: '再生', icon: '💚', desc: 'ボス: 自分のHPを回復' },
+  rally: { name: '総攻撃', icon: '⚔', desc: '挑戦者: ボスへ即時の大攻撃' },
+  focus: { name: '会心', icon: '🎯', desc: '挑戦者: 次のボスへの攻撃を倍化' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡', clear: '🌀', brake: '⏸', longbomb: '📨', rapid: '⚡', keep: '🔒',
   shrink: '✂', parry: '🪃', gaugedown: '⏬', totem: '🗿',
+  meteor: '🌠', quake: '🌋', regen: '💚', rally: '⚔', focus: '🎯',
 };
 const ALL_ITEMS: ItemType[] = [
   'shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'shrink', 'parry', 'gaugedown', 'totem',

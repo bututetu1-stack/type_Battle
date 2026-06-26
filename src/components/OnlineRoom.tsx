@@ -6,6 +6,7 @@ import {
   leaveRoom,
   startGame,
   setRoomCategory,
+  setRoomMode,
   type RoomSnapshot,
 } from '../lib/room';
 import { THEMES } from '../lib/words';
@@ -79,6 +80,8 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         status={meta.status}
         hostUid={meta.hostUid}
         category={meta.category || 'all'}
+        mode={meta.mode === 'boss' ? 'boss' : 'royale'}
+        bossUid={meta.bossUid || meta.hostUid}
         players={players}
         onExit={handleLeave}
       />
@@ -128,6 +131,42 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
               <span className={`w-2 h-2 rounded-full ${p.connected ? 'bg-green-500' : 'bg-gray-600'}`} />
             </div>
           ))}
+        </div>
+
+        {/* ゲームモード（ホストが選択） */}
+        <div className="mb-5">
+          <div className="text-xs text-gray-500 mb-1.5">ゲームモード {isHost ? '（ホストが選択）' : ''}</div>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { id: 'royale', label: 'バトルロワイヤル', desc: '全員で勝ち残り' },
+              { id: 'boss', label: 'ボス戦', desc: 'ホストがボス／みんなで討伐' },
+            ] as const).map((m) => {
+              const active = (meta.mode === 'boss' ? 'boss' : 'royale') === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => isHost && setRoomMode(roomId, m.id, meta.hostUid)}
+                  disabled={!isHost}
+                  className={`rounded-lg px-3 py-2 text-left border transition-colors ${
+                    active
+                      ? 'bg-cyan-600/20 border-cyan-500 text-cyan-200'
+                      : 'bg-neutral-800 border-white/10 text-gray-400 ' + (isHost ? 'hover:bg-neutral-700' : 'opacity-60')
+                  }`}
+                >
+                  <div className="text-sm font-bold flex items-center gap-1">
+                    {m.id === 'boss' && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
+                    {m.label}
+                  </div>
+                  <div className="text-[10px] text-gray-500">{m.desc}</div>
+                </button>
+              );
+            })}
+          </div>
+          {meta.mode === 'boss' && (
+            <p className="text-[11px] text-yellow-300/80 mt-1.5">
+              👑 ボスは {players[meta.bossUid || meta.hostUid]?.name ?? 'ホスト'}。他の参加者が協力して討伐します。
+            </p>
+          )}
         </div>
 
         {/* 出題テーマ（ホストが選択） */}

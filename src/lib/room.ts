@@ -25,6 +25,8 @@ export interface RoomMeta {
   maxPlayers: number;
   hostUid: string;
   createdAt: number;
+  mode?: 'royale' | 'boss'; // ゲームモード（未設定は royale）
+  bossUid?: string; // boss モードでのボス（既定はホスト）
 }
 
 export interface RoomPlayer {
@@ -105,6 +107,8 @@ export async function createRoom(uid: string, name: string): Promise<string> {
     maxPlayers: DEFAULT_MAX_PLAYERS,
     hostUid: uid,
     createdAt: Date.now(),
+    mode: 'royale',
+    bossUid: '',
   };
   await set(ref(db, `rooms/${roomId}/meta`), meta);
   await set(ref(db, `rooms/${roomId}/players/${uid}`), newPlayer(name, true));
@@ -155,6 +159,11 @@ export function writePlayerSummary(
 // ホスト操作: 出題テーマを変更（待機中）。
 export async function setRoomCategory(roomId: string, category: string): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { category });
+}
+
+// ホスト操作: ゲームモードを変更（待機中）。boss の場合はホストをボスにする。
+export async function setRoomMode(roomId: string, mode: 'royale' | 'boss', hostUid: string): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { mode, bossUid: mode === 'boss' ? hostUid : '' });
 }
 
 // ホスト操作: カウントダウン付きで開始。startAt をサーバ基準の未来時刻に設定。

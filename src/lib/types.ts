@@ -41,7 +41,16 @@ export type ItemType =
   | 'shrink' // 溜まったワードを全て短い単語に変換
   | 'parry' // 一定時間、被攻撃を他の相手に受け流す
   | 'gaugedown' // 攻撃ゲージの発射間隔を1減らす（一人一個・恒久）
-  | 'totem'; // 一定時間ワード上限超過を無効化（不死のトーテム）
+  | 'totem' // 一定時間ワード上限超過を無効化（不死のトーテム）
+  // --- ボスモード専用アイテム ---
+  | 'meteor' // ボス: 全挑戦者に隕石（一斉攻撃）
+  | 'quake' // ボス: 最も溜まっている挑戦者にトドメの大攻撃
+  | 'regen' // ボス: 自分のバックログ（HP）を回復
+  | 'rally' // 挑戦者: ボスへ即時の総攻撃
+  | 'focus'; // 挑戦者: 次のボスへの攻撃を倍化
+
+// ゲームモード。royale=バトルロワイヤル（全員対全員）, boss=多対一（挑戦者 対 ボス）。
+export type GameMode = 'royale' | 'boss';
 
 // 攻撃ターゲティング（仕様 §3.4）。
 export type TargetMode = 'random' | 'finish' | 'counter' | 'strong';
