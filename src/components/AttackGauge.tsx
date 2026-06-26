@@ -1,16 +1,17 @@
 import { Swords } from 'lucide-react';
 
 interface AttackGaugeProps {
-  combo: number;
+  progress: number; // 次の攻撃までのゲージ進捗（クリア数ベース / ミスでリセットされない）
+  combo: number; // 連鎖（＝アタック数の元。ミスでリセットされる）
   pinch?: boolean; // ピンチ倍率の対象か
   badges?: number; // バッジ倍率
 }
 
-// 次のマイルストーン（5連鎖ごと）までの進捗と、その瞬間に送れる攻撃量を表示。
-export default function AttackGauge({ combo, pinch, badges = 0 }: AttackGaugeProps) {
-  const seg = combo % 5; // 0..4 現在の進捗
-  const nextMilestone = (Math.floor(combo / 5) + 1) * 5;
-  let amount = Math.floor(nextMilestone / 5);
+// 進捗（5クリアごと発射）とその時送れる攻撃量を表示。
+// ミスをしても進捗は減らず、攻撃量(=連鎖)だけがリセットされる。
+export default function AttackGauge({ progress, combo, pinch, badges = 0 }: AttackGaugeProps) {
+  const seg = ((progress % 5) + 5) % 5; // 0..4 現在の進捗
+  let amount = Math.max(1, Math.floor(combo / 5)); // 連鎖が低くても最低1は撃てる
   if (pinch) amount = Math.round(amount * 1.5);
   amount = Math.round(amount * (1 + 0.25 * Math.min(badges, 4)));
   amount = Math.min(amount, 5); // ATTACK_CAP と一致
@@ -20,7 +21,7 @@ export default function AttackGauge({ combo, pinch, badges = 0 }: AttackGaugePro
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs text-gray-400 tracking-wide flex items-center gap-1">
           <Swords className="w-3.5 h-3.5 text-orange-400" /> 攻撃チャージ
-          <span className="text-[10px] text-gray-600">（5連鎖ごとに発射）</span>
+          <span className="text-[10px] text-gray-600">（5クリアごとに発射）</span>
         </span>
         <span className={`text-sm font-black flex items-center gap-1 ${pinch ? 'text-red-400' : 'text-orange-300'}`}>
           次の攻撃 +{amount}

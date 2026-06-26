@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause, ArrowLeft,
-  Volume2, VolumeX, Bomb, Crown, Target,
+  Volume2, VolumeX, Bomb, Crown, Target, Lock,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, randomLongWord, THEMES } from '../lib/words';
@@ -21,19 +21,21 @@ const DUMMY_COUNT = 20;
 const BRAKE_DURATION = 5000;
 const ATTACK_CAP = 5; // 1回の攻撃量の上限（即死コンボ防止）
 const RAPID_DURATION = 8000; // 連射アイテムの効果時間
+const KEEP_DURATION = 10000; // 連鎖キープ（ミスで連鎖が切れない）の効果時間
 const TELEGRAPH_DELAY = 1500; // CPU攻撃の着弾予告→確定までの猶予
 
 const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> = {
   shield: { name: 'シールド', icon: '🛡', desc: '次の自動供給を1回無効化' },
   clear: { name: 'おじゃま一掃', icon: '🌀', desc: 'バックログのおじゃまを消す' },
   brake: { name: 'ブレーキ', icon: '⏸', desc: '自動供給を5秒間ストップ' },
-  longbomb: { name: 'ロング送信', icon: '📨', desc: '敵に長い単語(大ダメージ)を送る' },
-  rapid: { name: '連射', icon: '⚡', desc: '8秒間 1連鎖ごとに1攻撃' },
+  longbomb: { name: 'ロング送信', icon: '📨', desc: '敵に長文(相殺不可)を送る' },
+  rapid: { name: '連射', icon: '⚡', desc: '8秒間 1クリアごとに1攻撃' },
+  keep: { name: '連鎖キープ', icon: '🔒', desc: '10秒間ミスしても連鎖が切れない' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
-  shield: '🛡', clear: '🌀', brake: '⏸', longbomb: '📨', rapid: '⚡',
+  shield: '🛡', clear: '🌀', brake: '⏸', longbomb: '📨', rapid: '⚡', keep: '🔒',
 };
-const ALL_ITEMS: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid'];
+const ALL_ITEMS: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep'];
 
 const TARGET_MODES: { mode: TargetMode; label: string }[] = [
   { mode: 'random', label: 'ランダム' },
@@ -75,6 +77,8 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   const [muted, setMuted] = useState(false);
   const [theme, setTheme] = useState('all');
   const [rapidActive, setRapidActive] = useState(false);
+  const [keepActive, setKeepActive] = useState(false);
+  const [attackProgress, setAttackProgress] = useState(0); // 次の攻撃までのゲージ（ミスで減らない）
   const [targetMode, setTargetMode] = useState<TargetMode>('random');
   // 受信予告（CPUからの攻撃）
   const [pending, setPending] = useState<Telegraph[]>([]);
@@ -109,6 +113,8 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   const accelRef = useRef(DEFAULT_ACCEL);
   const minRef = useRef(MIN_SPAWN_INTERVAL);
   const rapidUntilRef = useRef(0);
+  const keepUntilRef = useRef(0);
+  const attackProgressRef = useRef(0);
   const themeRef = useRef(theme);
   useEffect(() => { themeRef.current = theme; }, [theme]);
   const targetModeRef = useRef(targetMode);
@@ -227,6 +233,10 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
         rapidUntilRef.current = Date.now() + RAPID_DURATION;
         setRapidActive(true);
         setTimeout(() => setRapidActive(false), RAPID_DURATION);
+      } else if (item === 'keep') {
+        keepUntilRef.current = Date.now() + KEEP_DURATION;
+        setKeepActive(true);
+        setTimeout(() => setKeepActive(false), KEEP_DURATION);
       }
     },
     [fireAttack],
@@ -283,6 +293,10 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     minRef.current = custom ? cfgMin : MIN_SPAWN_INTERVAL;
     rapidUntilRef.current = 0;
     setRapidActive(false);
+    keepUntilRef.current = 0;
+    setKeepActive(false);
+    attackProgressRef.current = 0;
+    setAttackProgress(0);
     setSpawnInterval(custom ? cfgInitial : INITIAL_SPAWN_INTERVAL);
     setGameState('playing');
     setDummies((prev) =>
@@ -316,7 +330,8 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       const result = processKey(key, stateRef.current);
 
       if (result.miss) {
-        setCombo(0);
+        // 連鎖キープ中はミスしても連鎖（＝アタック数）を維持する。
+        if (Date.now() >= keepUntilRef.current) setCombo(0);
         setMissFlash(true);
         sfx.miss();
         setTimeout(() => setMissFlash(false), 150);
@@ -330,8 +345,15 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
         setKeysTyped((prev) => prev + 1);
         setScore((s) => s + 100 + newCombo * 10);
         sfx.clear();
-        if (newCombo >= 5 && newCombo % 5 === 0) fireAttack(Math.min(newCombo / 5, ATTACK_CAP));
-        if (Date.now() < rapidUntilRef.current) fireAttack(1); // 連射: 1連鎖ごとに1攻撃
+        // ゲージはクリア数で進む（ミスでは減らない）。5クリアごとに発射し、
+        // 攻撃量は現在の連鎖に応じて決まる（連鎖が低くても最低1は撃てる）。
+        attackProgressRef.current += 1;
+        if (attackProgressRef.current >= 5) {
+          attackProgressRef.current -= 5;
+          fireAttack(Math.min(Math.max(1, Math.floor(newCombo / 5)), ATTACK_CAP));
+        }
+        setAttackProgress(attackProgressRef.current);
+        if (Date.now() < rapidUntilRef.current) fireAttack(1); // 連射: 1クリアごとに1攻撃
         if (result.clearedType === 'treasure') grantItem();
       } else if (result.nextState) {
         setTokenIndex(result.nextState.tokenIndex);
@@ -659,9 +681,18 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
           )}
 
           <div className="flex-1 flex flex-col items-center justify-end pb-8 relative z-10">
-            {rapidActive && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 bg-yellow-500/90 text-black text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
-                <Zap className="w-4 h-4" /> 連射中！
+            {(rapidActive || keepActive) && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+                {rapidActive && (
+                  <div className="bg-yellow-500/90 text-black text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
+                    <Zap className="w-4 h-4" /> 連射中！
+                  </div>
+                )}
+                {keepActive && (
+                  <div className="bg-fuchsia-500/90 text-white text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
+                    <Lock className="w-4 h-4" /> 連鎖キープ中！
+                  </div>
+                )}
               </div>
             )}
             {gameState === 'playing' && (
@@ -766,7 +797,7 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
             </div>
 
             <div className="mt-3">
-              <AttackGauge combo={combo} pinch={isDanger} badges={Math.min(playerKOs, 4)} />
+              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={Math.min(playerKOs, 4)} />
             </div>
           </div>
 
@@ -978,5 +1009,6 @@ const ItemIcon = ({ type }: { type: ItemType }) => {
   if (type === 'clear') return <Wind className="w-5 h-5 text-cyan-300" />;
   if (type === 'brake') return <Pause className="w-5 h-5 text-green-300" />;
   if (type === 'longbomb') return <Bomb className="w-5 h-5 text-red-300" />;
+  if (type === 'keep') return <Lock className="w-5 h-5 text-fuchsia-300" />;
   return <Zap className="w-5 h-5 text-yellow-300" />;
 };

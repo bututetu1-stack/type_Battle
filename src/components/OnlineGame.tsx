@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Swords, Zap, AlertTriangle, Crown, Shield, Wind, Pause, Sparkles,
-  Target, RotateCcw, LogOut, Volume2, VolumeX, Bomb,
+  Target, RotateCcw, LogOut, Volume2, VolumeX, Bomb, Lock,
 } from 'lucide-react';
 import { mulberry32, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, randomLongWord } from '../lib/words';
@@ -30,8 +30,9 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   shield: { name: 'シールド', desc: '次の自動供給を1回無効化' },
   clear: { name: 'おじゃま一掃', desc: 'バックログのおじゃまを消す' },
   brake: { name: 'ブレーキ', desc: '自動供給を5秒間ストップ' },
-  longbomb: { name: 'ロング送信', desc: '相手に長い単語を送りつける' },
-  rapid: { name: '連射', desc: '8秒間 1連鎖ごとに1攻撃' },
+  longbomb: { name: 'ロング送信', desc: '相手に長文(相殺不可)を送りつける' },
+  rapid: { name: '連射', desc: '8秒間 1クリアごとに1攻撃' },
+  keep: { name: '連鎖キープ', desc: '10秒間ミスしても連鎖が切れない' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡',
@@ -39,8 +40,10 @@ const ITEM_EMOJI: Record<ItemType, string> = {
   brake: '⏸',
   longbomb: '📨',
   rapid: '⚡',
+  keep: '🔒',
 };
 const RAPID_DURATION = 8000;
+const KEEP_DURATION = 10000;
 
 const TARGET_MODES: { mode: TargetMode; label: string }[] = [
   { mode: 'random', label: 'ランダム' },
@@ -92,6 +95,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [targetMode, setTargetMode] = useState<TargetMode>('random');
   const [muted, setMuted] = useState(false);
   const [rapidActive, setRapidActive] = useState(false);
+  const [keepActive, setKeepActive] = useState(false);
+  const [attackProgress, setAttackProgress] = useState(0); // 次の攻撃までのゲージ（ミスで減らない）
   // エフェクト用
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
   const [hitId, setHitId] = useState<string | null>(null); // 自分が攻撃した相手
@@ -119,6 +124,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const shieldRef = useRef(false);
   const brakeUntilRef = useRef(0);
   const rapidUntilRef = useRef(0);
+  const keepUntilRef = useRef(0);
+  const attackProgressRef = useRef(0);
   const categoryRef = useRef(category);
   useEffect(() => {
     categoryRef.current = category;
@@ -194,6 +201,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     itemRngRef.current = mulberry32((seed ^ 0x9e3779b9) >>> 0);
     const th = categoryRef.current;
     setBacklog([generateWord(rng, th), generateWord(rng, th), generateWord(rng, th)]);
+    attackProgressRef.current = 0;
+    setAttackProgress(0);
+    keepUntilRef.current = 0;
+    setKeepActive(false);
     // 新しいゲーム開始時に自分の状態をリセット（再戦対応）。
     writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '' });
   }, [seed, roomId, uid]);
@@ -315,8 +326,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // 連鎖マイルストーン攻撃: 倍率・上限を適用して送信。
   const launchAttack = useCallback(
     (comboVal: number) => {
-      let amount = Math.floor(comboVal / 5);
-      if (amount <= 0) return;
+      // 5クリアごとに発射。攻撃量は連鎖に応じる（連鎖が低くても最低1は撃てる）。
+      let amount = Math.max(1, Math.floor(comboVal / 5));
       if (stateRef.current.backlog.length / MAX_BACKLOG >= PINCH_RATIO) amount = Math.round(amount * PINCH_MULT);
       const badges = Object.values(playersRef.current).filter((p) => p.koBy === uid).length;
       amount = Math.round(amount * (1 + 0.25 * Math.min(badges, 4)));
@@ -353,6 +364,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         rapidUntilRef.current = Date.now() + RAPID_DURATION;
         setRapidActive(true);
         setTimeout(() => setRapidActive(false), RAPID_DURATION);
+      } else if (item === 'keep') {
+        keepUntilRef.current = Date.now() + KEEP_DURATION;
+        setKeepActive(true);
+        setTimeout(() => setKeepActive(false), KEEP_DURATION);
       }
     },
     [pickTarget, fireBeam, roomId, uid],
@@ -361,7 +376,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const grantItem = useCallback(() => {
     if (heldItemRef.current) applyItem(heldItemRef.current); // 既存を自動発動してスタック
     const rng = itemRngRef.current;
-    const items: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid'];
+    const items: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep'];
     const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
     setHeldItem(pick);
     sfx.item();
@@ -441,7 +456,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       e.preventDefault();
       const result = processKey(e.key.toLowerCase(), stateRef.current);
       if (result.miss) {
-        setCombo(0);
+        // 連鎖キープ中はミスしても連鎖（＝アタック数）を維持する。
+        if (Date.now() >= keepUntilRef.current) setCombo(0);
         setMissFlash(true);
         sfx.miss();
         setTimeout(() => setMissFlash(false), 150);
@@ -454,8 +470,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         setMaxCombo((m) => Math.max(m, newCombo));
         setKeysTyped((k) => k + 1);
         sfx.clear();
-        if (newCombo >= 5 && newCombo % 5 === 0) launchAttack(newCombo);
-        if (Date.now() < rapidUntilRef.current) sendAmount(1); // 連射: 1連鎖ごとに1攻撃
+        // ゲージはクリア数で進む（ミスでは減らない）。5クリアごとに発射。
+        attackProgressRef.current += 1;
+        if (attackProgressRef.current >= 5) {
+          attackProgressRef.current -= 5;
+          launchAttack(newCombo);
+        }
+        setAttackProgress(attackProgressRef.current);
+        if (Date.now() < rapidUntilRef.current) sendAmount(1); // 連射: 1クリアごとに1攻撃
         if (result.clearedType === 'treasure') grantItem();
       } else if (result.nextState) {
         setTokenIndex(result.nextState.tokenIndex);
@@ -682,9 +704,18 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </div>
       )}
 
-      {rapidActive && (
-        <div className="fixed top-[7.5rem] left-1/2 -translate-x-1/2 z-40 bg-yellow-500/90 text-black text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse pointer-events-none">
-          <Zap className="w-4 h-4" /> 連射中！
+      {(rapidActive || keepActive) && (
+        <div className="fixed top-[7.5rem] left-1/2 -translate-x-1/2 z-40 flex gap-2 pointer-events-none">
+          {rapidActive && (
+            <div className="bg-yellow-500/90 text-black text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
+              <Zap className="w-4 h-4" /> 連射中！
+            </div>
+          )}
+          {keepActive && (
+            <div className="bg-fuchsia-500/90 text-white text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
+              <Lock className="w-4 h-4" /> 連鎖キープ中！
+            </div>
+          )}
         </div>
       )}
 
@@ -858,7 +889,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             </div>
 
             <div className="mt-3">
-              <AttackGauge combo={combo} pinch={isDanger} badges={myBadges} />
+              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={myBadges} />
             </div>
           </div>
         </div>
@@ -906,5 +937,6 @@ const ItemIcon = ({ type }: { type: ItemType }) => {
   if (type === 'clear') return <Wind className="w-5 h-5 text-cyan-300" />;
   if (type === 'brake') return <Pause className="w-5 h-5 text-green-300" />;
   if (type === 'longbomb') return <Bomb className="w-5 h-5 text-red-300" />;
+  if (type === 'keep') return <Lock className="w-5 h-5 text-fuchsia-300" />;
   return <Zap className="w-5 h-5 text-yellow-300" />;
 };
