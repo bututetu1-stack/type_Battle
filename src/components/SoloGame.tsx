@@ -60,7 +60,7 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   // 防御
   barrier: { name: 'バリア', icon: '🛡️', desc: '次の被弾を1回まるごと防ぐ' },
   freeze: { name: 'フリーズ', icon: '🧊', desc: '5秒間 着弾予告と自動供給を停止' },
-  purge: { name: '大掃除', icon: '🧹', desc: 'バックログのおじゃまを全消去' },
+  purge: { name: '大掃除', icon: '🧹', desc: 'バックログを全消去（逆転のチャンス）' },
   guard: { name: 'ガード', icon: '🧱', desc: '次の自動供給を2回ぶん防ぐ' },
   // 攻撃
   snipe: { name: '狙撃', icon: '🎯', desc: '狙った相手へ即+3' },
@@ -343,7 +343,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       else if (item === 'freeze') freezeUntilRef.current = Date.now() + FREEZE_DURATION;
       else if (item === 'guard') guardCountRef.current = 2;
       else if (item === 'purge') {
-        setBacklog((prev) => prev.filter((w) => w.type !== 'ojama'));
+        // 大掃除: バックログを丸ごと空にし、簡単な単語を1つだけ残す（逆転のチャンス）。
+        setBacklog([makeShortWord('normal')]);
         setTokenIndex(0);
         setCurrentTyping('');
       }

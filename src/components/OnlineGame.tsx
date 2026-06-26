@@ -4,7 +4,7 @@ import {
   Target, RotateCcw, LogOut, Volume2, VolumeX, Bomb, Lock,
 } from 'lucide-react';
 import { mulberry32, type RNG } from '../lib/rng';
-import { generateWord, makeOjamaWord, makeOjamaWordFrom, randomLongWord } from '../lib/words';
+import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import {
   serverNow, writePlayerSummary, finishGame, resetRoom, sendAttack, subscribeAttacks,
@@ -45,7 +45,7 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   focus: { name: '会心', desc: '挑戦者: 次のボスへの攻撃を倍化' },
   barrier: { name: 'バリア', desc: '次の被弾を1回まるごと防ぐ' },
   freeze: { name: 'フリーズ', desc: '5秒間 着弾予告と自動供給を停止' },
-  purge: { name: '大掃除', desc: 'バックログのおじゃまを全消去' },
+  purge: { name: '大掃除', desc: 'バックログを全消去（逆転のチャンス）' },
   guard: { name: 'ガード', desc: '次の自動供給を2回ぶん防ぐ' },
   snipe: { name: '狙撃', desc: '狙った相手へ即+3' },
   burst: { name: 'バースト', desc: '全ての相手へ一斉に+2' },
@@ -492,7 +492,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       else if (item === 'freeze') freezeUntilRef.current = Date.now() + FREEZE_DURATION;
       else if (item === 'guard') guardCountRef.current = 2;
       else if (item === 'purge') {
-        setBacklog((prev) => prev.filter((w) => w.type !== 'ojama'));
+        // 大掃除: バックログを丸ごと空にし、簡単な単語を1つだけ残す（逆転のチャンス）。
+        setBacklog([makeShortWord('normal')]);
         setTokenIndex(0);
         setCurrentTyping('');
       }
