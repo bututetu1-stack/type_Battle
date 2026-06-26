@@ -18,11 +18,16 @@ export interface Word {
   tokens: Token[];
 }
 
-// ダミープレイヤー（ソロ）の盤面。
+// ダミープレイヤー（ソロ＝CPU）の盤面。
 export interface Dummy {
   id: number;
   height: number;
   isKO: boolean;
+  name?: string;
+  combo?: number; // 表示用の連鎖（演出のみ）
+  lastItem?: ItemType; // 直近に使ったアイテム（演出用）
+  itemAt?: number; // 直近にアイテムを使った時刻
+  atk?: number; // プレイヤーを攻撃した回数（strongターゲット用）
 }
 
 // お宝単語クリアで獲得できるアイテム種別。

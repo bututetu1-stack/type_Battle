@@ -29,6 +29,12 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
     return () => unsub();
   }, [roomId, uid]);
 
+  // 再戦などで待機状態に戻ったら「開始中」表示を解除する。
+  // （これを怠ると一度開始したホストのボタンが回り続けて再開始できない＝ロード地獄）
+  useEffect(() => {
+    if (snap?.meta?.status === 'waiting') setStarting(false);
+  }, [snap?.meta?.status]);
+
   const handleLeave = async () => {
     await leaveRoom(roomId, uid).catch(() => {});
     onLeave();

@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause, ArrowLeft, Volume2, VolumeX, Bomb, Crown } from 'lucide-react';
+import {
+  Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause, ArrowLeft,
+  Volume2, VolumeX, Bomb, Crown, Target,
+} from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
-import { generateWord, THEMES } from '../lib/words';
+import { generateWord, makeOjamaWord, THEMES } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
-import type { Dummy, GameStatus, ItemType } from '../lib/types';
+import type { Dummy, GameStatus, ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
@@ -18,6 +21,7 @@ const DUMMY_COUNT = 20;
 const BRAKE_DURATION = 5000;
 const ATTACK_CAP = 5; // 1回の攻撃量の上限（即死コンボ防止）
 const RAPID_DURATION = 8000; // 連射アイテムの効果時間
+const TELEGRAPH_DELAY = 1500; // CPU攻撃の着弾予告→確定までの猶予
 
 const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> = {
   shield: { name: 'シールド', icon: '🛡', desc: '次の自動供給を1回無効化' },
@@ -26,6 +30,25 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   longbomb: { name: 'ロング送信', icon: '📨', desc: '敵に長い単語(大ダメージ)を送る' },
   rapid: { name: '連射', icon: '⚡', desc: '8秒間 1連鎖ごとに1攻撃' },
 };
+const ITEM_EMOJI: Record<ItemType, string> = {
+  shield: '🛡', clear: '🌀', brake: '⏸', longbomb: '📨', rapid: '⚡',
+};
+const ALL_ITEMS: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid'];
+
+const TARGET_MODES: { mode: TargetMode; label: string }[] = [
+  { mode: 'random', label: 'ランダム' },
+  { mode: 'counter', label: '反撃' },
+  { mode: 'finish', label: 'とどめ' },
+  { mode: 'strong', label: '強敵' },
+];
+
+interface Telegraph { id: number; amount: number; confirmAt: number; }
+
+const CPU_NAMES = [
+  'タイピー', 'カナ丸', 'ローマ', 'ことだま', 'はやて', 'シフト', 'エンター', 'スペース',
+  'バックスペース', 'キャップス', 'コンボ', 'チェイン', 'おじゃま', 'おたから', 'シールド',
+  'ブレーキ', 'ラピッド', 'ボム', 'ターゲット', 'ロイヤル',
+];
 
 export default function SoloGame({ onExit, custom = false }: { onExit: () => void; custom?: boolean }) {
   const [gameState, setGameState] = useState<GameStatus>('start');
@@ -46,11 +69,17 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
 
   const [missFlash, setMissFlash] = useState(false);
   const [itemFlash, setItemFlash] = useState(false);
-  const [attackFlash, setAttackFlash] = useState(0);
+  const [attackFlash, setAttackFlash] = useState<{ amount: number; name: string } | null>(null);
   const [hitDummy, setHitDummy] = useState<number | null>(null);
+  const [incomingDummy, setIncomingDummy] = useState<number | null>(null);
   const [muted, setMuted] = useState(false);
   const [theme, setTheme] = useState('all');
   const [rapidActive, setRapidActive] = useState(false);
+  const [targetMode, setTargetMode] = useState<TargetMode>('random');
+  // 受信予告（CPUからの攻撃）
+  const [pending, setPending] = useState<Telegraph[]>([]);
+  const [toasts, setToasts] = useState<{ id: number; text: string; kind: 'ko' | 'in' | 'item' }[]>([]);
+  const [damageFlash, setDamageFlash] = useState(false);
   // エフェクト用
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
   const [shake, setShake] = useState(false);
@@ -58,11 +87,21 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   const centerRef = useRef<HTMLDivElement>(null);
   const dummyRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const beamIdRef = useRef(0);
+  const toastIdRef = useRef(0);
+  const telegraphIdRef = useRef(0);
+
   const addBeam = useCallback((x1: number, y1: number, x2: number, y2: number, color: string) => {
     const id = beamIdRef.current++;
     setBeams((b) => [...b, { id, x1, y1, x2, y2, color }]);
     setTimeout(() => setBeams((b) => b.filter((x) => x.id !== id)), 700);
   }, []);
+
+  const pushToast = useCallback((text: string, kind: 'ko' | 'in' | 'item') => {
+    const id = toastIdRef.current++;
+    setToasts((t) => [...t, { id, text, kind }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 1700);
+  }, []);
+
   // カスタムモードの設定
   const [cfgInitial, setCfgInitial] = useState(INITIAL_SPAWN_INTERVAL);
   const [cfgMin, setCfgMin] = useState(MIN_SPAWN_INTERVAL);
@@ -71,12 +110,18 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   const minRef = useRef(MIN_SPAWN_INTERVAL);
   const rapidUntilRef = useRef(0);
   const themeRef = useRef(theme);
-  useEffect(() => {
-    themeRef.current = theme;
-  }, [theme]);
+  useEffect(() => { themeRef.current = theme; }, [theme]);
+  const targetModeRef = useRef(targetMode);
+  useEffect(() => { targetModeRef.current = targetMode; }, [targetMode]);
+  const lastAttackerRef = useRef<number | null>(null);
+  const pendingRef = useRef<Telegraph[]>([]);
+  const updatePending = useCallback((next: Telegraph[]) => {
+    pendingRef.current = next;
+    setPending(next);
+  }, []);
 
   const [dummies, setDummies] = useState<Dummy[]>(
-    Array.from({ length: DUMMY_COUNT }).map((_, i) => ({ id: i, height: 0, isKO: false })),
+    Array.from({ length: DUMMY_COUNT }).map((_, i) => ({ id: i, height: 0, isKO: false, name: CPU_NAMES[i], combo: 0, atk: 0 })),
   );
 
   const stateRef = useRef<PlayerState>({ backlog, tokenIndex, currentTyping, combo, gameState });
@@ -85,46 +130,87 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   }, [backlog, tokenIndex, currentTyping, combo, gameState]);
 
   const dummiesRef = useRef(dummies);
-  useEffect(() => {
-    dummiesRef.current = dummies;
-  }, [dummies]);
+  useEffect(() => { dummiesRef.current = dummies; }, [dummies]);
 
   const heldItemRef = useRef(heldItem);
-  useEffect(() => {
-    heldItemRef.current = heldItem;
-  }, [heldItem]);
+  useEffect(() => { heldItemRef.current = heldItem; }, [heldItem]);
 
   const wordRngRef = useRef<RNG | null>(null);
   const itemRngRef = useRef<RNG | null>(null);
   const shieldRef = useRef(false);
   const brakeUntilRef = useRef(0);
 
-  const fireAttack = useCallback((amount: number) => {
+  // CPUに攻撃を受けた演出（赤ビーム＋画面赤フラッシュ＋シェイク）。
+  const fireIncoming = useCallback((fromId: number) => {
+    setIncomingDummy(fromId);
+    setTimeout(() => setIncomingDummy((cur) => (cur === fromId ? null : cur)), 650);
+    setDamageFlash(true);
+    setTimeout(() => setDamageFlash(false), 220);
+    const from = dummyRefs.current[fromId]?.getBoundingClientRect();
+    const to = centerRef.current?.getBoundingClientRect();
+    if (from && to) {
+      addBeam(from.left + from.width / 2, from.top + from.height / 2, to.left + to.width / 2, to.top + to.height * 0.35, '#ef4444');
+    }
+  }, [addBeam]);
+
+  // ターゲット選択（4モード）。
+  const pickTarget = useCallback((): Dummy | null => {
     const alive = dummiesRef.current.filter((d) => !d.isKO);
-    if (alive.length === 0) return;
-    const target = alive[Math.floor(Math.random() * alive.length)];
-    const willKO = target.height + amount > MAX_BACKLOG;
+    if (alive.length === 0) return null;
+    const mode = targetModeRef.current;
+    if (mode === 'counter') {
+      const found = alive.find((d) => d.id === lastAttackerRef.current);
+      if (found) return found;
+    } else if (mode === 'finish') {
+      return alive.reduce((best, cur) => (cur.height > best.height ? cur : best));
+    } else if (mode === 'strong') {
+      return alive.reduce((best, cur) => ((cur.atk ?? 0) > (best.atk ?? 0) ? cur : best));
+    }
+    return alive[Math.floor(Math.random() * alive.length)];
+  }, []);
+
+  // 指定量を攻撃: まず受信予告と相殺 → 余剰をターゲットへ。
+  const fireAttack = useCallback((amount: number) => {
+    if (amount <= 0) return;
+    // 相殺
+    let remaining = amount;
+    const sorted = [...pendingRef.current].sort((a, b) => a.confirmAt - b.confirmAt);
+    for (const e of sorted) {
+      if (remaining <= 0) break;
+      const cut = Math.min(remaining, e.amount);
+      e.amount -= cut;
+      remaining -= cut;
+    }
+    updatePending(sorted.filter((e) => e.amount > 0));
+    sfx.attack();
+    if (remaining <= 0) {
+      setAttackFlash({ amount: 0, name: '相殺！' });
+      setTimeout(() => setAttackFlash(null), 600);
+      return;
+    }
+    const target = pickTarget();
+    if (!target) return;
+    const willKO = target.height + remaining > MAX_BACKLOG;
     setDummies((prev) =>
       prev.map((d) =>
-        d.id === target.id ? (willKO ? { ...d, height: 0, isKO: true } : { ...d, height: d.height + amount }) : d,
+        d.id === target.id ? (willKO ? { ...d, height: 0, isKO: true } : { ...d, height: d.height + remaining }) : d,
       ),
     );
     if (willKO) {
       setPlayerKOs((k) => k + 1);
+      pushToast(`${target.name} を撃破！`, 'ko');
       sfx.ko();
     }
-    sfx.attack();
-    setAttackFlash(amount);
+    setAttackFlash({ amount: remaining, name: target.name ?? '' });
     setHitDummy(target.id);
-    // 自分のボードから対象ダミーへビーム
     const from = centerRef.current?.getBoundingClientRect();
     const to = dummyRefs.current[target.id]?.getBoundingClientRect();
     if (from && to) {
       addBeam(from.left + from.width / 2, from.top + from.height * 0.35, to.left + to.width / 2, to.top + to.height / 2, '#fb923c');
     }
-    setTimeout(() => setAttackFlash(0), 600);
+    setTimeout(() => setAttackFlash(null), 600);
     setTimeout(() => setHitDummy((cur) => (cur === target.id ? null : cur)), 600);
-  }, [addBeam]);
+  }, [addBeam, pickTarget, pushToast, updatePending]);
 
   // アイテムの効果を適用（所持状態のクリアは行わない）。
   const applyItem = useCallback(
@@ -135,7 +221,7 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       else if (item === 'brake') brakeUntilRef.current = Date.now() + BRAKE_DURATION;
       else if (item === 'clear')
         setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1).filter((w) => w.type !== 'ojama')]));
-      else if (item === 'longbomb') fireAttack(6); // ソロでは敵ダミーへの大ダメージ攻撃
+      else if (item === 'longbomb') fireAttack(6); // 敵CPUへの大ダメージ攻撃
       else if (item === 'rapid') {
         rapidUntilRef.current = Date.now() + RAPID_DURATION;
         setRapidActive(true);
@@ -146,11 +232,9 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   );
 
   const grantItem = useCallback(() => {
-    // 既にアイテムを持っていたら自動発動してから新規をスタックする。
-    if (heldItemRef.current) applyItem(heldItemRef.current);
+    if (heldItemRef.current) applyItem(heldItemRef.current); // 既存を自動発動してスタック
     const rng = itemRngRef.current;
-    const items: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid'];
-    const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
+    const pick = rng ? ALL_ITEMS[Math.floor(rng() * ALL_ITEMS.length)] : ALL_ITEMS[0];
     setHeldItem(pick);
     sfx.item();
     setItemFlash(true);
@@ -165,6 +249,13 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     setHeldItem(null);
   }, [applyItem]);
 
+  const cycleTargetMode = useCallback(() => {
+    setTargetMode((m) => {
+      const idx = TARGET_MODES.findIndex((t) => t.mode === m);
+      return TARGET_MODES[(idx + 1) % TARGET_MODES.length].mode;
+    });
+  }, []);
+
   const startGame = useCallback(() => {
     const newSeed = randomSeed();
     const wordRng = mulberry32(newSeed);
@@ -173,6 +264,8 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     itemRngRef.current = itemRng;
     shieldRef.current = false;
     brakeUntilRef.current = 0;
+    lastAttackerRef.current = null;
+    updatePending([]);
     setSeed(newSeed);
     const th = themeRef.current;
     setBacklog([generateWord(wordRng, th), generateWord(wordRng, th), generateWord(wordRng, th)]);
@@ -191,9 +284,11 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     setRapidActive(false);
     setSpawnInterval(custom ? cfgInitial : INITIAL_SPAWN_INTERVAL);
     setGameState('playing');
-    setDummies((prev) => prev.map((d) => ({ ...d, height: Math.floor(Math.random() * 5), isKO: false })));
+    setDummies((prev) =>
+      prev.map((d) => ({ ...d, height: Math.floor(Math.random() * 5), isKO: false, combo: 0, atk: 0, lastItem: undefined, itemAt: undefined })),
+    );
     sfx.start();
-  }, [custom, cfgInitial, cfgMin, cfgAccel]);
+  }, [custom, cfgInitial, cfgMin, cfgAccel, updatePending]);
 
   const gameOver = useCallback(() => {
     setGameState('gameover');
@@ -202,6 +297,7 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     setTimeout(() => setShake(false), 450);
   }, []);
 
+  // --- 入力処理 ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const { gameState } = stateRef.current;
@@ -211,11 +307,8 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
         startGame();
         return;
       }
-      if (gameState === 'playing' && e.key === 'Enter') {
-        e.preventDefault();
-        useItem();
-        return;
-      }
+      if (gameState === 'playing' && e.key === 'Enter') { e.preventDefault(); useItem(); return; }
+      if (gameState === 'playing' && e.key === 'Tab') { e.preventDefault(); cycleTargetMode(); return; }
       if (gameState !== 'playing' || e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
       const key = e.key.toLowerCase();
@@ -248,29 +341,81 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [startGame, useItem, fireAttack, grantItem]);
+  }, [startGame, useItem, fireAttack, grantItem, cycleTargetMode]);
 
+  // --- CPUの挙動: 自滅ランダムウォーク + プレイヤーへの攻撃 + アイテム使用 ---
   useEffect(() => {
     if (gameState !== 'playing') return;
     const interval = setInterval(() => {
+      // 盤面の上下動（最終的に倒せる余地を作るためやや上昇寄り）
       setDummies((prev) =>
         prev.map((d) => {
           if (d.isKO) return d;
-          // やや上昇寄りのランダムウォーク（最終的に脱落＝倒せる余地を作る）
           let newHeight = d.height + (Math.random() > 0.45 ? 1 : -1);
           if (newHeight < 0) newHeight = 0;
+          let combo = d.combo ?? 0;
+          combo = Math.random() > 0.5 ? combo + 1 : 0; // 演出用のそれっぽい連鎖
           if (newHeight > MAX_BACKLOG) {
             sfx.eliminate();
-            return { ...d, height: 0, isKO: true };
+            return { ...d, height: 0, isKO: true, combo: 0 };
           }
-          return { ...d, height: newHeight };
+          return { ...d, height: newHeight, combo };
         }),
       );
+
+      const alive = dummiesRef.current.filter((d) => !d.isKO);
+      if (alive.length === 0) return;
+
+      // 一部のCPUがプレイヤーを攻撃（着弾予告ゲージに追加）。
+      if (Math.random() < 0.55) {
+        const attacker = alive[Math.floor(Math.random() * alive.length)];
+        const amount = 1 + Math.floor(Math.random() * 2); // 1〜2
+        lastAttackerRef.current = attacker.id;
+        setDummies((prev) => prev.map((d) => (d.id === attacker.id ? { ...d, atk: (d.atk ?? 0) + 1 } : d)));
+        updatePending([
+          ...pendingRef.current,
+          { id: telegraphIdRef.current++, amount, confirmAt: Date.now() + TELEGRAPH_DELAY },
+        ]);
+        fireIncoming(attacker.id);
+        pushToast(`${attacker.name} から攻撃 +${amount}`, 'in');
+      }
+
+      // 一部のCPUがアイテムを使用（演出のみ：ミニボードに絵文字）。
+      if (Math.random() < 0.3) {
+        const user = alive[Math.floor(Math.random() * alive.length)];
+        const item = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
+        setDummies((prev) => prev.map((d) => (d.id === user.id ? { ...d, lastItem: item, itemAt: Date.now() } : d)));
+        pushToast(`${user.name} が ${ITEM_META[item].name} 使用`, 'item');
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [gameState]);
+  }, [gameState, fireIncoming, pushToast, updatePending]);
 
-  // 全ダミーを倒したら勝利（ソロの勝利条件）。
+  // --- 受信予告の確定処理（時間が来たらおじゃまをバックログへ） ---
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+    const id = setInterval(() => {
+      if (pendingRef.current.length === 0) return;
+      const now = Date.now();
+      const due = pendingRef.current.filter((e) => e.confirmAt <= now);
+      if (due.length === 0) return;
+      updatePending(pendingRef.current.filter((e) => e.confirmAt > now));
+      const words: Word[] = [];
+      for (const e of due) for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord());
+      if (words.length === 0) return;
+      setBacklog((prev) => {
+        const next = [...prev, ...words];
+        if (next.length >= MAX_BACKLOG) {
+          gameOver();
+          return next.slice(0, MAX_BACKLOG);
+        }
+        return next;
+      });
+    }, 100);
+    return () => clearInterval(id);
+  }, [gameState, gameOver, updatePending]);
+
+  // 全CPUを倒したら勝利（ソロの勝利条件）。
   useEffect(() => {
     if (gameState !== 'playing') return;
     if (dummies.length > 0 && dummies.every((d) => d.isKO)) {
@@ -279,6 +424,7 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
     }
   }, [dummies, gameState]);
 
+  // --- ベース供給＆加速ループ ---
   useEffect(() => {
     if (gameState !== 'playing') return;
     let timerId: ReturnType<typeof setTimeout>;
@@ -338,12 +484,18 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
   const isDanger = backlog.length >= MAX_BACKLOG - 3;
   const eliminatedCount = dummies.filter((d) => d.isKO).length;
   const survivors = DUMMY_COUNT + 1 - eliminatedCount;
+  const totalIncoming = pending.reduce((s, e) => s + e.amount, 0);
 
   return (
     <div className={`min-h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
+      {/* 被弾時の赤フラッシュ */}
+      <div
+        className={`fixed inset-0 pointer-events-none z-40 transition-opacity duration-150 ${damageFlash ? 'opacity-100' : 'opacity-0'}`}
+        style={{ boxShadow: 'inset 0 0 140px 40px rgba(239,68,68,0.55)' }}
+      />
 
-      {/* 攻撃ビーム（自分→対象ダミー） */}
+      {/* 攻撃/被弾ビーム */}
       {beams.length > 0 && (
         <svg className="fixed inset-0 w-full h-full pointer-events-none z-40">
           {beams.map((b) => (
@@ -356,6 +508,25 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
         </svg>
       )}
 
+      {/* 通知トースト（被弾・撃破・アイテム） */}
+      <div className="fixed top-20 right-4 z-50 flex flex-col gap-1 items-end pointer-events-none">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            className={`px-3 py-1.5 rounded-lg text-sm font-bold shadow-lg animate-in slide-in-from-right-4 fade-in duration-200 ${
+              t.kind === 'ko'
+                ? 'bg-orange-600/90 text-white'
+                : t.kind === 'item'
+                  ? 'bg-yellow-600/90 text-black'
+                  : 'bg-red-950/90 text-red-200 border border-red-500/40'
+            }`}
+          >
+            {t.kind === 'ko' ? '🏆 ' : t.kind === 'item' ? '✨ ' : '⚠ '}
+            {t.text}
+          </div>
+        ))}
+      </div>
+
       {/* アイテム発動演出 */}
       {useFlash && (
         <div className="fixed top-[8rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in zoom-in duration-200">
@@ -366,10 +537,17 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       )}
 
       {/* 演出は上部に出して、打つべき単語に被らないようにする */}
-      {attackFlash > 0 && (
+      {attackFlash && (
         <div className="fixed top-[4.5rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="text-3xl font-black italic text-orange-400 drop-shadow-[0_0_15px_rgba(251,146,60,0.8)] flex items-center gap-2">
-            <Swords className="w-7 h-7" /> ATTACK ×{attackFlash}!
+            {attackFlash.amount > 0 ? (
+              <>
+                <Swords className="w-7 h-7" /> ATTACK ×{attackFlash.amount}!
+                {attackFlash.name && <span className="text-base text-orange-200 not-italic">→ {attackFlash.name}</span>}
+              </>
+            ) : (
+              <span className="text-cyan-300">相殺！</span>
+            )}
           </div>
         </div>
       )}
@@ -415,7 +593,16 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
           {dummies.slice(0, 10).map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
-              <MiniBoard height={d.height} max={MAX_BACKLOG} isKO={d.isKO} hit={hitDummy === d.id} />
+              <MiniBoard
+                height={d.height}
+                max={MAX_BACKLOG}
+                isKO={d.isKO}
+                name={d.name}
+                combo={d.combo}
+                hit={hitDummy === d.id}
+                incoming={incomingDummy === d.id}
+                itemEmoji={d.itemAt && Date.now() - d.itemAt < 1500 ? ITEM_EMOJI[d.lastItem as ItemType] : undefined}
+              />
             </div>
           ))}
         </div>
@@ -441,19 +628,38 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
               </div>
             )}
 
-            {/* 自分のバックログ（処理待ちの山）。満タンでトップアウト＝敗北。 */}
-            <div className="absolute left-0 bottom-8 top-1/4 flex flex-col items-center justify-end gap-1">
-              <div className="text-[9px] text-gray-500 mb-0.5">山</div>
-              <div className="w-3 flex-1 bg-neutral-900 rounded-full overflow-hidden border border-white/5 relative">
-                <div
-                  className={`absolute bottom-0 w-full transition-all duration-300 ${isDanger ? 'bg-red-500' : 'bg-cyan-500'}`}
-                  style={{ height: `${(backlog.length / MAX_BACKLOG) * 100}%` }}
-                />
+            {/* ターゲットモード切替（[Tab]でも切替） */}
+            {gameState === 'playing' && (
+              <div className="absolute top-1 left-0 flex flex-col items-start gap-1">
+                <div className="flex items-center gap-1 text-[10px] text-gray-500"><Target className="w-3 h-3" /> 狙い [Tab]</div>
+                <div className="flex gap-1">
+                  {TARGET_MODES.map((t) => (
+                    <button
+                      key={t.mode}
+                      onClick={() => setTargetMode(t.mode)}
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                        targetMode === t.mode ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="font-mono text-[10px] text-gray-400">
-                {backlog.length}/{MAX_BACKLOG}
+            )}
+
+            {/* 着弾予告ゲージ（CPUからの攻撃） */}
+            {totalIncoming > 0 && gameState === 'playing' && (
+              <div className="absolute left-0 bottom-8 top-1/3 flex flex-col items-center justify-end gap-1">
+                <div className="text-xs font-bold text-red-400 mb-1 animate-pulse">⚠ {totalIncoming}</div>
+                <div className="w-3 flex-1 bg-neutral-900 rounded-full overflow-hidden border border-red-900/50 flex flex-col-reverse">
+                  {Array.from({ length: Math.min(totalIncoming, MAX_BACKLOG) }).map((_, i) => (
+                    <div key={i} className="w-full flex-1 bg-red-500 border-t border-neutral-950/60" />
+                  ))}
+                </div>
+                <div className="text-[9px] text-gray-500 text-center leading-tight">おじゃま<br />着弾予告</div>
               </div>
-            </div>
+            )}
 
             <div className="mb-8 text-center h-16 flex items-end justify-center">
               {combo > 2 && (
@@ -498,13 +704,28 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
               )}
             </div>
 
-            <div className="mt-4">
+            {/* 自分のバックログ（処理待ち）。満タンでトップアウト＝敗北。 */}
+            <div className="w-full max-w-lg mt-2">
+              <div className="text-[10px] text-gray-500 mb-0.5">自分のバックログ（満タンで脱落）</div>
+              <div className="flex gap-1">
+                {Array.from({ length: MAX_BACKLOG }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-2 flex-1 rounded-sm ${
+                      i < backlog.length ? (i >= MAX_BACKLOG - 3 ? 'bg-red-500' : 'bg-cyan-500') : 'bg-neutral-800'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-3">
               <AttackGauge combo={combo} pinch={isDanger} badges={Math.min(playerKOs, 4)} />
             </div>
           </div>
 
           {gameState === 'start' && (
-            <div className="absolute inset-0 bg-neutral-950/80 backdrop-blur-sm flex flex-col items-center justify-center z-20 rounded-2xl">
+            <div className="absolute inset-0 bg-neutral-950/80 backdrop-blur-sm flex flex-col items-center justify-center z-20 rounded-2xl overflow-y-auto py-8">
               <Swords className="w-20 h-20 text-cyan-500 mb-6" />
               <h2 className="text-4xl font-black tracking-widest mb-2 text-white">TYPE ROYALE</h2>
               <p className="text-gray-400 mb-6 font-mono">Press [SPACE] to Start</p>
@@ -579,14 +800,14 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
                 <div>🟨 お宝単語</div>
               </div>
               <p className="text-xs text-gray-600 mt-4 max-w-sm text-center">
-                ノーミスで打ち切ると連鎖UP。5連鎖ごとに敵へおじゃまを送って撃墜！ お宝(🟨)を打つとアイテム獲得 → [Enter] で使用。
+                ノーミスで打ち切ると連鎖UP。5連鎖ごとに敵CPUへおじゃまを送って撃墜！ CPUも反撃してくるので [Tab] で狙いを切り替えよう。お宝(🟨)を打つとアイテム獲得 → [Enter] で使用。
               </p>
               <div className="mt-4 text-xs bg-neutral-900/50 p-3 rounded-xl max-w-sm w-full">
                 <div className="text-gray-400 font-bold mb-1.5 flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-yellow-400" /> アイテム効果（お宝🟨で入手 → [Enter]で使用）
                 </div>
                 <div className="flex flex-col gap-1 text-left text-gray-400">
-                  {(['shield', 'clear', 'brake', 'longbomb', 'rapid'] as const).map((t) => (
+                  {ALL_ITEMS.map((t) => (
                     <div key={t}>
                       <span className="mr-1">{ITEM_META[t].icon}</span>
                       <span className="text-gray-300 font-bold">{ITEM_META[t].name}</span>
@@ -597,17 +818,20 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
               </div>
 
               {/* ゲージの説明 */}
-              <div className="mt-3 text-xs bg-neutral-900/50 p-3 rounded-xl max-w-sm w-full">
+              <div className="mt-3 mb-2 text-xs bg-neutral-900/50 p-3 rounded-xl max-w-sm w-full">
                 <div className="text-gray-400 font-bold mb-1.5">ゲージの見方</div>
                 <div className="flex flex-col gap-1 text-left text-gray-500">
                   <div>
-                    <span className="text-cyan-300 font-bold">左の「山」ゲージ</span> … 自分の処理待ち（バックログ）。満タンでトップアウト＝敗北。
+                    <span className="text-red-400 font-bold">左の赤ゲージ（着弾予告）</span> … CPUから送られてくるおじゃまの予告。時間が来るとバックログに加算される。
+                  </div>
+                  <div>
+                    <span className="text-cyan-400 font-bold">下の青ゲージ（バックログ）</span> … 自分の処理待ちの山。満タンでトップアウト＝敗北。
                   </div>
                   <div>
                     <span className="text-orange-300 font-bold">攻撃チャージ</span> … 5連鎖ごとに発射。表示の「+N」がその時送る攻撃量。
                   </div>
                   <div>
-                    <span className="text-cyan-400 font-bold">連鎖(COMBO)</span> … ノーミスで打ち切った連続数。長いほど攻撃が増える。
+                    <span className="text-cyan-300 font-bold">連鎖(COMBO)</span> … ノーミスで打ち切った連続数。長いほど攻撃が増える。
                   </div>
                 </div>
               </div>
@@ -651,7 +875,16 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
           {dummies.slice(10, 20).map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
-              <MiniBoard height={d.height} max={MAX_BACKLOG} isKO={d.isKO} hit={hitDummy === d.id} />
+              <MiniBoard
+                height={d.height}
+                max={MAX_BACKLOG}
+                isKO={d.isKO}
+                name={d.name}
+                combo={d.combo}
+                hit={hitDummy === d.id}
+                incoming={incomingDummy === d.id}
+                itemEmoji={d.itemAt && Date.now() - d.itemAt < 1500 ? ITEM_EMOJI[d.lastItem as ItemType] : undefined}
+              />
             </div>
           ))}
         </div>
