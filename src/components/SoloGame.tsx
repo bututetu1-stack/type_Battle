@@ -367,9 +367,12 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       if (alive.length === 0) return;
 
       // 一部のCPUがプレイヤーを攻撃（着弾予告ゲージに追加）。
-      if (Math.random() < 0.55) {
+      // 攻撃が集中しすぎないよう、控えめな頻度・少量に抑える。
+      // さらに、すでに予告がたまっている時は追撃を控える（理不尽な飽和を防ぐ）。
+      const incomingNow = pendingRef.current.reduce((s, e) => s + e.amount, 0);
+      if (incomingNow < 4 && Math.random() < 0.2) {
         const attacker = alive[Math.floor(Math.random() * alive.length)];
-        const amount = 1 + Math.floor(Math.random() * 2); // 1〜2
+        const amount = Math.random() < 0.8 ? 1 : 2; // ほぼ1、たまに2
         lastAttackerRef.current = attacker.id;
         setDummies((prev) => prev.map((d) => (d.id === attacker.id ? { ...d, atk: (d.atk ?? 0) + 1 } : d)));
         updatePending([
@@ -381,7 +384,7 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
       }
 
       // 一部のCPUがアイテムを使用（演出のみ：ミニボードに絵文字）。
-      if (Math.random() < 0.3) {
+      if (Math.random() < 0.15) {
         const user = alive[Math.floor(Math.random() * alive.length)];
         const item = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
         setDummies((prev) => prev.map((d) => (d.id === user.id ? { ...d, lastItem: item, itemAt: Date.now() } : d)));
