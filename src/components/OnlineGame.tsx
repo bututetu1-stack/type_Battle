@@ -266,7 +266,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     wordRngRef.current = rng;
     itemRngRef.current = mulberry32((seed ^ 0x9e3779b9) >>> 0);
     const th = categoryRef.current;
-    setBacklog([generateWord(rng, th), generateWord(rng, th), generateWord(rng, th)]);
+    // 種別はローカル乱数で（お宝＝アイテムが各プレイヤーに確実に出るように）。
+    setBacklog([generateWord(rng, th, [], true), generateWord(rng, th, [], true), generateWord(rng, th, [], true)]);
     attackProgressRef.current = 0;
     setAttackProgress(0);
     keepUntilRef.current = 0;
@@ -753,7 +754,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             return prev;
           }
           const rng = wordRngRef.current;
-          return rng ? [...prev, generateWord(rng, categoryRef.current)] : prev;
+          return rng ? [...prev, generateWord(rng, categoryRef.current, [], true)] : prev;
         });
       }
       setSpawnInterval((prev) => Math.max(MIN_SPAWN_INTERVAL, prev * 0.98));
@@ -795,14 +796,31 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     if (aliveCount === 0 || (total >= 2 && aliveCount <= 1)) finishGame(roomId);
   }, [players, status, uid, hostUid, roomId, started, bossMode, bossUid]);
 
-  // テトリス99のように、他プレイヤー同士の攻防も可視化（自分以外の撃ち合い）。
-  // 実データの全攻撃は購読していないため、生存中の他プレイヤー間にそれっぽい
-  // ビームを散らすアンビエント表現（自分を狙うビームは出さない）。
+  // テトリス99のように、自分以外の攻防もアンビエントなビームで可視化する。
+  // 実データの全攻撃は購読していないため、それっぽいビームを散らす表現。
+  // ボス戦では挑戦者同士は撃ち合わない（全員ボスを攻撃する）ので、
+  // 挑戦者 → ボス へ集まるビームを描く。
   useEffect(() => {
     if (!started || status !== 'playing') return;
     const id = setInterval(() => {
+      if (Math.random() > 0.6) return;
+      if (bossMode) {
+        const boss = playersRef.current[bossUid];
+        if (!boss || !isLive(boss)) return;
+        // 挑戦者（自分とボス以外）から1人選び、ボスへビームを飛ばす。
+        const challengers = Object.entries(playersRef.current).filter(([oid, p]) => oid !== bossUid && oid !== uid && isLive(p));
+        if (challengers.length === 0) return;
+        const a = challengers[Math.floor(Math.random() * challengers.length)];
+        const from = boardRefs.current[a[0]]?.getBoundingClientRect();
+        // ボスの盤面: 自分がボスなら中央、そうでなければボスのミニボード。
+        const toRect = bossUid === uid ? centerRef.current?.getBoundingClientRect() : boardRefs.current[bossUid]?.getBoundingClientRect();
+        if (from && toRect) {
+          addBeam(from.left + from.width / 2, from.top + from.height / 2, toRect.left + toRect.width / 2, toRect.top + toRect.height / 2, '#94a3b8');
+        }
+        return;
+      }
       const aliveOthers = Object.entries(playersRef.current).filter(([oid, p]) => oid !== uid && isLive(p));
-      if (aliveOthers.length < 2 || Math.random() > 0.6) return;
+      if (aliveOthers.length < 2) return;
       const a = aliveOthers[Math.floor(Math.random() * aliveOthers.length)];
       let b = aliveOthers[Math.floor(Math.random() * aliveOthers.length)];
       if (b[0] === a[0]) b = aliveOthers[(aliveOthers.indexOf(a) + 1) % aliveOthers.length];
@@ -814,7 +832,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       }
     }, 1300);
     return () => clearInterval(id);
-  }, [started, status, uid, addBeam]);
+  }, [started, status, uid, addBeam, bossMode, bossUid]);
 
   const others = Object.entries(players).filter(([id]) => id !== uid);
   const aliveCount = Object.values(players).filter(isLive).length;

@@ -480,7 +480,15 @@ function buildWord(entry: WordEntry, type: WordType, prefix: string): Word {
 // 与えられた決定論的 RNG から新しい単語を生成する。
 // theme を指定すると、そのテーマ（タグ）の語彙からのみ出題する。
 // recent に直近出題した表示テキストを渡すと、それらを避けて選ぶ（連続/近接重複の防止）。
-export const generateWord = (rng: RNG, theme: string = 'all', recent: string[] = []): Word => {
+// localType=true のとき、種別（お宝/おじゃま）だけはクライアントごとにローカル乱数で決める。
+//   → 出題する単語列（エントリ）はシード共有で全員同じだが、お宝の出現は各自に保証される
+//     （オンラインでお宝＝アイテムが特定プレイヤーにしか出ない問題への対策）。
+export const generateWord = (
+  rng: RNG,
+  theme: string = 'all',
+  recent: string[] = [],
+  localType = false,
+): Word => {
   const pool = THEME_POOLS[theme] ?? WORD_POOL;
   let entry = pool[Math.floor(rng() * pool.length)];
   // 直近に出た単語と被ったら数回まで引き直す（プールが十分大きいときのみ）。
@@ -489,10 +497,12 @@ export const generateWord = (rng: RNG, theme: string = 'all', recent: string[] =
       entry = pool[Math.floor(rng() * pool.length)];
     }
   }
-  const rand = rng();
+  // 種別用の乱数は常にシード列を1つ消費する（エントリ列の同期を崩さない）。
+  const seededRand = rng();
+  const rand = localType ? Math.random() : seededRand;
   let type: WordType = 'normal';
-  if (rand < 0.1) type = 'treasure'; // 10%でお宝
-  else if (rand < 0.3) type = 'ojama'; // 20%でおじゃま
+  if (rand < 0.12) type = 'treasure'; // 約12%でお宝
+  else if (rand < 0.32) type = 'ojama'; // 20%でおじゃま
   return buildWord(entry, type, 'w');
 };
 
