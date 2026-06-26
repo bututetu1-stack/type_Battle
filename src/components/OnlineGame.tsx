@@ -753,7 +753,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                     <div key={i} className="w-full flex-1 bg-red-500 border-t border-neutral-950/60" />
                   ))}
                 </div>
-                <div className="text-[9px] text-gray-500">着弾</div>
+                <div className="text-[9px] text-gray-500 text-center leading-tight">おじゃま<br />着弾予告</div>
               </div>
             )}
 
@@ -787,17 +787,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   ))}
               </div>
 
-              {/* 保持アイテム（打鍵中に確認しやすいよう単語のすぐ上に表示） */}
-              {heldItem && (
-                <div className="flex justify-center mb-2">
-                  <div className="flex items-center gap-2 bg-neutral-900/90 border border-yellow-600/50 rounded-full px-3 py-1 shadow-lg shadow-yellow-900/30">
-                    <ItemIcon type={heldItem} />
-                    <span className="text-xs font-bold text-yellow-200">{ITEM_META[heldItem].name}</span>
-                    <span className="text-[10px] text-gray-400 hidden sm:inline">{ITEM_META[heldItem].desc}</span>
-                    <span className="text-[10px] text-cyan-300 font-bold">[Enter]</span>
-                  </div>
-                </div>
-              )}
               {word && (
                 <div
                   className={`p-6 rounded-xl border-2 shadow-2xl mb-4 ${
@@ -816,17 +805,31 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   />
                 </div>
               )}
+              {/* 保持アイテム（次の単語を隠さないよう単語の下に表示） */}
+              {heldItem && (
+                <div className="flex justify-center">
+                  <div className="flex items-center gap-2 bg-neutral-900/90 border border-yellow-600/50 rounded-full px-3 py-1 shadow-lg shadow-yellow-900/30">
+                    <ItemIcon type={heldItem} />
+                    <span className="text-xs font-bold text-yellow-200">{ITEM_META[heldItem].name}</span>
+                    <span className="text-[10px] text-gray-400 hidden sm:inline">{ITEM_META[heldItem].desc}</span>
+                    <span className="text-[10px] text-cyan-300 font-bold">[Enter]</span>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="w-full max-w-lg flex gap-1 mt-2">
-              {Array.from({ length: MAX_BACKLOG }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-2 flex-1 rounded-sm ${
-                    i < backlog.length ? (i >= MAX_BACKLOG - 3 ? 'bg-red-500' : 'bg-cyan-500') : 'bg-neutral-800'
-                  }`}
-                />
-              ))}
+            <div className="w-full max-w-lg mt-2">
+              <div className="text-[10px] text-gray-500 mb-0.5">自分のバックログ（満タンで脱落）</div>
+              <div className="flex gap-1">
+                {Array.from({ length: MAX_BACKLOG }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-2 flex-1 rounded-sm ${
+                      i < backlog.length ? (i >= MAX_BACKLOG - 3 ? 'bg-red-500' : 'bg-cyan-500') : 'bg-neutral-800'
+                    }`}
+                  />
+                ))}
+              </div>
             </div>
 
             <div className="mt-3">

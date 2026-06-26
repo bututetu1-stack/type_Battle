@@ -441,8 +441,18 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
               </div>
             )}
 
-            <div className="absolute left-0 bottom-8 top-1/4 w-3 bg-neutral-900 rounded-full overflow-hidden border border-white/5">
-              <div className="absolute bottom-0 w-full bg-red-500 transition-all duration-500" style={{ height: `${(backlog.length / MAX_BACKLOG) * 100}%` }} />
+            {/* 自分のバックログ（処理待ちの山）。満タンでトップアウト＝敗北。 */}
+            <div className="absolute left-0 bottom-8 top-1/4 flex flex-col items-center justify-end gap-1">
+              <div className="text-[9px] text-gray-500 mb-0.5">山</div>
+              <div className="w-3 flex-1 bg-neutral-900 rounded-full overflow-hidden border border-white/5 relative">
+                <div
+                  className={`absolute bottom-0 w-full transition-all duration-300 ${isDanger ? 'bg-red-500' : 'bg-cyan-500'}`}
+                  style={{ height: `${(backlog.length / MAX_BACKLOG) * 100}%` }}
+                />
+              </div>
+              <div className="font-mono text-[10px] text-gray-400">
+                {backlog.length}/{MAX_BACKLOG}
+              </div>
             </div>
 
             <div className="mb-8 text-center h-16 flex items-end justify-center">
@@ -474,9 +484,10 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
                     </div>
                   ))}
               </div>
-              {/* 保持アイテム（打鍵中に確認しやすいよう単語のすぐ上に表示） */}
+              {renderCurrentWord()}
+              {/* 保持アイテム（次の単語を隠さないよう単語の下に表示） */}
               {gameState === 'playing' && heldItem && (
-                <div className="flex justify-center mb-2">
+                <div className="flex justify-center">
                   <div className="flex items-center gap-2 bg-neutral-900/90 border border-yellow-600/50 rounded-full px-3 py-1 shadow-lg shadow-yellow-900/30">
                     <ItemIcon type={heldItem} />
                     <span className="text-xs font-bold text-yellow-200">{ITEM_META[heldItem].name}</span>
@@ -485,21 +496,9 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
                   </div>
                 </div>
               )}
-              {renderCurrentWord()}
             </div>
 
-            <div className="w-full max-w-lg flex gap-1 mt-2">
-              {Array.from({ length: MAX_BACKLOG }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`h-2 flex-1 rounded-sm transition-colors ${
-                    i < backlog.length ? (i >= MAX_BACKLOG - 3 ? 'bg-red-500' : 'bg-cyan-500') : 'bg-neutral-800'
-                  }`}
-                />
-              ))}
-            </div>
-
-            <div className="mt-3">
+            <div className="mt-4">
               <AttackGauge combo={combo} pinch={isDanger} badges={Math.min(playerKOs, 4)} />
             </div>
           </div>
@@ -594,6 +593,22 @@ export default function SoloGame({ onExit, custom = false }: { onExit: () => voi
                       <span className="text-gray-500"> … {ITEM_META[t].desc}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* ゲージの説明 */}
+              <div className="mt-3 text-xs bg-neutral-900/50 p-3 rounded-xl max-w-sm w-full">
+                <div className="text-gray-400 font-bold mb-1.5">ゲージの見方</div>
+                <div className="flex flex-col gap-1 text-left text-gray-500">
+                  <div>
+                    <span className="text-cyan-300 font-bold">左の「山」ゲージ</span> … 自分の処理待ち（バックログ）。満タンでトップアウト＝敗北。
+                  </div>
+                  <div>
+                    <span className="text-orange-300 font-bold">攻撃チャージ</span> … 5連鎖ごとに発射。表示の「+N」がその時送る攻撃量。
+                  </div>
+                  <div>
+                    <span className="text-cyan-400 font-bold">連鎖(COMBO)</span> … ノーミスで打ち切った連続数。長いほど攻撃が増える。
+                  </div>
                 </div>
               </div>
             </div>

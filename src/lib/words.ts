@@ -391,6 +391,8 @@ export interface Theme {
   label: string;
 }
 
+// 通常出題は「単語のみ」。長文(ことわざ等)はロング送信アイテム専用にするため
+// テーマには含めない（LONG_WORDS は makeOjamaWordFrom 経由でのみ出現）。
 export const THEMES: Theme[] = [
   { id: 'all', label: 'すべて' },
   { id: 'greeting', label: 'あいさつ' },
@@ -398,7 +400,6 @@ export const THEMES: Theme[] = [
   { id: 'food', label: '食べ物' },
   { id: 'nature', label: '自然・乗物' },
   { id: 'school', label: '学校・生活' },
-  { id: 'idiom', label: 'ことわざ・長文' },
 ];
 
 // テーマごとの語彙プール。'all' は全語彙（WORD_POOL）を使う。
