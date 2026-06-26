@@ -142,6 +142,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
   const [keysTyped, setKeysTyped] = useState(0);
+  const [missCount, setMissCount] = useState(0); // ミスタイプ数（リザルト用）
   const [spawnInterval, setSpawnInterval] = useState(INITIAL_SPAWN_INTERVAL);
   const [missFlash, setMissFlash] = useState(false);
   const [pending, setPending] = useState<Telegraph[]>([]);
@@ -169,6 +170,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const prevPlayersRef = useRef(players);
 
   const startTimeRef = useRef(0);
+  const endTimeRef = useRef(0); // ゲーム終了時刻（KPM固定用）
   const wordRngRef = useRef<RNG | null>(null);
   const itemRngRef = useRef<RNG | null>(null);
   const stateRef = useRef<PlayerState>({ backlog, tokenIndex, currentTyping, combo, gameState: 'playing' });
@@ -249,7 +251,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
   const calculateKPM = useCallback(() => {
     if (!startTimeRef.current || keysTyped === 0) return 0;
-    return Math.floor(keysTyped / ((Date.now() - startTimeRef.current) / 60000));
+    // 終了後は終了時刻で固定（裏で時間が進んで KPM が下がるのを防ぐ）。
+    const end = endTimeRef.current || Date.now();
+    const minutes = Math.max(1 / 600, (end - startTimeRef.current) / 60000);
+    return Math.floor(keysTyped / minutes);
   }, [keysTyped]);
 
   // 自分が稼いだバッジ数（自分にトドメ＝koBy===uid のプレイヤー数）。
@@ -270,6 +275,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     freezeUntilRef.current = 0;
     barrierRef.current = false;
     guardCountRef.current = 0;
+    endTimeRef.current = 0;
+    setKeysTyped(0);
+    setMissCount(0);
     // 新しいゲーム開始時に自分の状態をリセット（再戦対応）。
     writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '' });
   }, [seed, roomId, uid]);
@@ -299,10 +307,21 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     return () => clearInterval(id);
   }, [startAt, started]);
 
+  // 決着時、まだ脱落していない（勝者）なら KPM をこの時点で固定する。
+  useEffect(() => {
+    if (status === 'finished' && endTimeRef.current === 0) endTimeRef.current = Date.now();
+  }, [status]);
+
   // 自分が脱落。順位と KO クレジット（koBy）を確定。
   const topOut = useCallback(() => {
     if (!selfAliveRef.current) return;
+    // ボスは挑戦者が全滅していれば勝利確定。決着の伝播待ちに過積載で自滅しないようにする。
+    if (bossMode && isBoss) {
+      const aliveChallengers = Object.entries(playersRef.current).filter(([id, p]) => id !== bossUid && isLive(p)).length;
+      if (aliveChallengers === 0) return;
+    }
     selfAliveRef.current = false;
+    endTimeRef.current = Date.now(); // KPM をこの時点で固定
     const aliveCount = Object.values(playersRef.current).filter(isLive).length;
     const myRank = Math.max(1, aliveCount);
     setRank(myRank);
@@ -311,7 +330,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     setShake(true);
     setTimeout(() => setShake(false), 500);
     writePlayerSummary(roomId, uid, { alive: false, rank: myRank, backlog: selfMax, koBy: lastAttackerRef.current });
-  }, [roomId, uid, selfMax]);
+  }, [roomId, uid, selfMax, bossMode, isBoss, bossUid]);
 
   // 他プレイヤーの脱落を検知してトースト表示（自分の撃破なら強調）。
   useEffect(() => {
@@ -608,7 +627,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
   // 予告ゲージの確定処理。
   useEffect(() => {
-    if (!started) return;
+    if (!started || status !== 'playing') return; // 決着後は着弾処理を止める
     const id = setInterval(() => {
       if (!selfAliveRef.current || pendingRef.current.length === 0) return;
       const now = Date.now();
@@ -660,7 +679,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       }
     }, 100);
     return () => clearInterval(id);
-  }, [started, updatePending, topOut, pickTarget, roomId, uid, fireBeam, pushToast, selfMax]);
+  }, [started, status, updatePending, topOut, pickTarget, roomId, uid, fireBeam, pushToast, selfMax]);
 
   // カウントダウン描画用の時刻ティック。
   useEffect(() => {
@@ -682,6 +701,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       if (result.miss) {
         // 連鎖キープ中はミスしても連鎖（＝アタック数）を維持する。
         if (Date.now() >= keepUntilRef.current) setCombo(0);
+        setMissCount((m) => m + 1);
         setMissFlash(true);
         sfx.miss();
         setTimeout(() => setMissFlash(false), 150);
@@ -716,7 +736,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
   // ベース供給＆加速ループ（シールド/ブレーキ対応）。
   useEffect(() => {
-    if (!started || !selfAlive) return;
+    if (!started || !selfAlive || status !== 'playing') return; // 決着後は供給を止める
     let timerId: ReturnType<typeof setTimeout>;
     const loop = () => {
       const now = Date.now();
@@ -741,7 +761,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     };
     timerId = setTimeout(loop, spawnInterval);
     return () => clearTimeout(timerId);
-  }, [started, selfAlive, spawnInterval, topOut, selfMax]);
+  }, [started, selfAlive, spawnInterval, topOut, selfMax, status]);
 
   // サマリのスロットリング書込（バッジも反映）。
   const summaryRef = useRef({ backlog: 0, combo: 0, kpm: 0, badges: 0 });
@@ -859,7 +879,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             </div>
           ))}
         </div>
-        <p className="text-gray-400 mb-4 font-mono">あなたの順位: {myRank} 位 / 最高連鎖 {maxCombo}</p>
+        <p className="text-gray-400 mb-4 font-mono">
+          あなたの順位: {myRank} 位 / 最高連鎖 {maxCombo} / KPM {calculateKPM()}
+        </p>
+        <p className="text-gray-500 mb-4 font-mono text-sm">
+          正タイプ {keysTyped} · ミス {missCount}
+        </p>
         <div className="flex gap-3">
           <button onClick={onExit} className="bg-neutral-800 hover:bg-neutral-700 rounded-lg px-5 py-2 font-bold flex items-center gap-2">
             <LogOut className="w-4 h-4" /> ロビーに戻る

@@ -84,23 +84,36 @@ const ALL_ITEMS: ItemType[] = [
   'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror',
 ];
 
+const MAX_DUMMIES = 30; // 敵数の上限（名前プールの都合）
+const HP_MIN = 6;
+const HP_MAX = 24;
+
 // カスタム設定の永続化（タイトルに戻ってもリセットされない）。
-interface CustomCfg { initial: number; min: number; accel: number; theme: string; }
+interface CustomCfg { initial: number; min: number; accel: number; theme: string; hp: number; enemies: number; }
 function loadCfg(): CustomCfg {
+  const def: CustomCfg = {
+    initial: INITIAL_SPAWN_INTERVAL, min: MIN_SPAWN_INTERVAL, accel: DEFAULT_ACCEL,
+    theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT,
+  };
   try {
     const raw = localStorage.getItem(CFG_KEY);
     if (raw) {
       const o = JSON.parse(raw);
       return {
-        initial: typeof o.initial === 'number' ? o.initial : INITIAL_SPAWN_INTERVAL,
-        min: typeof o.min === 'number' ? o.min : MIN_SPAWN_INTERVAL,
-        accel: typeof o.accel === 'number' ? o.accel : DEFAULT_ACCEL,
-        theme: typeof o.theme === 'string' ? o.theme : 'all',
+        initial: typeof o.initial === 'number' ? o.initial : def.initial,
+        min: typeof o.min === 'number' ? o.min : def.min,
+        accel: typeof o.accel === 'number' ? o.accel : def.accel,
+        theme: typeof o.theme === 'string' ? o.theme : def.theme,
+        hp: typeof o.hp === 'number' ? Math.min(HP_MAX, Math.max(HP_MIN, o.hp)) : def.hp,
+        enemies: typeof o.enemies === 'number' ? Math.min(MAX_DUMMIES, Math.max(1, o.enemies)) : def.enemies,
       };
     }
   } catch { /* localStorage 不可環境は既定値 */ }
-  return { initial: INITIAL_SPAWN_INTERVAL, min: MIN_SPAWN_INTERVAL, accel: DEFAULT_ACCEL, theme: 'all' };
+  return def;
 }
+
+// CPU名（足りない分は連番で補う）。
+const cpuName = (i: number): string => CPU_NAMES[i] ?? `CPU${i + 1}`;
 
 const TARGET_MODES: { mode: TargetMode; label: string }[] = [
   { mode: 'random', label: 'ランダム' },
@@ -128,9 +141,15 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [maxCombo, setMaxCombo] = useState(0);
   const [score, setScore] = useState(0);
   const [keysTyped, setKeysTyped] = useState(0);
+  const [missCount, setMissCount] = useState(0); // ミスタイプ数（リザルト用）
   const [startTime, setStartTime] = useState<number | null>(null);
+  const [endTime, setEndTime] = useState<number | null>(null); // ゲーム終了時刻（KPM固定用）
   const [spawnInterval, setSpawnInterval] = useState(INITIAL_SPAWN_INTERVAL);
   const [seed, setSeed] = useState(0);
+  // カスタム: HP（積載限界）と敵数。
+  const [maxBacklog, setMaxBacklog] = useState(initialCfg.hp);
+  const [dummyCount, setDummyCount] = useState(initialCfg.enemies);
+  const maxBacklogRef = useRef(initialCfg.hp);
 
   const [playerKOs, setPlayerKOs] = useState(0);
   const [heldItem, setHeldItem] = useState<ItemType | null>(null);
@@ -177,12 +196,14 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgInitial, setCfgInitial] = useState(initialCfg.initial);
   const [cfgMin, setCfgMin] = useState(initialCfg.min);
   const [cfgAccel, setCfgAccel] = useState(initialCfg.accel);
+  const [cfgHp, setCfgHp] = useState(initialCfg.hp);
+  const [cfgEnemies, setCfgEnemies] = useState(initialCfg.enemies);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
   useEffect(() => {
     try {
-      localStorage.setItem(CFG_KEY, JSON.stringify({ initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme }));
+      localStorage.setItem(CFG_KEY, JSON.stringify({ initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies]);
   const accelRef = useRef(DEFAULT_ACCEL);
   const minRef = useRef(MIN_SPAWN_INTERVAL);
   const rapidUntilRef = useRef(0);
@@ -220,7 +241,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   }, []);
 
   const [dummies, setDummies] = useState<Dummy[]>(
-    Array.from({ length: DUMMY_COUNT }).map((_, i) => ({ id: i, height: 0, isKO: false, name: CPU_NAMES[i], combo: 0, atk: 0 })),
+    Array.from({ length: initialCfg.enemies }).map((_, i) => ({ id: i, height: 0, isKO: false, name: cpuName(i), combo: 0, atk: 0 })),
   );
 
   const stateRef = useRef<PlayerState>({ backlog, tokenIndex, currentTyping, combo, gameState });
@@ -290,7 +311,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     }
     const target = pickTarget();
     if (!target) return;
-    const willKO = target.height + remaining > MAX_BACKLOG;
+    const willKO = target.height + remaining > maxBacklogRef.current;
     setDummies((prev) =>
       prev.map((d) =>
         d.id === target.id ? (willKO ? { ...d, height: 0, isKO: true } : { ...d, height: d.height + remaining }) : d,
@@ -355,9 +376,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         // 全ての敵CPUへ一斉に +2。
         const inc = 2;
         const targets = dummiesRef.current.filter((d) => !d.isKO);
-        const koIds = targets.filter((d) => d.height + inc > MAX_BACKLOG).map((d) => d.id);
+        const cap = maxBacklogRef.current;
+        const koIds = targets.filter((d) => d.height + inc > cap).map((d) => d.id);
         setDummies((prev) =>
-          prev.map((d) => (!d.isKO ? (d.height + inc > MAX_BACKLOG ? { ...d, height: 0, isKO: true } : { ...d, height: d.height + inc }) : d)),
+          prev.map((d) => (!d.isKO ? (d.height + inc > cap ? { ...d, height: 0, isKO: true } : { ...d, height: d.height + inc }) : d)),
         );
         if (koIds.length) {
           setPlayerKOs((k) => k + koIds.length);
@@ -389,7 +411,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       const alive = dummiesRef.current.filter((d) => !d.isKO);
       if (alive.length === 0) return;
       const target = alive[Math.floor(Math.random() * alive.length)];
-      const willKO = target.height + amount > MAX_BACKLOG;
+      const willKO = target.height + amount > maxBacklogRef.current;
       setDummies((prev) =>
         prev.map((d) =>
           d.id === target.id ? (willKO ? { ...d, height: 0, isKO: true } : { ...d, height: d.height + amount }) : d,
@@ -431,7 +453,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const rng = itemRngRef.current;
     const r = rng ? rng() : Math.random();
     // 不利度（バックログが多いほど高い）。短縮・ゲージ短縮は不利な人ほど出やすくする。
-    const ratio = Math.min(1, stateRef.current.backlog.length / MAX_BACKLOG);
+    const ratio = Math.min(1, stateRef.current.backlog.length / maxBacklogRef.current);
     const weighted: { item: ItemType; w: number }[] = [];
     for (const it of ALL_ITEMS) {
       if (it === 'gaugedown') {
@@ -493,9 +515,15 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setMaxCombo(0);
     setScore(0);
     setKeysTyped(0);
+    setMissCount(0);
     setPlayerKOs(0);
     setHeldItem(null);
     setStartTime(Date.now());
+    setEndTime(null);
+    // カスタム設定を反映（HP＝積載限界、敵数）。
+    maxBacklogRef.current = cfgHp;
+    setMaxBacklog(cfgHp);
+    setDummyCount(cfgEnemies);
     accelRef.current = cfgAccel;
     minRef.current = cfgMin;
     rapidUntilRef.current = 0;
@@ -512,14 +540,18 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setAttackProgress(0);
     setSpawnInterval(cfgInitial);
     setGameState('playing');
-    setDummies((prev) =>
-      prev.map((d) => ({ ...d, height: Math.floor(Math.random() * 5), isKO: false, combo: 0, atk: 0, lastItem: undefined, itemAt: undefined })),
+    // 敵数ぶんのダミーを作り直す（カスタムで数が変わるため）。
+    setDummies(
+      Array.from({ length: cfgEnemies }).map((_, i) => ({
+        id: i, height: Math.floor(Math.random() * 5), isKO: false, name: cpuName(i), combo: 0, atk: 0,
+      })),
     );
     sfx.start();
-  }, [cfgInitial, cfgMin, cfgAccel, updatePending, nextWord]);
+  }, [cfgInitial, cfgMin, cfgAccel, cfgHp, cfgEnemies, updatePending, nextWord]);
 
   const gameOver = useCallback(() => {
     setGameState('gameover');
+    setEndTime(Date.now()); // KPM をこの時点で固定
     sfx.gameover();
     setShake(true);
     setTimeout(() => setShake(false), 450);
@@ -545,6 +577,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       if (result.miss) {
         // 連鎖キープ中はミスしても連鎖（＝アタック数）を維持する。
         if (Date.now() >= keepUntilRef.current) setCombo(0);
+        setMissCount((m) => m + 1);
         setMissFlash(true);
         sfx.miss();
         setTimeout(() => setMissFlash(false), 150);
@@ -591,7 +624,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           if (newHeight < 0) newHeight = 0;
           let combo = d.combo ?? 0;
           combo = Math.random() > 0.5 ? combo + 1 : 0; // 演出用のそれっぽい連鎖
-          if (newHeight > MAX_BACKLOG) {
+          if (newHeight > maxBacklogRef.current) {
             sfx.eliminate();
             return { ...d, height: 0, isKO: true, combo: 0 };
           }
@@ -647,7 +680,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         let b = alive[Math.floor(Math.random() * alive.length)];
         if (b.id === a.id) b = alive[(alive.indexOf(a) + 1) % alive.length];
         if (b.id !== a.id) {
-          const willKO = b.height + 1 > MAX_BACKLOG;
+          const willKO = b.height + 1 > maxBacklogRef.current;
           setDummies((prev) =>
             prev.map((d) =>
               d.id === b.id ? (willKO ? { ...d, height: 0, isKO: true, combo: 0 } : { ...d, height: d.height + 1 }) : d,
@@ -707,10 +740,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       if (words.length === 0) return;
       setBacklog((prev) => {
         const next = [...prev, ...words];
-        if (next.length >= MAX_BACKLOG) {
-          if (overflowProtect() === 'protected') return next.slice(0, MAX_BACKLOG - 1);
+        if (next.length >= maxBacklogRef.current) {
+          if (overflowProtect() === 'protected') return next.slice(0, maxBacklogRef.current - 1);
           gameOver();
-          return next.slice(0, MAX_BACKLOG);
+          return next.slice(0, maxBacklogRef.current);
         }
         return next;
       });
@@ -723,6 +756,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     if (gameState !== 'playing') return;
     if (dummies.length > 0 && dummies.every((d) => d.isKO)) {
       setGameState('win');
+      setEndTime(Date.now()); // KPM をこの時点で固定
       sfx.start();
     }
   }, [dummies, gameState]);
@@ -741,8 +775,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         shieldRef.current = false;
       } else {
         setBacklog((prev) => {
-          if (prev.length >= MAX_BACKLOG) {
-            if (overflowProtect() === 'protected') return prev.slice(0, MAX_BACKLOG - 1);
+          if (prev.length >= maxBacklogRef.current) {
+            if (overflowProtect() === 'protected') return prev.slice(0, maxBacklogRef.current - 1);
             gameOver();
             return prev;
           }
@@ -765,7 +799,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
   const calculateKPM = () => {
     if (!startTime || keysTyped === 0) return 0;
-    return Math.floor(keysTyped / ((Date.now() - startTime) / 60000));
+    // ゲーム終了後は終了時刻で固定（裏で時間が進んで KPM が下がるのを防ぐ）。
+    const end = endTime ?? Date.now();
+    const minutes = Math.max(1 / 600, (end - startTime) / 60000); // 0除算回避
+    return Math.floor(keysTyped / minutes);
   };
 
   const renderCurrentWord = () => {
@@ -793,9 +830,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     );
   };
 
-  const isDanger = backlog.length >= MAX_BACKLOG - 3;
+  const isDanger = backlog.length >= maxBacklog - 3;
   const eliminatedCount = dummies.filter((d) => d.isKO).length;
-  const survivors = DUMMY_COUNT + 1 - eliminatedCount;
+  const survivors = dummyCount + 1 - eliminatedCount;
   const totalIncoming = pending.reduce((s, e) => s + e.amount, 0);
 
   // 発動中の時間制限アイテム（残り時間カウントダウン表示用）。
@@ -942,11 +979,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
       <main className="flex-1 flex w-full max-w-7xl mx-auto p-4 gap-4 h-[calc(100vh-4rem)]">
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
-          {dummies.slice(0, 10).map((d) => (
+          {dummies.slice(0, Math.ceil(dummies.length / 2)).map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
               <MiniBoard
                 height={d.height}
-                max={MAX_BACKLOG}
+                max={maxBacklog}
                 isKO={d.isKO}
                 name={d.name}
                 combo={d.combo}
@@ -993,7 +1030,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <div className="text-xs text-gray-500">ALIVE</div>
                 <div className="font-mono text-2xl font-bold text-gray-300">
                   {survivors}
-                  <span className="text-sm text-gray-600"> / {DUMMY_COUNT + 1}</span>
+                  <span className="text-sm text-gray-600"> / {dummyCount + 1}</span>
                 </div>
               </div>
             )}
@@ -1023,7 +1060,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               <div className="absolute left-0 bottom-8 top-1/3 flex flex-col items-center justify-end gap-1">
                 <div className="text-xs font-bold text-red-400 mb-1 animate-pulse">⚠ {totalIncoming}</div>
                 <div className="w-3 flex-1 bg-neutral-900 rounded-full overflow-hidden border border-red-900/50 flex flex-col-reverse">
-                  {Array.from({ length: Math.min(totalIncoming, MAX_BACKLOG) }).map((_, i) => (
+                  {Array.from({ length: Math.min(totalIncoming, maxBacklog) }).map((_, i) => (
                     <div key={i} className="w-full flex-1 bg-red-500 border-t border-neutral-950/60" />
                   ))}
                 </div>
@@ -1078,11 +1115,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <div className="w-full max-w-lg mt-2">
               <div className="text-[10px] text-gray-500 mb-0.5">自分のバックログ（満タンで脱落）</div>
               <div className="flex gap-1">
-                {Array.from({ length: MAX_BACKLOG }).map((_, i) => (
+                {Array.from({ length: maxBacklog }).map((_, i) => (
                   <div
                     key={i}
                     className={`h-2 flex-1 rounded-sm ${
-                      i < backlog.length ? (i >= MAX_BACKLOG - 3 ? 'bg-red-500' : 'bg-cyan-500') : 'bg-neutral-800'
+                      i < backlog.length ? (i >= maxBacklog - 3 ? 'bg-red-500' : 'bg-cyan-500') : 'bg-neutral-800'
                     }`}
                   />
                 ))}
@@ -1155,6 +1192,38 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                         className="flex-1 accent-cyan-500"
                       />
                       <StepBtn onClick={() => setCfgAccel((v) => Math.min(1, Math.round((v + 0.01) * 100) / 100))}>＋</StepBtn>
+                    </div>
+                  </div>
+                  <div className="block text-[11px] text-gray-400 mt-3">
+                    自分のHP（積載限界）: <span className="text-cyan-300 font-mono">{cfgHp}</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <StepBtn onClick={() => setCfgHp((v) => Math.max(HP_MIN, v - 1))}>−</StepBtn>
+                      <input
+                        type="range"
+                        min={HP_MIN}
+                        max={HP_MAX}
+                        step={1}
+                        value={cfgHp}
+                        onChange={(e) => setCfgHp(Number(e.target.value))}
+                        className="flex-1 accent-cyan-500"
+                      />
+                      <StepBtn onClick={() => setCfgHp((v) => Math.min(HP_MAX, v + 1))}>＋</StepBtn>
+                    </div>
+                  </div>
+                  <div className="block text-[11px] text-gray-400 mt-3">
+                    敵の数: <span className="text-cyan-300 font-mono">{cfgEnemies}</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <StepBtn onClick={() => setCfgEnemies((v) => Math.max(1, v - 1))}>−</StepBtn>
+                      <input
+                        type="range"
+                        min={1}
+                        max={MAX_DUMMIES}
+                        step={1}
+                        value={cfgEnemies}
+                        onChange={(e) => setCfgEnemies(Number(e.target.value))}
+                        className="flex-1 accent-cyan-500"
+                      />
+                      <StepBtn onClick={() => setCfgEnemies((v) => Math.min(MAX_DUMMIES, v + 1))}>＋</StepBtn>
                     </div>
                   </div>
                 </div>
@@ -1231,7 +1300,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <Stat label="MAX COMBO" value={maxCombo} />
                 <Stat label="K.O." value={playerKOs} />
                 <Stat label="KPM" value={calculateKPM()} />
-                <Stat label="KEYS" value={keysTyped} />
+                <Stat label="正タイプ" value={keysTyped} />
+                <Stat label="ミス" value={missCount} />
                 <Stat label="SEED" value={seed} small />
               </div>
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
@@ -1248,7 +1318,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <Stat label="MAX COMBO" value={maxCombo} />
                 <Stat label="K.O." value={playerKOs} />
                 <Stat label="KPM" value={calculateKPM()} />
-                <Stat label="KEYS" value={keysTyped} />
+                <Stat label="正タイプ" value={keysTyped} />
+                <Stat label="ミス" value={missCount} />
                 <Stat label="SEED" value={seed} small />
               </div>
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
@@ -1257,11 +1328,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         </div>
 
         <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
-          {dummies.slice(10, 20).map((d) => (
+          {dummies.slice(Math.ceil(dummies.length / 2)).map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
               <MiniBoard
                 height={d.height}
-                max={MAX_BACKLOG}
+                max={maxBacklog}
                 isKO={d.isKO}
                 name={d.name}
                 combo={d.combo}
