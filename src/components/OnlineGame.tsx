@@ -52,6 +52,15 @@ const ITEM_EMOJI: Record<ItemType, string> = {
 };
 const RAPID_DURATION = 8000;
 const KEEP_DURATION = 10000;
+const PARRY_DURATION = 8000; // 受け流し（被攻撃を他プレイヤーへ逸らす）の効果時間
+
+// 時間制限つきアイテムの効果時間（カウントダウンゲージ用）。
+const ITEM_DURATION: Partial<Record<ItemType, number>> = {
+  brake: BRAKE_DURATION,
+  rapid: RAPID_DURATION,
+  keep: KEEP_DURATION,
+  parry: PARRY_DURATION,
+};
 
 const TARGET_MODES: { mode: TargetMode; label: string }[] = [
   { mode: 'random', label: 'ランダム' },
@@ -102,9 +111,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [itemFlash, setItemFlash] = useState(false);
   const [targetMode, setTargetMode] = useState<TargetMode>('random');
   const [muted, setMuted] = useState(false);
-  const [rapidActive, setRapidActive] = useState(false);
-  const [keepActive, setKeepActive] = useState(false);
   const [attackProgress, setAttackProgress] = useState(0); // 次の攻撃までのゲージ（ミスで減らない）
+  const [nowTick, setNowTick] = useState(0); // カウントダウン描画用の時刻
   // エフェクト用
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
   const [hitId, setHitId] = useState<string | null>(null); // 自分が攻撃した相手
@@ -133,6 +141,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const brakeUntilRef = useRef(0);
   const rapidUntilRef = useRef(0);
   const keepUntilRef = useRef(0);
+  const parryUntilRef = useRef(0);
   const attackProgressRef = useRef(0);
   const categoryRef = useRef(category);
   useEffect(() => {
@@ -212,7 +221,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     attackProgressRef.current = 0;
     setAttackProgress(0);
     keepUntilRef.current = 0;
-    setKeepActive(false);
+    rapidUntilRef.current = 0;
+    parryUntilRef.current = 0;
     // 新しいゲーム開始時に自分の状態をリセット（再戦対応）。
     writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '' });
   }, [seed, roomId, uid]);
@@ -370,12 +380,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         }
       } else if (item === 'rapid') {
         rapidUntilRef.current = Date.now() + RAPID_DURATION;
-        setRapidActive(true);
-        setTimeout(() => setRapidActive(false), RAPID_DURATION);
       } else if (item === 'keep') {
         keepUntilRef.current = Date.now() + KEEP_DURATION;
-        setKeepActive(true);
-        setTimeout(() => setKeepActive(false), KEEP_DURATION);
+      } else if (item === 'parry') {
+        parryUntilRef.current = Date.now() + PARRY_DURATION;
       }
     },
     [pickTarget, fireBeam, roomId, uid],
@@ -384,7 +392,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const grantItem = useCallback(() => {
     if (heldItemRef.current) applyItem(heldItemRef.current); // 既存を自動発動してスタック
     const rng = itemRngRef.current;
-    const items: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep'];
+    const items: ItemType[] = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'parry'];
     const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
     setHeldItem(pick);
     sfx.item();
@@ -433,12 +441,29 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       const now = Date.now();
       const due = pendingRef.current.filter((e) => e.confirmAt <= now);
       if (due.length === 0) return;
+      updatePending(pendingRef.current.filter((e) => e.confirmAt > now));
+      // 受け流し中は、確定したおじゃまを自分に入れず、別の“プレイヤー”へ逸らす。
+      if (now < parryUntilRef.current) {
+        let deflect = 0;
+        for (const e of due) deflect += e.word ? 2 : e.amount;
+        if (deflect > 0) {
+          const targetId = pickTarget();
+          if (targetId) {
+            sendAttack(roomId, targetId, uid, deflect);
+            fireBeam(targetId);
+            const name = playersRef.current[targetId]?.name || '相手';
+            pushToast(`受け流し！ ${name} へ +${deflect}`, 'item');
+          } else {
+            pushToast(`受け流し！ +${deflect}`, 'item');
+          }
+        }
+        return;
+      }
       const words: Word[] = [];
       for (const e of due) {
         if (e.word) words.push(makeOjamaWordFrom(e.word.display, e.word.reading));
         else for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord());
       }
-      updatePending(pendingRef.current.filter((e) => e.confirmAt > now));
       if (words.length > 0) {
         setBacklog((prev) => {
           const next = [...prev, ...words];
@@ -451,7 +476,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       }
     }, 100);
     return () => clearInterval(id);
-  }, [started, updatePending, topOut]);
+  }, [started, updatePending, topOut, pickTarget, roomId, uid, fireBeam, pushToast]);
+
+  // カウントダウン描画用の時刻ティック。
+  useEffect(() => {
+    if (!started) return;
+    const id = setInterval(() => setNowTick(Date.now()), 150);
+    return () => clearInterval(id);
+  }, [started]);
 
   // 入力処理
   useEffect(() => {
@@ -575,6 +607,16 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const isDanger = backlog.length >= MAX_BACKLOG - 3;
   const totalIncoming = pending.reduce((s, e) => s + e.amount, 0);
   const isHost = uid === hostUid;
+
+  // 発動中の時間制限アイテム（残り時間カウントダウン表示用）。
+  const activeEffects: { type: ItemType; until: number; color: string }[] = (
+    [
+      { type: 'brake', until: brakeUntilRef.current, color: 'bg-green-500' },
+      { type: 'rapid', until: rapidUntilRef.current, color: 'bg-yellow-400' },
+      { type: 'keep', until: keepUntilRef.current, color: 'bg-fuchsia-500' },
+      { type: 'parry', until: parryUntilRef.current, color: 'bg-violet-500' },
+    ] as { type: ItemType; until: number; color: string }[]
+  ).filter((e) => nowTick > 0 && e.until > nowTick);
 
   const toggleMute = () => {
     const next = !muted;
@@ -712,18 +754,28 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </div>
       )}
 
-      {(rapidActive || keepActive) && (
-        <div className="fixed top-[7.5rem] left-1/2 -translate-x-1/2 z-40 flex gap-2 pointer-events-none">
-          {rapidActive && (
-            <div className="bg-yellow-500/90 text-black text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
-              <Zap className="w-4 h-4" /> 連射中！
-            </div>
-          )}
-          {keepActive && (
-            <div className="bg-fuchsia-500/90 text-white text-xs font-black px-3 py-1 rounded-full flex items-center gap-1 animate-pulse">
-              <Lock className="w-4 h-4" /> 連鎖キープ中！
-            </div>
-          )}
+      {/* 発動中アイテムの残り時間カウントダウン（大きく目立つ位置に） */}
+      {activeEffects.length > 0 && (
+        <div className="fixed top-[7rem] left-1/2 -translate-x-1/2 z-40 flex flex-col items-center gap-1.5 w-64 pointer-events-none">
+          {activeEffects.map((e) => {
+            const dur = ITEM_DURATION[e.type] ?? 1;
+            const remain = Math.max(0, e.until - nowTick);
+            const frac = Math.max(0, Math.min(1, remain / dur));
+            return (
+              <div key={e.type} className="w-full bg-neutral-900/95 border border-white/15 rounded-lg px-3 py-1.5 flex items-center gap-2 shadow-xl">
+                <span className="text-2xl leading-none">{ITEM_EMOJI[e.type]}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex justify-between items-baseline mb-0.5">
+                    <span className="text-xs font-bold text-gray-100 whitespace-nowrap">{ITEM_META[e.type].name}</span>
+                    <span className="text-sm font-mono font-black text-white tabular-nums">{(remain / 1000).toFixed(1)}<span className="text-[10px] text-gray-400">s</span></span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-neutral-700 overflow-hidden">
+                    <div className={`h-full ${e.color} transition-[width] duration-150`} style={{ width: `${frac * 100}%` }} />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

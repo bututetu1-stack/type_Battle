@@ -23,7 +23,7 @@ export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 
           s.rt ? (
             <ruby key={i} className="text-3xl md:text-4xl font-bold tracking-wide">
               {s.text}
-              <rt className="text-[0.55rem] text-gray-400 font-normal">{s.rt}</rt>
+              <rt className="text-sm md:text-base text-cyan-200/80 font-normal tracking-tight">{s.rt}</rt>
             </ruby>
           ) : (
             <span key={i} className="text-3xl md:text-4xl font-bold tracking-wide">

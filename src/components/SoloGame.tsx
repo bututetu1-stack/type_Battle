@@ -866,21 +866,25 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           )}
 
           <div className="flex-1 flex flex-col items-center justify-end pb-8 relative z-10">
-            {/* 発動中アイテムの残り時間カウントダウン */}
+            {/* 発動中アイテムの残り時間カウントダウン（大きく目立つ位置に） */}
             {activeEffects.length > 0 && (
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-1">
+              <div className="absolute top-1 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-1.5 w-64">
                 {activeEffects.map((e) => {
                   const dur = ITEM_DURATION[e.type] ?? 1;
                   const remain = Math.max(0, e.until - nowTick);
                   const frac = Math.max(0, Math.min(1, remain / dur));
                   return (
-                    <div key={e.type} className="bg-neutral-900/90 border border-white/10 rounded-full pl-2 pr-3 py-0.5 flex items-center gap-1.5 shadow-lg">
-                      <span className="text-sm">{ITEM_EMOJI[e.type]}</span>
-                      <span className="text-[10px] font-bold text-gray-200 whitespace-nowrap">{ITEM_META[e.type].name}</span>
-                      <div className="w-12 h-1.5 rounded-full bg-neutral-700 overflow-hidden">
-                        <div className={`h-full ${e.color} transition-[width] duration-150`} style={{ width: `${frac * 100}%` }} />
+                    <div key={e.type} className="w-full bg-neutral-900/95 border border-white/15 rounded-lg px-3 py-1.5 flex items-center gap-2 shadow-xl">
+                      <span className="text-2xl leading-none">{ITEM_EMOJI[e.type]}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-baseline mb-0.5">
+                          <span className="text-xs font-bold text-gray-100 whitespace-nowrap">{ITEM_META[e.type].name}</span>
+                          <span className="text-sm font-mono font-black text-white tabular-nums">{(remain / 1000).toFixed(1)}<span className="text-[10px] text-gray-400">s</span></span>
+                        </div>
+                        <div className="w-full h-2.5 rounded-full bg-neutral-700 overflow-hidden">
+                          <div className={`h-full ${e.color} transition-[width] duration-150`} style={{ width: `${frac * 100}%` }} />
+                        </div>
                       </div>
-                      <span className="text-[9px] font-mono text-gray-400 w-6 text-right">{(remain / 1000).toFixed(1)}</span>
                     </div>
                   );
                 })}
@@ -1038,19 +1042,23 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                       <StepBtn onClick={() => setCfgMin((v) => Math.min(3000, v + 100))}>＋0.1</StepBtn>
                     </div>
                   </div>
-                  <label className="block text-[11px] text-gray-400">
+                  <div className="block text-[11px] text-gray-400">
                     加速の強さ: <span className="text-cyan-300 font-mono">×{cfgAccel.toFixed(2)}</span>
                     <span className="text-gray-600"> （小さいほど速く加速 / 1.00で加速なし）</span>
-                    <input
-                      type="range"
-                      min={0.9}
-                      max={1.0}
-                      step={0.01}
-                      value={cfgAccel}
-                      onChange={(e) => setCfgAccel(Number(e.target.value))}
-                      className="w-full accent-cyan-500"
-                    />
-                  </label>
+                    <div className="flex items-center gap-2 mt-1">
+                      <StepBtn onClick={() => setCfgAccel((v) => Math.max(0.9, Math.round((v - 0.01) * 100) / 100))}>−</StepBtn>
+                      <input
+                        type="range"
+                        min={0.9}
+                        max={1}
+                        step={0.01}
+                        value={cfgAccel}
+                        onChange={(e) => setCfgAccel(Number(e.target.value))}
+                        className="flex-1 accent-cyan-500"
+                      />
+                      <StepBtn onClick={() => setCfgAccel((v) => Math.min(1, Math.round((v + 0.01) * 100) / 100))}>＋</StepBtn>
+                    </div>
+                  </div>
                 </div>
 
               {/* 出題テーマ選択 */}
