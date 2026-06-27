@@ -4,7 +4,7 @@ import {
   Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine, Settings,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
-import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, THEMES, toggleThemeSelection } from '../lib/words';
+import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, THEMES, toggleThemeSelection } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
 import { ITEM_CAT, ITEM_KIND, ITEM_RARITY, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode } from '../lib/items';
@@ -328,24 +328,18 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const attackThresholdRef = useRef(ATTACK_THRESHOLD);
   const gaugeDownObtainedRef = useRef(false); // ゲージ短縮は一人一個まで
   const attackProgressRef = useRef(0);
-  const recentRef = useRef<string[]>([]); // 直近に出した単語（連続/近接重複の回避）
+  const bagRef = useRef(newWordBag()); // 出題バッグ（全語を1巡するまで重複させない）
   const themeRef = useRef(theme);
   useEffect(() => { themeRef.current = theme; }, [theme]);
   const targetModeRef = useRef(targetMode);
   useEffect(() => { targetModeRef.current = targetMode; }, [targetMode]);
   const lastAttackerRef = useRef<number | null>(null);
 
-  // 直近の単語履歴に追加（末尾8件まで保持）。
-  const pushRecent = useCallback((display: string) => {
-    recentRef.current = [...recentRef.current, display].slice(-20);
-  }, []);
-  // 重複を避けつつ次の単語を生成して履歴に積む。
+  // 出題バッグから次の単語を生成（全語を1巡するまで重複しない）。
   const nextWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    const w = generateWord(rng, themeRef.current, recentRef.current, false, treasureRateRef.current, treasureBoostRef.current);
-    pushRecent(w.display);
-    return w;
-  }, [pushRecent]);
+    return generateWord(rng, themeRef.current, bagRef.current, false, treasureRateRef.current, treasureBoostRef.current);
+  }, []);
   const pendingRef = useRef<Telegraph[]>([]);
   const updatePending = useCallback((next: Telegraph[]) => {
     pendingRef.current = next;
@@ -731,7 +725,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     lastAttackerRef.current = null;
     updatePending([]);
     setSeed(newSeed);
-    recentRef.current = [];
+    bagRef.current = newWordBag(); // 出題バッグを新しい1巡でリセット
     treasureBoostRef.current = 0;
     hpUpCountRef.current = 0;
     setBacklog([nextWord(), nextWord(), nextWord()]);

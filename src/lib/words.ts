@@ -1060,24 +1060,39 @@ export function poolForThemes(theme: string = 'all'): WordEntry[] {
   return merged.length ? merged : ALL_POOL;
 }
 
+// 出題バッグ（シャッフル袋）。プールの全語を1巡するまで同じ語を出さないための状態。
+// items = まだ出していない語のインデックス列（末尾から取り出す）。last = 直近に出したindex。
+export interface WordBag { items: number[]; last: number }
+export const newWordBag = (): WordBag => ({ items: [], last: -1 });
+
 export const generateWord = (
   rng: RNG,
   theme: string = 'all',
-  recent: string[] = [],
+  bag: WordBag = newWordBag(),
   localType = false,
   treasureProb = 0.2,
   treasureBonus = 0, // 「お宝出現率アップ」アイテムなどの恒久ボーナス（加算）
 ): Word => {
   const pool = poolForThemes(theme);
-  let entry = pool[Math.floor(rng() * pool.length)];
-  // 直近に出た単語と被ったら引き直す（プールが十分大きいときのみ）。
-  // プールサイズに応じて試行回数を増やし、近接重複をしっかり避ける。
-  if (recent.length > 0 && pool.length > recent.length + 1) {
-    const tries = Math.min(40, pool.length);
-    for (let i = 0; i < tries && recent.includes(entry.display); i++) {
-      entry = pool[Math.floor(rng() * pool.length)];
+  // バッグが空なら、プール全体をシャッフルして詰め直す（=新しい1巡を開始）。
+  if (bag.items.length === 0) {
+    for (let i = 0; i < pool.length; i++) bag.items.push(i);
+    // Fisher-Yates（rng はシード列。オンラインでもクライアント間で同じ並びになる）。
+    for (let i = bag.items.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const t = bag.items[i]; bag.items[i] = bag.items[j]; bag.items[j] = t;
+    }
+    // 巡の境目で「前巡の最後」と「次に出す語」が連続しないよう、必要なら入れ替える。
+    if (pool.length > 1 && bag.items[bag.items.length - 1] === bag.last) {
+      const t = bag.items[bag.items.length - 1];
+      bag.items[bag.items.length - 1] = bag.items[0];
+      bag.items[0] = t;
     }
   }
+  let idx = bag.items.pop();
+  if (idx === undefined || idx >= pool.length) idx = (idx ?? 0) % pool.length; // プール変化時の保険
+  bag.last = idx;
+  const entry = pool[idx];
   // 種別用の乱数は常にシード列を1つ消費する（エントリ列の同期を崩さない）。
   const seededRand = rng();
   const rand = localType ? Math.random() : seededRand;

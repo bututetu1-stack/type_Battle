@@ -4,7 +4,7 @@ import {
   Target, RotateCcw, LogOut, Volume2, VolumeX, Bomb, Lock, Settings,
 } from 'lucide-react';
 import { mulberry32, type RNG } from '../lib/rng';
-import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord } from '../lib/words';
+import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import {
   serverNow, writePlayerSummary, finishGame, resetRoom, sendAttack, subscribeAttacks,
@@ -258,7 +258,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const reflectUntilRef = useRef(0); // リフレクト（被攻撃を送り主へ跳ね返す）
   const overchargeUntilRef = useRef(0); // オーバーチャージ（ゲージ倍速）
   const siphonUntilRef = useRef(0); // サイフォン（攻撃命中で自分のHP回復）
-  const recentRef = useRef<string[]>([]); // 直近に出した単語（近接重複の回避・全員同一）
+  const bagRef = useRef(newWordBag()); // 出題バッグ（全語を1巡するまで重複させない・シード共有で全員同一）
   const treasureBoostRef = useRef(0); // 幸運(luck)によるお宝出現率の永続上昇分
   const hpUpCountRef = useRef(0); // HPアップ(maxhp)の取得回数（上限 MAX_HP_UP）
   const attackProgressRef = useRef(0);
@@ -287,9 +287,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // 引き直しの rng 消費数も一致＝同期は崩れない。種別はローカル乱数（localType）。
   const genWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    const w = generateWord(rng, categoryRef.current, recentRef.current, true, itemRateRef.current / 100, treasureBoostRef.current);
-    recentRef.current = [...recentRef.current, w.display].slice(-20);
-    return w;
+    return generateWord(rng, categoryRef.current, bagRef.current, true, itemRateRef.current / 100, treasureBoostRef.current);
   }, []);
 
   const pushToast = useCallback((text: string, kind: 'ko' | 'in' | 'item') => {
@@ -364,7 +362,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     wordRngRef.current = rng;
     itemRngRef.current = mulberry32((seed ^ 0x9e3779b9) >>> 0);
     // 種別はローカル乱数で（お宝＝アイテムが各プレイヤーに確実に出るように）。出現率はホスト設定。
-    recentRef.current = [];
+    bagRef.current = newWordBag(); // 出題バッグを新しい1巡でリセット
     treasureBoostRef.current = 0;
     hpUpCountRef.current = 0;
     setHpBonus(0);
