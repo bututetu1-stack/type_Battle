@@ -33,6 +33,8 @@ export interface RoomMeta {
   attackGauge?: number; // 何クリアで攻撃を発射するか（既定5）
   attackCap?: number; // 1回の攻撃量の上限（既定5）
   comboStep?: number; // 何連鎖ごとに攻撃量+1（既定5）
+  badgeCap?: number; // バッジ補正の上限枚数（既定4）
+  badgeRate?: number; // バッジ1枚あたりの攻撃上昇率%（既定25）
 }
 
 export interface RoomPlayer {
@@ -130,6 +132,8 @@ export async function createRoom(uid: string, name: string): Promise<string> {
     attackGauge: 5,
     attackCap: 5,
     comboStep: 5,
+    badgeCap: 4,
+    badgeRate: 25,
   };
   await set(ref(db, `rooms/${roomId}/meta`), meta);
   await set(ref(db, `rooms/${roomId}/players/${uid}`), newPlayer(name, true));
@@ -212,6 +216,12 @@ export async function setRoomAttackCap(roomId: string, v: number): Promise<void>
 }
 export async function setRoomComboStep(roomId: string, v: number): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { comboStep: Math.min(15, Math.max(2, Math.round(v))) });
+}
+export async function setRoomBadgeCap(roomId: string, v: number): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { badgeCap: Math.min(10, Math.max(0, Math.round(v))) });
+}
+export async function setRoomBadgeRate(roomId: string, v: number): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { badgeRate: Math.min(100, Math.max(0, Math.round(v))) });
 }
 
 // --- CPU（ホストがシミュレートする擬似プレイヤー）---

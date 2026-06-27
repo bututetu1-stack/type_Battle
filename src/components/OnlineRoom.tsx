@@ -13,20 +13,30 @@ import {
   setRoomAttackGauge,
   setRoomAttackCap,
   setRoomComboStep,
+  setRoomBadgeCap,
+  setRoomBadgeRate,
   addCpuPlayer,
   removeCpuPlayer,
   removeAllCpus,
   type RoomSnapshot,
 } from '../lib/room';
 import { THEMES } from '../lib/words';
-import { loadItemPrefs, saveItemPrefs, CAT_META, USE_MODES, type ItemPrefs } from '../lib/items';
-import OnlineGame from './OnlineGame';
+import { loadItemPrefs, saveItemPrefs, CAT_META, USE_MODES, ITEM_CAT, type ItemPrefs } from '../lib/items';
+import type { ItemType } from '../lib/types';
+import OnlineGame, { ITEM_META, ITEM_EMOJI } from './OnlineGame';
 
 interface OnlineRoomProps {
   roomId: string;
   uid: string;
   onLeave: () => void;
 }
+
+// 統合・削除してオンラインに出ないアイテム（一覧から除外）。
+const HIDDEN_ITEMS = new Set<ItemType>(['shield', 'clear', 'heavy', 'mirror']);
+// ボス戦専用アイテム（一覧で印を付ける）。
+const BOSS_ONLY = new Set<ItemType>(['meteor', 'quake', 'regen', 'rally', 'focus']);
+// オンライン専用アイテム（一覧で印を付ける）。
+const ONLINE_ONLY = new Set<ItemType>(['reflect', 'overcharge', 'thunder', 'jammer', 'siphon']);
 
 // ルーム購読 + 待機画面。status が playing/finished になったら OnlineGame を描画。
 export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
@@ -37,6 +47,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
   const updatePrefs = (p: ItemPrefs) => { setItemPrefs(p); saveItemPrefs(p); };
   const [starting, setStarting] = useState(false);
   const [cpuStr, setCpuStr] = useState(5); // 追加するCPUの強さ(0〜10)
+  const [showItems, setShowItems] = useState(false); // アイテム効果一覧の開閉
 
   useEffect(() => {
     setupPresence(roomId, uid).catch(() => {});
@@ -104,6 +115,8 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         attackGauge={typeof meta.attackGauge === 'number' ? meta.attackGauge : 5}
         attackCap={typeof meta.attackCap === 'number' ? meta.attackCap : 5}
         comboStep={typeof meta.comboStep === 'number' ? meta.comboStep : 5}
+        badgeCap={typeof meta.badgeCap === 'number' ? meta.badgeCap : 4}
+        badgeRate={typeof meta.badgeRate === 'number' ? meta.badgeRate : 25}
         itemPrefs={itemPrefs}
         players={players}
         onExit={handleLeave}
@@ -260,6 +273,8 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
             { key: 'gauge', label: 'アタックゲージ', val: typeof meta.attackGauge === 'number' ? meta.attackGauge : 5, min: 2, max: 10, set: setRoomAttackGauge },
             { key: 'cap', label: 'アタック上限', val: typeof meta.attackCap === 'number' ? meta.attackCap : 5, min: 2, max: 12, set: setRoomAttackCap },
             { key: 'step', label: '増加の連鎖数', val: typeof meta.comboStep === 'number' ? meta.comboStep : 5, min: 2, max: 15, set: setRoomComboStep },
+            { key: 'badgeCap', label: 'バッジ上限', val: typeof meta.badgeCap === 'number' ? meta.badgeCap : 4, min: 0, max: 10, set: setRoomBadgeCap },
+            { key: 'badgeRate', label: 'バッジ上昇率%', val: typeof meta.badgeRate === 'number' ? meta.badgeRate : 25, min: 0, max: 100, set: setRoomBadgeRate },
           ] as const).map((s) => (
             <div key={s.key} className="bg-neutral-900/60 border border-white/10 rounded-lg p-2">
               <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-between">
@@ -385,6 +400,46 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
               <p className="text-[9px] text-gray-600 leading-tight">
                 新着=[Enter]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 保持=1つ保持し被ったら新しい方を発動
               </p>
+            </div>
+          )}
+        </div>
+
+        {/* アイテム効果一覧（オンラインの効果。ボス専用・オンライン専用も表示） */}
+        <div className="mb-6 bg-neutral-900/60 border border-white/10 rounded-xl">
+          <button
+            onClick={() => setShowItems((v) => !v)}
+            className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-bold text-cyan-200"
+          >
+            <span>📖 アイテム効果一覧（オンライン）</span>
+            <span className="text-gray-500">{showItems ? '▲ 閉じる' : '▼ 開く'}</span>
+          </button>
+          {showItems && (
+            <div className="px-3 pb-3 flex flex-col gap-3 max-h-72 overflow-y-auto">
+              {CAT_META.map((c) => {
+                const list = (Object.keys(ITEM_CAT) as ItemType[]).filter(
+                  (it) => ITEM_CAT[it] === c.key && !HIDDEN_ITEMS.has(it),
+                );
+                if (list.length === 0) return null;
+                return (
+                  <div key={c.key}>
+                    <div className={`text-[11px] font-bold mb-1 ${c.color}`}>{c.label}</div>
+                    <div className="flex flex-col gap-1">
+                      {list.map((it) => (
+                        <div key={it} className="flex items-start gap-2 text-[11px]">
+                          <span className="text-base leading-none shrink-0">{ITEM_EMOJI[it]}</span>
+                          <div>
+                            <span className="font-bold text-gray-200">{ITEM_META[it].name}</span>
+                            {BOSS_ONLY.has(it) && <span className="ml-1 text-[9px] text-yellow-300">[ボス]</span>}
+                            {ONLINE_ONLY.has(it) && <span className="ml-1 text-[9px] text-fuchsia-300">[ONLINE]</span>}
+                            <span className="text-gray-500"> — {ITEM_META[it].desc}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              <p className="text-[9px] text-gray-600">※ ソロとオンラインで効果が異なるアイテムがあります（上記はオンラインの効果）。</p>
             </div>
           )}
         </div>

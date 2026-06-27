@@ -23,12 +23,14 @@ export const ITEM_CAT: Record<ItemType, ItemCat> = {
   // 攻撃（相手におじゃまを送る系）
   longbomb: 'attack', snipe: 'attack', burst: 'attack', heavy: 'attack', flood: 'attack', drain: 'attack',
   mirror: 'attack', meteor: 'attack', quake: 'attack', rally: 'attack', focus: 'attack',
+  thunder: 'attack', jammer: 'attack',
   // 防御（即時に自分を守る/利する系）
   shield: 'defense', clear: 'defense', purge: 'defense', guard: 'defense', barrier: 'defense', shrink: 'defense',
   regen: 'defense',
   // 効果（一定時間続く系＋永続で効果が続く系＋お宝化）
   brake: 'timed', rapid: 'timed', keep: 'timed', parry: 'timed', totem: 'timed', freeze: 'timed',
   gaugedown: 'timed', luck: 'timed', maxhp: 'timed', goldify: 'timed',
+  reflect: 'timed', overcharge: 'timed', siphon: 'timed',
 };
 
 export const CAT_META: { key: ItemCat; label: string; color: string }[] = [

@@ -33,7 +33,7 @@ const MAX_HP_UP = 3; // HPアップ(maxhp)の取得上限（永続）
 // ストックされている単語を変化させる系アイテム（発動を分かりやすく強調する）。
 const BOARD_CHANGE_ITEMS = new Set<ItemType>(['purge', 'shrink', 'goldify', 'clear', 'drain']);
 
-const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
+export const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   shield: { name: 'シールド', desc: '次の自動供給を1回無効化' },
   clear: { name: 'おじゃま一掃', desc: 'バックログのおじゃまを消す' },
   brake: { name: 'ブレーキ', desc: '自動供給を5秒間ストップ' },
@@ -62,8 +62,13 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   goldify: { name: 'ゴールド化', desc: '溜まっているワードを全てお宝に変える' },
   luck: { name: '幸運', desc: 'お宝の出現率が上がる（永続）' },
   maxhp: { name: 'HPアップ', desc: 'HP(積載上限)+1（永続・最大+3）' },
+  reflect: { name: 'リフレクト', desc: '8秒間 受けた攻撃を送り主へ跳ね返す' },
+  overcharge: { name: 'オーバーチャージ', desc: '8秒間 アタックゲージが倍速で溜まる' },
+  thunder: { name: 'サンダーボルト', desc: '首位（最多連鎖）の相手へ落雷+5' },
+  jammer: { name: 'ジャマー', desc: '全相手へ長文おじゃまを送りつける' },
+  siphon: { name: 'サイフォン', desc: '8秒間 攻撃が当たるたび自分のHPが回復' },
 };
-const ITEM_EMOJI: Record<ItemType, string> = {
+export const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡',
   clear: '🌀',
   brake: '⏸',
@@ -92,20 +97,30 @@ const ITEM_EMOJI: Record<ItemType, string> = {
   goldify: '✨',
   luck: '🍀',
   maxhp: '❤️',
+  reflect: '🪞',
+  overcharge: '🔋',
+  thunder: '⚡',
+  jammer: '📡',
+  siphon: '🧛',
 };
 // アイテムの大分類。def=防御/逆転（不利なほど出やすい）, atk=攻撃（有利なほど出やすい）, util=その他。
 const ITEM_KIND: Record<ItemType, 'def' | 'atk' | 'util'> = {
   shield: 'def', clear: 'def', brake: 'def', keep: 'util', shrink: 'def', parry: 'def',
   gaugedown: 'def', totem: 'def', barrier: 'def', freeze: 'def', purge: 'def', guard: 'def',
   regen: 'def', mirror: 'def', goldify: 'def', luck: 'util', maxhp: 'util',
+  reflect: 'def', overcharge: 'util', siphon: 'def',
   longbomb: 'atk', rapid: 'atk', meteor: 'atk', quake: 'atk', rally: 'atk', focus: 'atk',
   snipe: 'atk', burst: 'atk', heavy: 'atk', flood: 'atk', drain: 'atk',
+  thunder: 'atk', jammer: 'atk',
 };
 
 const RAPID_DURATION = 8000;
 const KEEP_DURATION = 10000;
 const PARRY_DURATION = 8000; // 受け流し（被攻撃を他プレイヤーへ逸らす）の効果時間
 const FREEZE_DURATION = 5000; // フリーズ（着弾予告と自動供給を停止）の効果時間
+const REFLECT_DURATION = 8000; // リフレクト（被攻撃を送り主へ跳ね返す）
+const OVERCHARGE_DURATION = 8000; // オーバーチャージ（ゲージ倍速）
+const SIPHON_DURATION = 8000; // サイフォン（攻撃命中で自分のHP回復）
 
 // 時間制限つきアイテムの効果時間（カウントダウンゲージ用）。
 const ITEM_DURATION: Partial<Record<ItemType, number>> = {
@@ -114,6 +129,9 @@ const ITEM_DURATION: Partial<Record<ItemType, number>> = {
   keep: KEEP_DURATION,
   parry: PARRY_DURATION,
   freeze: FREEZE_DURATION,
+  reflect: REFLECT_DURATION,
+  overcharge: OVERCHARGE_DURATION,
+  siphon: SIPHON_DURATION,
 };
 
 const TARGET_MODES: { mode: TargetMode; label: string }[] = [
@@ -149,12 +167,14 @@ interface OnlineGameProps {
   attackGauge?: number;
   attackCap?: number;
   comboStep?: number;
+  badgeCap?: number;
+  badgeRate?: number;
   itemPrefs: ItemPrefs;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, itemPrefs, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, badgeCap, badgeRate, itemPrefs, players, onExit }: OnlineGameProps) {
   // ボスモード関連の派生フラグ。
   const bossMode = mode === 'boss';
   const isBoss = bossMode && uid === bossUid;
@@ -164,6 +184,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const atkGauge = typeof attackGauge === 'number' ? attackGauge : 5; // 何クリアで発射
   const atkCap = typeof attackCap === 'number' ? attackCap : ATTACK_CAP; // 攻撃量の上限
   const cStep = typeof comboStep === 'number' ? comboStep : 5; // 何連鎖ごとに+1
+  const bCap = typeof badgeCap === 'number' ? badgeCap : 4; // バッジ補正の上限枚数
+  const bRate = typeof badgeRate === 'number' ? badgeRate : 25; // バッジ1枚あたり%
   const [hpBonus, setHpBonus] = useState(0); // HPアップ(maxhp)による積載上限の増分（永続）
   const selfMax = baseSelfMax + hpBonus; // 自分の上限
   const [started, setStarted] = useState(false);
@@ -236,6 +258,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const barrierRef = useRef(false); // バリア（次の被弾を1回防ぐ）
   const guardCountRef = useRef(0); // ガード（自動供給を複数回防ぐ）
   const focusNextRef = useRef(false); // 会心: 次のボスへの攻撃を倍化
+  const reflectUntilRef = useRef(0); // リフレクト（被攻撃を送り主へ跳ね返す）
+  const overchargeUntilRef = useRef(0); // オーバーチャージ（ゲージ倍速）
+  const siphonUntilRef = useRef(0); // サイフォン（攻撃命中で自分のHP回復）
   const recentRef = useRef<string[]>([]); // 直近に出した単語（近接重複の回避・全員同一）
   const treasureBoostRef = useRef(0); // 幸運(luck)によるお宝出現率の永続上昇分
   const hpUpCountRef = useRef(0); // HPアップ(maxhp)の取得回数（上限 MAX_HP_UP）
@@ -355,6 +380,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     rapidUntilRef.current = 0;
     parryUntilRef.current = 0;
     freezeUntilRef.current = 0;
+    reflectUntilRef.current = 0;
+    overchargeUntilRef.current = 0;
+    siphonUntilRef.current = 0;
     barrierRef.current = false;
     guardCountRef.current = 0;
     endTimeRef.current = 0;
@@ -511,6 +539,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       updatePending(sorted.filter((e) => e.amount > 0 || e.word));
       sfx.attack();
       if (remaining > 0) {
+        // サイフォン中は、攻撃が出る（命中する）たびに自分のバックログを1回復。
+        if (Date.now() < siphonUntilRef.current) {
+          setBacklog((prev) => (prev.length > 1 ? prev.slice(0, -1) : prev));
+        }
         const targetId = pickTarget();
         if (targetId) {
           const targetName = playersRef.current[targetId]?.name || '相手';
@@ -535,7 +567,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       let amount = 1 + Math.floor(comboVal / cStep);
       if (stateRef.current.backlog.length / selfMax >= PINCH_RATIO) amount = Math.round(amount * PINCH_MULT);
       const badges = Object.values(playersRef.current).filter((p) => p.koBy === uid).length;
-      amount = Math.round(amount * (1 + 0.25 * Math.min(badges, 4)));
+      amount = Math.round(amount * (1 + (bRate / 100) * Math.min(badges, bCap)));
       amount = Math.min(amount, atkCap);
       // 会心: 次のボスへの攻撃を倍化（上限を少し緩める）。
       if (focusNextRef.current) {
@@ -544,7 +576,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       }
       sendAmount(amount);
     },
-    [uid, sendAmount, selfMax, cStep, atkCap],
+    [uid, sendAmount, selfMax, cStep, atkCap, bCap, bRate],
   );
 
   // アイテム効果適用（所持状態のクリアは行わない）。
@@ -701,6 +733,42 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           sfx.item();
         }
       }
+      // --- オンライン専用 ---
+      else if (item === 'reflect') {
+        reflectUntilRef.current = Date.now() + REFLECT_DURATION;
+        sfx.use();
+      } else if (item === 'overcharge') {
+        overchargeUntilRef.current = Date.now() + OVERCHARGE_DURATION;
+        sfx.use();
+      } else if (item === 'siphon') {
+        siphonUntilRef.current = Date.now() + SIPHON_DURATION;
+        sfx.use();
+      } else if (item === 'thunder') {
+        // 首位（最も連鎖が高い）の生存相手へ落雷の大ダメージ。
+        const cands = Object.entries(playersRef.current).filter(([id, p]) => id !== uid && isLive(p) && (!bossMode || isBoss || id === bossUid));
+        const t = cands.length ? cands.reduce((b, c) => ((c[1].combo || 0) > (b[1].combo || 0) ? c : b))[0] : null;
+        if (t) {
+          sendAttack(roomId, t, uid, 5);
+          fireBeam(t);
+          setAttackFlash({ amount: 5, name: `${playersRef.current[t]?.name || '相手'} へ落雷⚡` });
+          setTimeout(() => setAttackFlash(null), 800);
+          sfx.attack();
+        }
+      } else if (item === 'jammer') {
+        // 全相手へ長文おじゃまを送りつけて手を止める。
+        const opponents = bossMode
+          ? isBoss
+            ? Object.keys(playersRef.current).filter((id) => id !== bossUid && isLive(playersRef.current[id]))
+            : isLive(playersRef.current[bossUid]) ? [bossUid] : []
+          : Object.entries(playersRef.current).filter(([id, p]) => id !== uid && isLive(p)).map(([id]) => id);
+        for (const id of opponents) {
+          sendAttack(roomId, id, uid, 1, randomLongWord());
+          fireBeam(id);
+        }
+        setAttackFlash({ amount: opponents.length, name: '全体へジャマー📡' });
+        setTimeout(() => setAttackFlash(null), 800);
+        sfx.attack();
+      }
     },
     [pickTarget, fireBeam, roomId, uid, bossUid, bossMode, isBoss, sendAmount],
   );
@@ -708,14 +776,16 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const grantItem = useCallback(() => {
     const rng = itemRngRef.current;
     let items: ItemType[];
+    // 統合・削除した shield/clear/heavy/mirror はドロップから除外。
+    // オンライン専用 reflect/overcharge/thunder/jammer/siphon を追加。
     if (bossMode && isBoss) {
       // ボス専用＋自衛系＋全体攻撃。
-      items = ['meteor', 'quake', 'regen', 'brake', 'keep', 'clear', 'barrier', 'freeze', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'mirror', 'goldify', 'luck', 'maxhp'];
+      items = ['meteor', 'quake', 'regen', 'brake', 'keep', 'barrier', 'freeze', 'guard', 'snipe', 'burst', 'flood', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon'];
     } else if (bossMode) {
       // 挑戦者: 攻撃協力系を多めに＋追加アイテム。
-      items = ['shield', 'clear', 'brake', 'rapid', 'keep', 'parry', 'rally', 'focus', 'longbomb', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror', 'goldify', 'luck', 'maxhp'];
+      items = ['brake', 'rapid', 'keep', 'parry', 'rally', 'focus', 'longbomb', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon'];
     } else {
-      items = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'parry', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror', 'goldify', 'luck', 'maxhp'];
+      items = ['brake', 'longbomb', 'rapid', 'keep', 'parry', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon'];
     }
     // HPアップは上限に達したら抽選から除外する。
     if (hpUpCountRef.current >= MAX_HP_UP) items = items.filter((it) => it !== 'maxhp');
@@ -811,6 +881,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       if (Date.now() < freezeUntilRef.current) {
         const fromName = playersRef.current[ev.from]?.name || '相手';
         pushToast(`フリーズで ${fromName} の攻撃を無効化`, 'item');
+        return;
+      }
+      // リフレクト中は、来た攻撃を送り主へそのまま跳ね返す。
+      if (Date.now() < reflectUntilRef.current && ev.from && isLive(playersRef.current[ev.from] ?? ({} as RoomPlayer))) {
+        sendAttack(roomId, ev.from, uid, ev.amount, ev.word);
+        fireBeam(ev.from);
+        pushToast(`リフレクト！ ${playersRef.current[ev.from]?.name || '相手'} へ跳ね返し`, 'item');
         return;
       }
       if (ev.from) {
@@ -932,8 +1009,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         // 1単語クリアごとに、来ている着弾予告を1つ相殺（タイピング＝防御）。
         offsetIncoming(1);
         // ゲージはクリア数で進む（ミスでは減らない）。5クリアごとに発射。
-        attackProgressRef.current += 1;
-        if (attackProgressRef.current >= atkGauge) {
+        attackProgressRef.current += Date.now() < overchargeUntilRef.current ? 2 : 1; // オーバーチャージ中は倍速
+        while (attackProgressRef.current >= atkGauge) {
           attackProgressRef.current -= atkGauge;
           launchAttack(newCombo);
         }
@@ -1164,6 +1241,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       { type: 'keep', until: keepUntilRef.current, color: 'bg-fuchsia-500' },
       { type: 'parry', until: parryUntilRef.current, color: 'bg-violet-500' },
       { type: 'freeze', until: freezeUntilRef.current, color: 'bg-sky-400' },
+      { type: 'reflect', until: reflectUntilRef.current, color: 'bg-pink-400' },
+      { type: 'overcharge', until: overchargeUntilRef.current, color: 'bg-amber-400' },
+      { type: 'siphon', until: siphonUntilRef.current, color: 'bg-rose-500' },
     ] as { type: ItemType; until: number; color: string }[]
   ).filter((e) => nowTick > 0 && e.until > nowTick);
 
@@ -1286,12 +1366,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         ))}
       </div>
 
-      {/* 自分のアイテム発動演出 */}
+      {/* 自分のアイテム発動演出（名前＋ざっくり効果説明） */}
       {useFlash && (
-        <div className="fixed top-[8.5rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in zoom-in duration-200">
+        <div className="fixed top-[8.5rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in zoom-in duration-200 flex flex-col items-center gap-1">
           <div className="bg-yellow-500/95 text-black font-black px-4 py-1.5 rounded-full flex items-center gap-2 shadow-lg">
             <span className="text-lg">{ITEM_EMOJI[useFlash]}</span> {ITEM_META[useFlash].name} 発動！
           </div>
+          <div className="bg-black/80 text-gray-100 text-xs px-3 py-1 rounded-full shadow">{ITEM_META[useFlash].desc}</div>
         </div>
       )}
 

@@ -76,6 +76,12 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   goldify: { name: 'ゴールド化', icon: '✨', desc: '溜まっているワードを全てお宝に変える' },
   luck: { name: '幸運', icon: '🍀', desc: 'お宝の出現率が上がる（永続）' },
   maxhp: { name: 'HPアップ', icon: '❤️', desc: 'HP(積載上限)+1（永続・最大+3）' },
+  // オンライン専用（ソロには出現しない）
+  reflect: { name: 'リフレクト', icon: '🪞', desc: '一定時間 受けた攻撃を送り主へ跳ね返す' },
+  overcharge: { name: 'オーバーチャージ', icon: '🔋', desc: '一定時間 アタックゲージが倍速で溜まる' },
+  thunder: { name: 'サンダーボルト', icon: '⚡', desc: '首位の相手へ落雷の大ダメージ' },
+  jammer: { name: 'ジャマー', icon: '📡', desc: '全相手へ長文おじゃまを送りつける' },
+  siphon: { name: 'サイフォン', icon: '🧛', desc: '一定時間 攻撃が当たるたび自分のHPが回復' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡', clear: '🌀', brake: '⏸', longbomb: '📨', rapid: '⚡', keep: '🔒',
@@ -84,11 +90,13 @@ const ITEM_EMOJI: Record<ItemType, string> = {
   barrier: '🛡️', freeze: '🧊', purge: '🧹', guard: '🧱',
   snipe: '🎯', burst: '💥', heavy: '🔨', flood: '🌊', drain: '🩸', mirror: '🪞',
   goldify: '✨', luck: '🍀', maxhp: '❤️',
+  reflect: '🪞', overcharge: '🔋', thunder: '⚡', jammer: '📡', siphon: '🧛',
 };
+// プレイ中にドロップするアイテム（統合・削除した shield/clear/heavy/mirror は除外）。
 const ALL_ITEMS: ItemType[] = [
-  'shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'shrink', 'parry', 'gaugedown', 'totem',
+  'brake', 'longbomb', 'rapid', 'keep', 'shrink', 'parry', 'gaugedown', 'totem',
   // 追加アイテム（防御/攻撃/妨害）
-  'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror',
+  'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain',
   // 追加アイテム（お宝/HP）
   'goldify', 'luck', 'maxhp',
 ];
@@ -109,6 +117,8 @@ interface CustomCfg {
   attackGauge: number; // 何クリアで攻撃を発射するか（ゲージの数）
   attackCap: number; // 1回の攻撃量の上限
   comboStep: number; // 何連鎖ごとに攻撃量が+1されるか
+  badgeCap: number; // バッジ補正の上限枚数
+  badgeRate: number; // バッジ1枚あたりの攻撃量上昇率(%)
   autoFull: boolean; // 完全オート（有利不利を見て自動で使用）
   use: Record<ItemCat, UseMode>; // カテゴリ別の使い方（保持/即時）
 }
@@ -118,6 +128,7 @@ function loadCfg(): CustomCfg {
     initial: INITIAL_SPAWN_INTERVAL, min: MIN_SPAWN_INTERVAL, accel: DEFAULT_ACCEL,
     theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT, cpuStr: 5, treasureRate: 20,
     attackGauge: ATTACK_THRESHOLD, attackCap: ATTACK_CAP, comboStep: 5,
+    badgeCap: 4, badgeRate: 25,
     autoFull: false, use: { attack: 'hold', defense: 'hold', timed: 'hold' },
   };
   try {
@@ -136,6 +147,8 @@ function loadCfg(): CustomCfg {
         attackGauge: typeof o.attackGauge === 'number' ? Math.min(10, Math.max(2, o.attackGauge)) : def.attackGauge,
         attackCap: typeof o.attackCap === 'number' ? Math.min(12, Math.max(2, o.attackCap)) : def.attackCap,
         comboStep: typeof o.comboStep === 'number' ? Math.min(15, Math.max(2, o.comboStep)) : def.comboStep,
+        badgeCap: typeof o.badgeCap === 'number' ? Math.min(10, Math.max(0, o.badgeCap)) : def.badgeCap,
+        badgeRate: typeof o.badgeRate === 'number' ? Math.min(100, Math.max(0, o.badgeRate)) : def.badgeRate,
         autoFull: typeof o.autoFull === 'boolean' ? o.autoFull : def.autoFull,
         use: o.use && typeof o.use === 'object'
           ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), timed: validMode(o.use.timed ?? o.use.disrupt) }
@@ -191,6 +204,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const hpUpCountRef = useRef(0); // HPアップ(maxhp)の取得回数（上限 MAX_HP_UP）
 
   const [playerKOs, setPlayerKOs] = useState(0);
+  const playerKOsRef = useRef(0);
+  useEffect(() => { playerKOsRef.current = playerKOs; }, [playerKOs]);
   // アイテムは攻撃/防御/妨害の3スロットで保持。Spaceで選択切替、Enterで発動。
   const [slots, setSlots] = useState<Record<ItemCat, ItemType | null>>({ attack: null, defense: null, timed: null });
   const [selectedSlot, setSelectedSlot] = useState<ItemCat>('attack');
@@ -251,6 +266,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgAttackGauge, setCfgAttackGauge] = useState(initialCfg.attackGauge);
   const [cfgAttackCap, setCfgAttackCap] = useState(initialCfg.attackCap);
   const [cfgComboStep, setCfgComboStep] = useState(initialCfg.comboStep);
+  const [cfgBadgeCap, setCfgBadgeCap] = useState(initialCfg.badgeCap);
+  const [cfgBadgeRate, setCfgBadgeRate] = useState(initialCfg.badgeRate);
   const [cfgAutoFull, setCfgAutoFull] = useState(initialCfg.autoFull);
   const [cfgUse, setCfgUse] = useState<Record<ItemCat, UseMode>>(initialCfg.use);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
@@ -259,14 +276,18 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       localStorage.setItem(CFG_KEY, JSON.stringify({
         initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies, cpuStr: cfgCpuStr,
         treasureRate: cfgTreasureRate, attackGauge: cfgAttackGauge, attackCap: cfgAttackCap, comboStep: cfgComboStep,
-        autoFull: cfgAutoFull, use: cfgUse,
+        badgeCap: cfgBadgeCap, badgeRate: cfgBadgeRate, autoFull: cfgAutoFull, use: cfgUse,
       }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgAutoFull, cfgUse]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgAutoFull, cfgUse]);
   const attackCapRef = useRef(initialCfg.attackCap);
   const comboStepRef = useRef(initialCfg.comboStep);
+  const badgeCapRef = useRef(initialCfg.badgeCap);
+  const badgeRateRef = useRef(initialCfg.badgeRate);
   useEffect(() => { attackCapRef.current = cfgAttackCap; }, [cfgAttackCap]);
   useEffect(() => { comboStepRef.current = cfgComboStep; }, [cfgComboStep]);
+  useEffect(() => { badgeCapRef.current = cfgBadgeCap; }, [cfgBadgeCap]);
+  useEffect(() => { badgeRateRef.current = cfgBadgeRate; }, [cfgBadgeRate]);
   const cpuStrengthRef = useRef(initialCfg.cpuStr / 10); // 0..1 の目標強さ
   const treasureRateRef = useRef(initialCfg.treasureRate / 100); // お宝の基本出現率（0..1）
   useEffect(() => { treasureRateRef.current = cfgTreasureRate / 100; }, [cfgTreasureRate]);
@@ -799,7 +820,13 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         attackProgressRef.current += 1;
         if (attackProgressRef.current >= attackThresholdRef.current) {
           attackProgressRef.current -= attackThresholdRef.current;
-          fireAttack(Math.min(1 + Math.floor(newCombo / comboStepRef.current), attackCapRef.current));
+          {
+            // 連鎖で攻撃量UP → バッジ（撃破数）でさらに上昇（上限/上昇率はカスタム設定）。
+            let amt = 1 + Math.floor(newCombo / comboStepRef.current);
+            const badges = Math.min(playerKOsRef.current, badgeCapRef.current);
+            amt = Math.round(amt * (1 + (badgeRateRef.current / 100) * badges));
+            fireAttack(Math.min(amt, attackCapRef.current));
+          }
         }
         setAttackProgress(attackProgressRef.current);
         if (Date.now() < rapidUntilRef.current) fireAttack(1); // 連射: 1クリアごとに1攻撃
@@ -1136,12 +1163,13 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         ))}
       </div>
 
-      {/* アイテム発動演出 */}
+      {/* アイテム発動演出（名前＋ざっくり効果説明） */}
       {useFlash && (
-        <div className="fixed top-[8rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in zoom-in duration-200">
+        <div className="fixed top-[8rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in zoom-in duration-200 flex flex-col items-center gap-1">
           <div className="bg-yellow-500/95 text-black font-black px-4 py-1.5 rounded-full flex items-center gap-2 shadow-lg">
             <span className="text-lg">{ITEM_META[useFlash].icon}</span> {ITEM_META[useFlash].name} 発動！
           </div>
+          <div className="bg-black/80 text-gray-100 text-xs px-3 py-1 rounded-full shadow">{ITEM_META[useFlash].desc}</div>
         </div>
       )}
 
@@ -1401,7 +1429,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             </div>
 
             <div className="mt-3">
-              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={Math.min(playerKOs, 4)} threshold={attackThreshold} />
+              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={Math.min(playerKOs, cfgBadgeCap)} threshold={attackThreshold} />
             </div>
           </div>
 
@@ -1560,6 +1588,24 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                       <input type="range" min={2} max={15} step={1} value={cfgComboStep}
                         onChange={(e) => setCfgComboStep(Number(e.target.value))} className="flex-1 accent-orange-500" />
                       <StepBtn onClick={() => setCfgComboStep((v) => Math.min(15, v + 1))}>＋</StepBtn>
+                    </div>
+                  </div>
+                  <div className="block text-[11px] text-gray-400 mt-3">
+                    バッジ上限（撃破数の補正上限）: <span className="text-yellow-300 font-mono">{cfgBadgeCap}</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <StepBtn onClick={() => setCfgBadgeCap((v) => Math.max(0, v - 1))}>−</StepBtn>
+                      <input type="range" min={0} max={10} step={1} value={cfgBadgeCap}
+                        onChange={(e) => setCfgBadgeCap(Number(e.target.value))} className="flex-1 accent-yellow-500" />
+                      <StepBtn onClick={() => setCfgBadgeCap((v) => Math.min(10, v + 1))}>＋</StepBtn>
+                    </div>
+                  </div>
+                  <div className="block text-[11px] text-gray-400 mt-3">
+                    バッジ1枚の攻撃上昇率: <span className="text-yellow-300 font-mono">{cfgBadgeRate}%</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <StepBtn onClick={() => setCfgBadgeRate((v) => Math.max(0, v - 5))}>−</StepBtn>
+                      <input type="range" min={0} max={100} step={5} value={cfgBadgeRate}
+                        onChange={(e) => setCfgBadgeRate(Number(e.target.value))} className="flex-1 accent-yellow-500" />
+                      <StepBtn onClick={() => setCfgBadgeRate((v) => Math.min(100, v + 5))}>＋</StepBtn>
                     </div>
                   </div>
 
