@@ -501,8 +501,17 @@ export const generateWord = (
   const seededRand = rng();
   const rand = localType ? Math.random() : seededRand;
   let type: WordType = 'normal';
-  if (rand < 0.12) type = 'treasure'; // 約12%でお宝
-  else if (rand < 0.32) type = 'ojama'; // 20%でおじゃま
+  if (localType) {
+    // オンライン: 相手から大量におじゃまが飛んでくるぶん、お宝で打つ単語の割合が
+    // 薄まりがち。お宝を多め（約20%）、自動供給のおじゃまは少なめ（約8%）にして
+    // アイテム入手の機会を確保する。
+    if (rand < 0.2) type = 'treasure';
+    else if (rand < 0.28) type = 'ojama';
+  } else {
+    // ソロ: お宝 約12% / おじゃま 約20%。
+    if (rand < 0.12) type = 'treasure';
+    else if (rand < 0.32) type = 'ojama';
+  }
   return buildWord(entry, type, 'w');
 };
 
