@@ -741,7 +741,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     const handleKeyDown = (e: KeyboardEvent) => {
       resumeAudio();
       if (!started || !selfAliveRef.current) return;
-      if (e.key === 'Enter') { e.preventDefault(); useItem(); return; }
+      // スペース（またはEnter）でアイテム発動。スペースはお題に使わないので安全。
+      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); useItem(); return; }
       if (e.key === 'Tab') { e.preventDefault(); cycleTargetMode(); return; }
       if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
@@ -1241,7 +1242,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                     <ItemIcon type={heldItem} />
                     <span className="text-xs font-bold text-yellow-200">{ITEM_META[heldItem].name}</span>
                     <span className="text-[10px] text-gray-400 hidden sm:inline">{ITEM_META[heldItem].desc}</span>
-                    <span className="text-[10px] text-cyan-300 font-bold">[Enter]</span>
+                    <span className="text-[10px] text-cyan-300 font-bold">[Space]</span>
                   </div>
                 </div>
               )}

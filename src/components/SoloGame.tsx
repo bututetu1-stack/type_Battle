@@ -583,7 +583,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         startGame();
         return;
       }
-      if (gameState === 'playing' && e.key === 'Enter') { e.preventDefault(); useItem(); return; }
+      // プレイ中はスペース（またはEnter）でアイテム発動。スペースはお題に使わないので安全。
+      if (gameState === 'playing' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); useItem(); return; }
       if (gameState === 'playing' && e.key === 'Tab') { e.preventDefault(); cycleTargetMode(); return; }
       if (gameState !== 'playing' || e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
@@ -848,6 +849,14 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     );
   };
 
+  // 加速度（表示用）: 大きいほど速く加速。内部の供給間隔倍率(cfgAccel)は
+  // 1.00=加速なし、0.90=最速。speed = (1 - 倍率) * 100 で 0〜10 にマップ。
+  const accelSpeed = Math.round((1 - cfgAccel) * 1000) / 10;
+  const setAccelFromSpeed = (s: number) => {
+    const clamped = Math.min(10, Math.max(0, s));
+    setCfgAccel(Math.round((1 - clamped / 100) * 1000) / 1000);
+  };
+
   const isDanger = backlog.length >= maxBacklog - 3;
   const eliminatedCount = dummies.filter((d) => d.isKO).length;
   const survivors = dummyCount + 1 - eliminatedCount;
@@ -1099,7 +1108,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                     <ItemIcon type={heldItem} />
                     <span className="text-xs font-bold text-yellow-200">{ITEM_META[heldItem].name}</span>
                     <span className="text-[10px] text-gray-400 hidden sm:inline">{ITEM_META[heldItem].desc}</span>
-                    <span className="text-[10px] text-cyan-300 font-bold">[Enter]</span>
+                    <span className="text-[10px] text-cyan-300 font-bold">[Space]</span>
                   </div>
                 </div>
               )}
@@ -1149,9 +1158,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           </div>
 
           {gameState === 'start' && (
-            <div className="absolute inset-0 bg-neutral-950/80 backdrop-blur-sm z-20 rounded-2xl overflow-y-auto">
-              {/* min-h-full + justify-center で、収まる時は中央・はみ出す時は上から
-                  スクロールできる（上部が見切れる問題の対策）。 */}
+            // ヘッダー(h-16)の下を画面いっぱいに使う固定オーバーレイ。
+            // 画面サイズに合わせてスクロール領域が広がる（収まる時は中央／はみ出す時は上からスクロール）。
+            <div className="fixed left-0 right-0 top-16 bottom-0 bg-neutral-950/90 backdrop-blur-sm z-30 overflow-y-auto">
               <div className="min-h-full flex flex-col items-center justify-center w-full py-8 px-2">
               <Swords className="w-20 h-20 text-cyan-500 mb-6" />
               <h2 className="text-4xl font-black tracking-widest mb-2 text-white">TYPE ROYALE</h2>
@@ -1195,20 +1204,20 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                     </div>
                   </div>
                   <div className="block text-[11px] text-gray-400">
-                    加速の強さ: <span className="text-cyan-300 font-mono">×{cfgAccel.toFixed(2)}</span>
-                    <span className="text-gray-600"> （小さいほど速く加速 / 1.00で加速なし）</span>
+                    加速度: <span className="text-cyan-300 font-mono">{accelSpeed.toFixed(1)}</span>
+                    <span className="text-gray-600"> （大きいほど速く加速 / 0で加速なし）</span>
                     <div className="flex items-center gap-2 mt-1">
-                      <StepBtn onClick={() => setCfgAccel((v) => Math.max(0.9, Math.round((v - 0.01) * 100) / 100))}>−</StepBtn>
+                      <StepBtn onClick={() => setAccelFromSpeed(accelSpeed - 0.5)}>−</StepBtn>
                       <input
                         type="range"
-                        min={0.9}
-                        max={1}
-                        step={0.01}
-                        value={cfgAccel}
-                        onChange={(e) => setCfgAccel(Number(e.target.value))}
+                        min={0}
+                        max={10}
+                        step={0.5}
+                        value={accelSpeed}
+                        onChange={(e) => setAccelFromSpeed(Number(e.target.value))}
                         className="flex-1 accent-cyan-500"
                       />
-                      <StepBtn onClick={() => setCfgAccel((v) => Math.min(1, Math.round((v + 0.01) * 100) / 100))}>＋</StepBtn>
+                      <StepBtn onClick={() => setAccelFromSpeed(accelSpeed + 0.5)}>＋</StepBtn>
                     </div>
                   </div>
                   <div className="block text-[11px] text-gray-400 mt-3">
@@ -1269,11 +1278,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <div>🟨 お宝単語</div>
               </div>
               <p className="text-xs text-gray-600 mt-4 max-w-sm text-center">
-                ノーミスで打ち切ると連鎖UP。5連鎖ごとに敵CPUへおじゃまを送って撃墜！ CPUも反撃してくるので [Tab] で狙いを切り替えよう。お宝(🟨)を打つとアイテム獲得 → [Enter] で使用。
+                ノーミスで打ち切ると連鎖UP。5連鎖ごとに敵CPUへおじゃまを送って撃墜！ CPUも反撃してくるので [Tab] で狙いを切り替えよう。お宝(🟨)を打つとアイテム獲得 → [Space] で使用。
               </p>
               <div className="mt-4 text-xs bg-neutral-900/50 p-3 rounded-xl max-w-sm w-full">
                 <div className="text-gray-400 font-bold mb-1.5 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-yellow-400" /> アイテム効果（お宝🟨で入手 → [Enter]で使用）
+                  <Sparkles className="w-3 h-3 text-yellow-400" /> アイテム効果（お宝🟨で入手 → [Space]で使用）
                 </div>
                 <div className="flex flex-col gap-1 text-left text-gray-400">
                   {ALL_ITEMS.map((t) => (
