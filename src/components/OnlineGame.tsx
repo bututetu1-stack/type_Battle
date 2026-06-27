@@ -1497,7 +1497,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           ))}
         </div>
 
-        <div ref={centerRef} className="w-2/4 flex flex-col h-full relative">
+        <div ref={centerRef} className="w-2/4 flex flex-col h-full min-h-0 relative">
           {isDanger && selfAlive && started && (
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}
@@ -1573,7 +1573,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               </div>
             );
           })()}
-          <div className="flex-1 flex flex-col items-center justify-end pb-8 relative z-10">
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-end pb-8 relative z-10">
             {/* ボスモードの状況表示（挑戦者にはボスHP、ボスには自分のHP）。 */}
             {bossMode && started && (
               isBoss ? (

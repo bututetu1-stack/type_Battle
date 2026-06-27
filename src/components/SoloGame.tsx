@@ -1285,7 +1285,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           ))}
         </div>
 
-        <div ref={centerRef} className="w-2/4 flex flex-col h-full relative">
+        <div ref={centerRef} className="w-2/4 flex flex-col h-full min-h-0 relative">
           {isDanger && gameState === 'playing' && (
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}
@@ -1307,7 +1307,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             </div>
           )}
 
-          <div className="flex-1 flex flex-col items-center justify-end pb-8 relative z-10">
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-end pb-8 relative z-10">
             {gameState === 'playing' && (
               <div className="absolute top-2 right-0 text-right">
                 <div className="text-xs text-gray-500">ALIVE</div>
