@@ -6,11 +6,12 @@ interface CurrentWordProps {
   tokenIndex: number;
   currentTyping: string;
   accent?: string; // 入力中トークンの色（Tailwind クラス）
+  typedRomaji?: string[]; // 確定済みトークンで実際に打たれた綴り（index 揃え）
 }
 
 // 現在のお題の内側表示: 漢字＋ふりがな(ruby) / かな進捗 / ローマ字ガイド。
 // 外枠カード（種別ごとの色）は親側で付ける。
-export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 'text-cyan-400' }: CurrentWordProps) {
+export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 'text-cyan-400', typedRomaji = [] }: CurrentWordProps) {
   // 漢字部分にだけ振り仮名を付けたセグメント列。長文でも各セグメントが
   // 独立して折り返せるので、まとめてルビを振った時の縦並びバグが起きない。
   const segs = buildRuby(word.display, word.reading);
@@ -50,8 +51,13 @@ export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 
       {/* ローマ字ガイド: 入力済みは薄く残し、次に打つ1文字だけを強調する */}
       <div className="flex flex-wrap justify-center items-center text-lg md:text-xl font-mono tracking-[0.15em] min-h-[1.6em]">
         {word.tokens.map((t, i) => {
-          // そのトークンに表示する綴り（入力中トークンは入力に合う候補を使う）
-          const str = i === tokenIndex ? t.romaji.find((r) => r.startsWith(currentTyping)) || t.romaji[0] : t.romaji[0];
+          // そのトークンに表示する綴り：確定済みは実際に打った綴り、入力中は入力に合う候補、未入力は既定。
+          const str =
+            i < tokenIndex
+              ? typedRomaji[i] ?? t.romaji[0]
+              : i === tokenIndex
+                ? t.romaji.find((r) => r.startsWith(currentTyping)) || t.romaji[0]
+                : t.romaji[0];
           const typedLen = i < tokenIndex ? str.length : i === tokenIndex ? currentTyping.length : 0;
           return (
             <span key={i} className="flex">

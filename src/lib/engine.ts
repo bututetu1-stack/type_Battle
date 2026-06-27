@@ -14,6 +14,8 @@ export interface ProcessResult {
   wordCleared?: boolean;
   clearedType?: WordType;
   nextState?: PlayerState;
+  // この打鍵で確定したトークンと、実際に打たれた綴り（表示の保持用）。
+  typed?: { index: number; romaji: string }[];
 }
 
 // 1打鍵を処理し、結果（ミス/単語クリア/次状態）を返す。
@@ -33,7 +35,8 @@ export function processKey(key: string, state: PlayerState): ProcessResult {
     const nextT = word.tokens[tokenIndex + 1];
     const isConsonant = !['a', 'i', 'u', 'e', 'o', 'n'].includes(key);
     if (nextT && isConsonant && nextT.romaji.some((r) => r.startsWith(key))) {
-      return { miss: false, nextState: { ...state, tokenIndex: tokenIndex + 1, currentTyping: '' } };
+      // 「っ」は次の子音1打で確定（実際に打たれた綴り＝その子音）。
+      return { miss: false, nextState: { ...state, tokenIndex: tokenIndex + 1, currentTyping: '' }, typed: [{ index: tokenIndex, romaji: key }] };
     }
   }
   // 特殊処理: 「ん」のショートカット (nの次が母音/y/n以外の子音なら確定)
@@ -44,7 +47,9 @@ export function processKey(key: string, state: PlayerState): ProcessResult {
       nextT.kana !== 'ん' &&
       nextT.romaji.some((r) => r.startsWith(key) && !['a', 'i', 'u', 'e', 'o', 'y', 'n'].includes(key))
     ) {
-      return processKey(key, { ...state, tokenIndex: tokenIndex + 1, currentTyping: '' });
+      // 「ん」は n 1打で確定し、同じ打鍵を次トークンへ繰り越す。
+      const rest = processKey(key, { ...state, tokenIndex: tokenIndex + 1, currentTyping: '' });
+      return { ...rest, typed: [{ index: tokenIndex, romaji: 'n' }, ...(rest.typed ?? [])] };
     }
   }
 
@@ -71,10 +76,11 @@ export function processKey(key: string, state: PlayerState): ProcessResult {
           wordCleared: true,
           clearedType: word.type,
           nextState: { ...state, backlog: backlog.slice(1), tokenIndex: 0, currentTyping: '', combo: combo + 1 },
+          typed: [{ index: tokenIndex, romaji: nextTyping }],
         };
       }
       // 次のトークンへ
-      return { miss: false, nextState: { ...state, tokenIndex: nextTokenIndex, currentTyping: '' } };
+      return { miss: false, nextState: { ...state, tokenIndex: nextTokenIndex, currentTyping: '' }, typed: [{ index: tokenIndex, romaji: nextTyping }] };
     }
     // 入力中（前方一致）
     return { miss: false, nextState: { ...state, currentTyping: nextTyping } };

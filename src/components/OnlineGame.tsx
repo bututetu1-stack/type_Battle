@@ -196,6 +196,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [backlog, setBacklog] = useState<PlayerState['backlog']>([]);
   const [tokenIndex, setTokenIndex] = useState(0);
   const [currentTyping, setCurrentTyping] = useState('');
+  const [typedRomaji, setTypedRomaji] = useState<string[]>([]); // 現在ワードで実際に打った綴り
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
   const [keysTyped, setKeysTyped] = useState(0);
@@ -375,6 +376,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     setWatchId(null);
     setSelfLog([]);
     setToasts([]);
+    setTypedRomaji([]);
     setBacklog([genWord(), genWord(), genWord()]);
     setSpawnInterval(typeof spawnMs === 'number' ? spawnMs : INITIAL_SPAWN_INTERVAL);
     attackProgressRef.current = 0;
@@ -669,6 +671,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         setBacklog([makeShortWord('normal')]);
         setTokenIndex(0);
         setCurrentTyping('');
+        setTypedRomaji([]);
       }
       // --- 攻撃 ---
       else if (item === 'snipe') {
@@ -1011,6 +1014,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         setBacklog(result.nextState.backlog);
         setTokenIndex(0);
         setCurrentTyping('');
+        setTypedRomaji([]); // 次のワードへ：実打綴りをリセット
         setCombo(newCombo);
         setMaxCombo((m) => Math.max(m, newCombo));
         setKeysTyped((k) => k + 1);
@@ -1029,6 +1033,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       } else if (result.nextState) {
         setTokenIndex(result.nextState.tokenIndex);
         setCurrentTyping(result.nextState.currentTyping);
+        if (result.typed) setTypedRomaji((tr) => { const n = [...tr]; for (const x of result.typed!) n[x.index] = x.romaji; return n; });
         setKeysTyped((k) => k + 1);
         sfx.type();
       }
@@ -1073,7 +1078,11 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     const cur = backlog[0];
     const tokens = cur?.tokens ?? [];
     const parts = tokens.map((t, i) =>
-      i === tokenIndex ? (t.romaji.find((r) => r.startsWith(currentTyping)) || t.romaji[0]) : t.romaji[0],
+      i < tokenIndex
+        ? (typedRomaji[i] ?? t.romaji[0])
+        : i === tokenIndex
+          ? (t.romaji.find((r) => r.startsWith(currentTyping)) || t.romaji[0])
+          : t.romaji[0],
     );
     const curRomaji = parts.join('');
     const curRomajiDone = parts.slice(0, tokenIndex).reduce((s, r) => s + r.length, 0) + currentTyping.length;
@@ -1347,14 +1356,24 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </div>
       )}
 
-      {/* 攻撃/被弾ビーム */}
+      {/* 攻撃/被弾ビーム（発光ライン＋白コア＋飛んでいく弾＋着弾リング） */}
       {beams.length > 0 && (
         <svg className="fixed inset-0 w-full h-full pointer-events-none z-40">
+          <defs>
+            <filter id="beamGlow" x="-50%" y="-50%" width="200%" height="200%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
+              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+            </filter>
+          </defs>
           {beams.map((b) => (
-            <g key={b.id} className="attack-beam">
-              <line x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} stroke={b.color} strokeWidth={4} strokeLinecap="round" />
-              <circle cx={b.x2} cy={b.y2} r={14} fill="none" stroke={b.color} strokeWidth={3} />
-              <circle cx={b.x1} cy={b.y1} r={5} fill={b.color} />
+            <g key={b.id} className="attack-beam" filter="url(#beamGlow)">
+              <line x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} stroke={b.color} strokeWidth={5} strokeLinecap="round" opacity={0.85} />
+              <line x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2} stroke="#fff" strokeWidth={1.5} strokeLinecap="round" opacity={0.7} />
+              <circle cx={b.x2} cy={b.y2} r={16} fill="none" stroke={b.color} strokeWidth={3} />
+              <circle r={7} fill="#fff">
+                <animate attributeName="cx" from={b.x1} to={b.x2} dur="0.28s" fill="freeze" />
+                <animate attributeName="cy" from={b.y1} to={b.y2} dur="0.28s" fill="freeze" />
+              </circle>
             </g>
           ))}
         </svg>
@@ -1629,9 +1648,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             {totalIncoming > 0 && (
               <div className="absolute left-0 bottom-8 top-1/3 flex flex-col items-center justify-end gap-1">
                 <div className="text-xs font-bold text-red-400 mb-1 animate-pulse">⚠ {totalIncoming}</div>
-                <div className="w-3 flex-1 bg-neutral-900 rounded-full overflow-hidden border border-red-900/50 flex flex-col-reverse">
+                {/* 段階式ゲージ：1おじゃま=1ブロック。切れ目を空けて視認性を上げる。 */}
+                <div className="w-4 flex-1 flex flex-col-reverse gap-[3px] justify-start">
                   {Array.from({ length: Math.min(totalIncoming, MAX_BACKLOG) }).map((_, i) => (
-                    <div key={i} className="w-full flex-1 bg-red-500 border-t border-neutral-950/60" />
+                    <div key={i} className="w-full flex-1 min-h-[6px] rounded-[3px] bg-red-500 border border-red-300/40 shadow-[0_0_5px_rgba(239,68,68,0.55)]" />
                   ))}
                 </div>
                 <div className="text-[9px] text-gray-500 text-center leading-tight">おじゃま<br />着弾予告</div>
@@ -1683,6 +1703,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                     tokenIndex={tokenIndex}
                     currentTyping={currentTyping}
                     accent={word.type === 'ojama' ? 'text-red-400' : word.type === 'treasure' ? 'text-yellow-400' : 'text-cyan-400'}
+                    typedRomaji={typedRomaji}
                   />
                 </div>
               )}
