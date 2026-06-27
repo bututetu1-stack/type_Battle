@@ -1758,9 +1758,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               </div>
             </div>
 
-            {/* 発動中アイテムの残り時間カウントダウン（保持アイテムの下に表示） */}
-            {activeEffects.length > 0 && (
-              <div className="w-full max-w-lg mt-3 flex flex-col gap-1">
+            {/* 発動中アイテムの残り時間カウントダウン（保持アイテムの下）。
+                常に固定高さの枠を確保し、効果の出現/消失で他の要素が上下しないようにする。 */}
+            {status === 'playing' && (
+              <div className="w-full max-w-lg mt-3 flex flex-col gap-1 min-h-[3.6rem]">
                 {activeEffects.map((e) => {
                   const dur = ITEM_DURATION[e.type] ?? 1;
                   const remain = Math.max(0, e.until - nowTick);
