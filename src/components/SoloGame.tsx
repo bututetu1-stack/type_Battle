@@ -1125,7 +1125,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   ).filter((e) => nowTick > 0 && e.until > nowTick);
 
   return (
-    <div className={`min-h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
+    <div className={`h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
       {/* 被弾時の赤フラッシュ */}
       <div
@@ -1266,7 +1266,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         </div>
       </header>
 
-      <main className="flex-1 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]">
+      <main className="flex-1 min-h-0 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]">
         <div className="flex-1 grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {dummies.slice(0, Math.ceil(dummies.length / 2)).map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
@@ -1307,7 +1307,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             </div>
           )}
 
-          <div className="flex-1 min-h-0 flex flex-col items-center justify-start pt-12 pb-8 relative z-10">
+          <div className="flex-1 min-h-0 flex flex-col items-center pt-6 pb-6 relative z-10">
             {gameState === 'playing' && (
               <div className="absolute top-2 right-0 text-right">
                 <div className="text-xs text-gray-500">ALIVE</div>
@@ -1386,7 +1386,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               )}
             </div>
 
-            <div className="shrink-0 w-full max-w-lg flex flex-col justify-end h-96 relative">
+            <div className="flex-1 min-h-0 w-full max-w-lg flex flex-col justify-end overflow-hidden relative">
               <div className="flex flex-col-reverse gap-2 mb-4 overflow-hidden mask-image-top">
                 {backlog
                   .slice(1)
@@ -1410,11 +1410,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               {renderCurrentWord()}
             </div>
 
-            {/* 可変スペーサー: アイテム効果ゲージの増減をここで吸収し、上のお題グループを動かさないようにする */}
-            <div className="flex-1 min-h-0 w-full" />
-
             {/* グループ3: アイテムスロット〜アタックゲージ（画面下部に固定）。
-                効果ゲージが増減しても上のスペーサーが吸収するため、お題グループは動かない。 */}
+                高さは常に一定なので、効果ゲージが何個出ても上のお題グループは動かない。 */}
             <div className="shrink-0 w-full flex flex-col items-center">
               {/* アイテムスロット（攻撃/防御/妨害）。入力方式に応じて選択強調 or 割当キーを表示。 */}
               {gameState === 'playing' && (
@@ -1462,9 +1459,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               )}
 
             {/* 発動中アイテムの残り時間カウントダウン（保持アイテムの下）。
-                常に固定高さの枠を確保し、効果の出現/消失で他の要素が上下しないようにする。 */}
+                高さを固定（h-[5.4rem]）し、効果の個数が変わってもレイアウトが動かないようにする。 */}
             {gameState === 'playing' && (
-              <div className="w-full max-w-lg mt-3 flex flex-col gap-1 min-h-[3.6rem]">
+              <div className="w-full max-w-lg mt-3 flex flex-col gap-1 h-[5.4rem] overflow-hidden">
                 {activeEffects.map((e) => {
                   const dur = ITEM_DURATION[e.type] ?? 1;
                   const remain = Math.max(0, e.until - nowTick);
