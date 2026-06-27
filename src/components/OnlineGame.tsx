@@ -217,6 +217,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [hitId, setHitId] = useState<string | null>(null); // 自分が攻撃した相手
   const [incomingId, setIncomingId] = useState<string | null>(null); // 自分を攻撃してきた相手
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: 'ko' | 'in' | 'item'; at: number }[]>([]);
+  const [selfLog, setSelfLog] = useState<{ id: number; item: ItemType; at: number }[]>([]); // 自分のアイテム使用履歴
   const [shake, setShake] = useState(false);
   const [damageFlash, setDamageFlash] = useState(false); // 被弾時の赤フラッシュ
   const [useFlash, setUseFlash] = useState<ItemType | null>(null); // 自分のアイテム発動演出
@@ -372,6 +373,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     hpUpCountRef.current = 0;
     setHpBonus(0);
     setWatchId(null);
+    setSelfLog([]);
+    setToasts([]);
     setBacklog([genWord(), genWord(), genWord()]);
     setSpawnInterval(typeof spawnMs === 'number' ? spawnMs : INITIAL_SPAWN_INTERVAL);
     attackProgressRef.current = 0;
@@ -585,6 +588,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       // 自分の発動演出＋他プレイヤーへ「誰が何を使ったか」を共有
       setUseFlash(item);
       setTimeout(() => setUseFlash(null), 900);
+      // 自分のアイテム使用ログ（効果説明つき）。
+      {
+        const lid = toastIdRef.current++;
+        setSelfLog((l) => [...l, { id: lid, item, at: Date.now() }].slice(-24));
+        setTimeout(() => setSelfLog((l) => l.filter((x) => x.id !== lid)), 6000);
+      }
       // ストックされた単語が変化する系は、気づかず古い単語を打ってしまわないよう強調表示。
       if (BOARD_CHANGE_ITEMS.has(item)) {
         setBoardFx(item);
@@ -1583,6 +1592,17 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                       t.kind === 'ko' ? 'bg-orange-600/85 text-white' : 'bg-red-950/85 text-red-200 border border-red-500/40'
                     }`}>
                       {t.kind === 'ko' ? '🏆 ' : '⚠ '}{t.text}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-[9px] font-bold text-cyan-300/80 mb-0.5 text-right">自分のアイテム</div>
+                <div className="flex flex-col gap-0.5 items-end">
+                  {selfLog.slice(-5).map((l) => (
+                    <div key={l.id} className="max-w-full px-2 py-0.5 rounded bg-cyan-900/85 text-cyan-100 text-[10px] font-bold shadow border border-cyan-500/40 animate-in fade-in slide-in-from-right-2 duration-200">
+                      <div className="flex items-center gap-1">{ITEM_EMOJI[l.item]} {ITEM_META[l.item].name}</div>
+                      <div className="text-[9px] font-normal text-cyan-200/80 leading-tight">{ITEM_META[l.item].desc}</div>
                     </div>
                   ))}
                 </div>

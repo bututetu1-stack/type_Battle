@@ -224,6 +224,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // 受信予告（CPUからの攻撃）
   const [pending, setPending] = useState<Telegraph[]>([]);
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: 'ko' | 'in' | 'item'; at: number }[]>([]);
+  const [selfLog, setSelfLog] = useState<{ id: number; item: ItemType; at: number }[]>([]); // 自分のアイテム使用履歴
   const [damageFlash, setDamageFlash] = useState(false);
   // エフェクト用
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
@@ -454,6 +455,12 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     (item: ItemType) => {
       setUseFlash(item);
       setTimeout(() => setUseFlash(null), 900);
+      // 自分のアイテム使用ログ（効果説明つき）。
+      {
+        const lid = toastIdRef.current++;
+        setSelfLog((l) => [...l, { id: lid, item, at: Date.now() }].slice(-24));
+        setTimeout(() => setSelfLog((l) => l.filter((x) => x.id !== lid)), 6000);
+      }
       // ストックされた単語が変化する系は、気づかず古い単語を打ってしまわないよう強調表示。
       if (BOARD_CHANGE_ITEMS.has(item)) {
         setBoardFx(item);
@@ -717,6 +724,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setKeysTyped(0);
     setMissCount(0);
     setPlayerKOs(0);
+    setSelfLog([]);
+    setToasts([]);
     setSlots({ attack: null, defense: null, timed: null });
     setSelectedSlot('attack');
     slotsRef.current = { attack: null, defense: null, timed: null };
@@ -1284,6 +1293,17 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                         t.kind === 'ko' ? 'bg-orange-600/85 text-white' : 'bg-red-950/85 text-red-200 border border-red-500/40'
                       }`}>
                         {t.kind === 'ko' ? '🏆 ' : '⚠ '}{t.text}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9px] font-bold text-cyan-300/80 mb-0.5 text-right">自分のアイテム</div>
+                  <div className="flex flex-col gap-0.5 items-end">
+                    {selfLog.slice(-5).map((l) => (
+                      <div key={l.id} className="max-w-full px-2 py-0.5 rounded bg-cyan-900/85 text-cyan-100 text-[10px] font-bold shadow border border-cyan-500/40 animate-in fade-in slide-in-from-right-2 duration-200">
+                        <div className="flex items-center gap-1">{ITEM_META[l.item].icon} {ITEM_META[l.item].name}</div>
+                        <div className="text-[9px] font-normal text-cyan-200/80 leading-tight">{ITEM_META[l.item].desc}</div>
                       </div>
                     ))}
                   </div>
