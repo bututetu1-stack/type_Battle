@@ -44,6 +44,11 @@ export interface RoomPlayer {
   connected: boolean;
   lastSeen: number;
   joinedAt: number;
+  // 観戦用（プレイ中の現在ワードと入力進捗。脱落者が他プレイヤーの入力画面を覗ける）。
+  curDisplay?: string; // 現在打っているワード（表示テキスト）
+  curReading?: string; // 現在打っているワードの読み（かな）
+  curIdx?: number; // 確定済みトークン数（おおよその進捗）
+  curTyping?: string; // 入力途中のローマ字
 }
 
 export interface RoomSnapshot {
@@ -152,7 +157,8 @@ export function writePlayerSummary(
   roomId: string,
   uid: string,
   summary: Partial<
-    Pick<RoomPlayer, 'backlog' | 'combo' | 'kpm' | 'badges' | 'alive' | 'rank' | 'koBy' | 'lastItem' | 'itemAt'>
+    Pick<RoomPlayer, 'backlog' | 'combo' | 'kpm' | 'badges' | 'alive' | 'rank' | 'koBy' | 'lastItem' | 'itemAt'
+      | 'curDisplay' | 'curReading' | 'curIdx' | 'curTyping'>
   >,
 ): void {
   update(ref(db, `rooms/${roomId}/players/${uid}`), { ...summary, lastSeen: Date.now() }).catch(() => {});

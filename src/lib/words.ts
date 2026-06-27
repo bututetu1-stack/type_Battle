@@ -512,8 +512,8 @@ export const generateWord = (
     if (rand < tp) type = 'treasure';
     else if (rand < tp + 0.08) type = 'ojama';
   } else {
-    // ソロ: お宝 約12%（＋ボーナス） / おじゃま 約20%。
-    const tp = Math.min(0.95, 0.12 + treasureBonus);
+    // ソロ: お宝出現率はカスタム設定（treasureProb／＋ボーナス）/ おじゃま 約20%。
+    const tp = Math.min(0.95, Math.max(0, treasureProb + treasureBonus));
     if (rand < tp) type = 'treasure';
     else if (rand < tp + 0.2) type = 'ojama';
   }

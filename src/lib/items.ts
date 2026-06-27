@@ -13,10 +13,10 @@ export const CAT_ORDER: ItemCat[] = ['attack', 'defense', 'timed'];
 
 // 使い方モードの表示ラベル。
 export const USE_MODES: { key: UseMode; label: string; desc: string }[] = [
-  { key: 'hold', label: '保持', desc: '[Enter]で手動発動（被ったら古い方を自動発動）' },
+  { key: 'hold', label: '新着', desc: '[Enter]で手動発動（被ったら古い方を自動発動し新着を保持）' },
   { key: 'instant', label: '即時', desc: '拾った瞬間に自動発動' },
   { key: 'auto', label: 'オート', desc: '有利/不利を見て良い時に自動発動' },
-  { key: 'usenew', label: '新着', desc: '1つ保持し、被ったら新しく来た方を自動発動' },
+  { key: 'usenew', label: '保持', desc: '1つ保持し、被ったら新しく来た方を自動発動（既存を保持）' },
 ];
 
 export const ITEM_CAT: Record<ItemType, ItemCat> = {
@@ -25,16 +25,16 @@ export const ITEM_CAT: Record<ItemType, ItemCat> = {
   mirror: 'attack', meteor: 'attack', quake: 'attack', rally: 'attack', focus: 'attack',
   // 防御（即時に自分を守る/利する系）
   shield: 'defense', clear: 'defense', purge: 'defense', guard: 'defense', barrier: 'defense', shrink: 'defense',
-  regen: 'defense', goldify: 'defense',
-  // 持続効果（一定時間続く系＋永続で効果が続く系）
+  regen: 'defense',
+  // 効果（一定時間続く系＋永続で効果が続く系＋お宝化）
   brake: 'timed', rapid: 'timed', keep: 'timed', parry: 'timed', totem: 'timed', freeze: 'timed',
-  gaugedown: 'timed', luck: 'timed', maxhp: 'timed',
+  gaugedown: 'timed', luck: 'timed', maxhp: 'timed', goldify: 'timed',
 };
 
 export const CAT_META: { key: ItemCat; label: string; color: string }[] = [
   { key: 'attack', label: '攻撃', color: 'text-orange-300' },
   { key: 'defense', label: '防御', color: 'text-cyan-300' },
-  { key: 'timed', label: '持続', color: 'text-fuchsia-300' },
+  { key: 'timed', label: '効果', color: 'text-fuchsia-300' },
 ];
 
 // 「使い方」設定（プレイヤー個人の設定）。autoFull=完全オート。

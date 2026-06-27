@@ -103,6 +103,7 @@ const HP_MAX = 24;
 interface CustomCfg {
   initial: number; min: number; accel: number; theme: string; hp: number; enemies: number;
   cpuStr: number; // CPUの平均的な強さ 0〜10
+  treasureRate: number; // お宝の出現率（%）
   autoFull: boolean; // 完全オート（有利不利を見て自動で使用）
   use: Record<ItemCat, UseMode>; // カテゴリ別の使い方（保持/即時）
 }
@@ -110,7 +111,7 @@ const validMode = (v: unknown): UseMode => (v === 'instant' ? 'instant' : 'hold'
 function loadCfg(): CustomCfg {
   const def: CustomCfg = {
     initial: INITIAL_SPAWN_INTERVAL, min: MIN_SPAWN_INTERVAL, accel: DEFAULT_ACCEL,
-    theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT, cpuStr: 5,
+    theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT, cpuStr: 5, treasureRate: 20,
     autoFull: false, use: { attack: 'hold', defense: 'hold', timed: 'hold' },
   };
   try {
@@ -125,6 +126,7 @@ function loadCfg(): CustomCfg {
         hp: typeof o.hp === 'number' ? Math.min(HP_MAX, Math.max(HP_MIN, o.hp)) : def.hp,
         enemies: typeof o.enemies === 'number' ? Math.min(MAX_DUMMIES, Math.max(1, o.enemies)) : def.enemies,
         cpuStr: typeof o.cpuStr === 'number' ? Math.min(10, Math.max(0, o.cpuStr)) : def.cpuStr,
+        treasureRate: typeof o.treasureRate === 'number' ? Math.min(80, Math.max(0, o.treasureRate)) : def.treasureRate,
         autoFull: typeof o.autoFull === 'boolean' ? o.autoFull : def.autoFull,
         use: o.use && typeof o.use === 'object'
           ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), timed: validMode(o.use.timed ?? o.use.disrupt) }
@@ -235,6 +237,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgHp, setCfgHp] = useState(initialCfg.hp);
   const [cfgEnemies, setCfgEnemies] = useState(initialCfg.enemies);
   const [cfgCpuStr, setCfgCpuStr] = useState(initialCfg.cpuStr);
+  const [cfgTreasureRate, setCfgTreasureRate] = useState(initialCfg.treasureRate);
   const [cfgAutoFull, setCfgAutoFull] = useState(initialCfg.autoFull);
   const [cfgUse, setCfgUse] = useState<Record<ItemCat, UseMode>>(initialCfg.use);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
@@ -242,11 +245,13 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     try {
       localStorage.setItem(CFG_KEY, JSON.stringify({
         initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies, cpuStr: cfgCpuStr,
-        autoFull: cfgAutoFull, use: cfgUse,
+        treasureRate: cfgTreasureRate, autoFull: cfgAutoFull, use: cfgUse,
       }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgAutoFull, cfgUse]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAutoFull, cfgUse]);
   const cpuStrengthRef = useRef(initialCfg.cpuStr / 10); // 0..1 の目標強さ
+  const treasureRateRef = useRef(initialCfg.treasureRate / 100); // お宝の基本出現率（0..1）
+  useEffect(() => { treasureRateRef.current = cfgTreasureRate / 100; }, [cfgTreasureRate]);
   // ゲーム中に参照するための ref（設定はスタート画面で変える想定）。
   const autoFullRef = useRef(cfgAutoFull);
   const useModeRef = useRef(cfgUse);
@@ -278,7 +283,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // 重複を避けつつ次の単語を生成して履歴に積む。
   const nextWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    const w = generateWord(rng, themeRef.current, recentRef.current, false, 0.2, treasureBoostRef.current);
+    const w = generateWord(rng, themeRef.current, recentRef.current, false, treasureRateRef.current, treasureBoostRef.current);
     pushRecent(w.display);
     return w;
   }, [pushRecent]);
@@ -1170,7 +1175,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       </header>
 
       <main className="flex-1 flex w-full max-w-7xl mx-auto p-4 gap-4 h-[calc(100vh-4rem)]">
-        <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
+        <div className="w-1/4 grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 content-start">
           {dummies.slice(0, Math.ceil(dummies.length / 2)).map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
               <MiniBoard
@@ -1207,7 +1212,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             {/* ターゲットモード切替（[Tab]でも切替） */}
             {gameState === 'playing' && (
               <div className="absolute top-1 left-0 flex flex-col items-start gap-1">
-                <div className="flex items-center gap-1 text-[10px] text-gray-500"><Target className="w-3 h-3" /> 狙い [Tab]</div>
+                <div className="flex items-center gap-1 text-[10px] text-gray-500"><Target className="w-3 h-3" /> 狙い [{keyLabel(keyCfg.target)}]</div>
                 <div className="flex gap-1">
                   {TARGET_MODES.map((t) => (
                     <button
@@ -1468,6 +1473,23 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                       <StepBtn onClick={() => setCfgCpuStr((v) => Math.min(10, v + 1))}>＋</StepBtn>
                     </div>
                   </div>
+                  <div className="block text-[11px] text-gray-400 mt-3">
+                    お宝の出現率: <span className="text-yellow-300 font-mono">{cfgTreasureRate}%</span>
+                    <span className="text-gray-600"> （お宝🟨を打つとアイテム入手）</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <StepBtn onClick={() => setCfgTreasureRate((v) => Math.max(0, v - 5))}>−</StepBtn>
+                      <input
+                        type="range"
+                        min={0}
+                        max={80}
+                        step={5}
+                        value={cfgTreasureRate}
+                        onChange={(e) => setCfgTreasureRate(Number(e.target.value))}
+                        className="flex-1 accent-yellow-500"
+                      />
+                      <StepBtn onClick={() => setCfgTreasureRate((v) => Math.min(80, v + 5))}>＋</StepBtn>
+                    </div>
+                  </div>
 
                   {/* アイテムの使い方 */}
                   <div className="mt-4 border-t border-white/10 pt-3">
@@ -1484,7 +1506,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                     </div>
                     {cfgAutoFull ? (
                       <p className="text-[10px] text-emerald-300/80">
-                        有利/不利を見て、いい感じのタイミングで自動発動します（手動 [Space] も可）。
+                        有利/不利を見て、いい感じのタイミングで自動発動します（手動 [{keyLabel(keyCfg.fire)}] も可）。
                       </p>
                     ) : (
                       <div className="flex flex-col gap-1.5">
@@ -1508,7 +1530,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                           </div>
                         ))}
                         <p className="text-[9px] text-gray-600 leading-tight">
-                          保持=[Enter]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 新着=1つ保持し被ったら新しい方を発動
+                          新着=[{keyLabel(keyCfg.fire)}]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 保持=1つ保持し被ったら新しい方を発動
                         </p>
                       </div>
                     )}
@@ -1539,11 +1561,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <div>🟨 お宝単語</div>
               </div>
               <p className="text-xs text-gray-600 mt-4 max-w-sm text-center">
-                ノーミスで打ち切ると連鎖UP。5連鎖ごとに敵CPUへおじゃまを送って撃墜！ CPUも反撃してくるので [Tab] で狙いを切り替えよう。お宝(🟨)を打つと攻撃/防御/妨害のスロットにアイテム獲得 → [Space]でスロット切替・[Enter]で発動。
+                ノーミスで打ち切ると連鎖UP。5連鎖ごとに敵CPUへおじゃまを送って撃墜！ CPUも反撃してくるので [{keyLabel(keyCfg.target)}] で狙いを切り替えよう。お宝(🟨)を打つと攻撃/防御/効果のスロットにアイテム獲得 → {keyCfg.inputMode === 'cycle' ? `[${keyLabel(keyCfg.cycle)}]でスロット切替・[${keyLabel(keyCfg.fire)}]で発動` : '各スロットの即時キーで発動'}。
               </p>
               <div className="mt-4 text-xs bg-neutral-900/50 p-3 rounded-xl max-w-sm w-full">
                 <div className="text-gray-400 font-bold mb-1.5 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-yellow-400" /> アイテム効果（お宝🟨で入手 → スロットへ。[Space]切替/[Enter]発動）
+                  <Sparkles className="w-3 h-3 text-yellow-400" /> アイテム効果（お宝🟨で入手 → スロットへ。{keyCfg.inputMode === 'cycle' ? `[${keyLabel(keyCfg.cycle)}]切替/[${keyLabel(keyCfg.fire)}]発動` : '各スロット即時キー'}）
                 </div>
                 <div className="flex flex-col gap-2 text-left text-gray-400">
                   {CAT_META.map((c) => (
@@ -1621,7 +1643,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           )}
         </div>
 
-        <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
+        <div className="w-1/4 grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 content-start">
           {dummies.slice(Math.ceil(dummies.length / 2)).map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
               <MiniBoard

@@ -187,6 +187,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [damageFlash, setDamageFlash] = useState(false); // 被弾時の赤フラッシュ
   const [useFlash, setUseFlash] = useState<ItemType | null>(null); // 自分のアイテム発動演出
   const [parryFx, setParryFx] = useState(false); // 受け流し成功エフェクト
+  const [watchId, setWatchId] = useState<string | null>(null); // 観戦中に覗いているプレイヤー
   const [showSettings, setShowSettings] = useState(false); // プレイヤー設定モーダル
   const [keyCfg, setKeyCfg] = useState<KeyConfig>(() => loadKeyConfig());
   const keyConfigRef = useRef<KeyConfig>(keyCfg);
@@ -330,6 +331,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     treasureBoostRef.current = 0;
     hpUpCountRef.current = 0;
     setHpBonus(0);
+    setWatchId(null);
     setBacklog([genWord(), genWord(), genWord()]);
     attackProgressRef.current = 0;
     setAttackProgress(0);
@@ -939,9 +941,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     return () => clearTimeout(timerId);
   }, [started, selfAlive, spawnInterval, topOut, selfMax, status, genWord]);
 
-  // サマリのスロットリング書込（バッジも反映）。
-  const summaryRef = useRef({ backlog: 0, combo: 0, kpm: 0, badges: 0 });
-  summaryRef.current = { backlog: backlog.length, combo, kpm: calculateKPM(), badges: myBadges };
+  // サマリのスロットリング書込（バッジ＋観戦用の現在ワード/入力進捗も反映）。
+  const summaryRef = useRef<Parameters<typeof writePlayerSummary>[2]>({ backlog: 0, combo: 0, kpm: 0, badges: 0 });
+  summaryRef.current = {
+    backlog: backlog.length, combo, kpm: calculateKPM(), badges: myBadges,
+    curDisplay: backlog[0]?.display ?? '', curReading: backlog[0]?.reading ?? '',
+    curIdx: tokenIndex, curTyping: currentTyping,
+  };
   useEffect(() => {
     if (!started) return;
     const id = setInterval(() => {
@@ -1194,9 +1200,38 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       {!selfAlive && status === 'playing' && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 bg-red-950/80 border border-red-500/40 rounded-lg px-6 py-2 text-center">
           <div className="text-red-300 font-bold">TOP OUT — {rank} 位</div>
-          <div className="text-xs text-gray-400">観戦中…</div>
+          <div className="text-xs text-gray-400">観戦中… 盤面をクリックすると入力画面を覗けます</div>
         </div>
       )}
+
+      {/* 観戦: 選んだプレイヤーの現在ワードと入力進捗を表示 */}
+      {watchId && !selfAlive && (() => {
+        const wp = players[watchId];
+        if (!wp || !isLive(wp)) return null;
+        const reading = wp.curReading ?? '';
+        const idx = Math.min(wp.curIdx ?? 0, reading.length);
+        return (
+          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[min(92vw,28rem)] bg-neutral-900/95 border border-cyan-500/40 rounded-xl px-5 py-3 shadow-2xl backdrop-blur">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-bold text-cyan-300 flex items-center gap-1">👁 {wp.name} を観戦中</span>
+              <button onClick={() => setWatchId(null)} className="text-gray-500 hover:text-gray-200 text-xs">✕ 閉じる</button>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-100">{wp.curDisplay || '—'}</div>
+              <div className="text-base font-mono tracking-wide mt-1">
+                <span className="text-gray-600">{reading.slice(0, idx)}</span>
+                <span className="text-cyan-200">{reading.slice(idx)}</span>
+              </div>
+              <div className="text-sm font-mono text-emerald-300 mt-1 min-h-[1.25rem]">{wp.curTyping || ''}<span className="animate-pulse">▍</span></div>
+            </div>
+            <div className="flex justify-between text-[11px] text-gray-500 mt-2">
+              <span>残り {wp.backlog} 個</span>
+              <span>{wp.combo} 連鎖</span>
+              <span>{wp.kpm} KPM</span>
+            </div>
+          </div>
+        );
+      })()}
 
       <header className="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-neutral-900/50 z-10">
         <div className="flex items-center gap-3">
@@ -1226,9 +1261,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       </header>
 
       <main className="flex-1 flex w-full max-w-7xl mx-auto p-4 gap-4 h-[calc(100vh-4rem)]">
-        <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
+        <div className="w-1/4 grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 content-start">
           {others.slice(0, Math.ceil(others.length / 2)).map(([id, p]) => (
-            <div key={id} ref={(el) => { boardRefs.current[id] = el; }}>
+            <div
+              key={id}
+              ref={(el) => { boardRefs.current[id] = el; }}
+              onClick={() => { if (!selfAlive && isLive(p)) setWatchId(id); }}
+              className={`${!selfAlive && isLive(p) ? 'cursor-pointer hover:opacity-80' : ''} ${watchId === id ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}
+            >
               <MiniBoard
                 height={p.backlog}
                 max={bossMode && id === bossUid ? BOSS_MAX_BACKLOG : MAX_BACKLOG}
@@ -1458,9 +1498,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           </div>
         </div>
 
-        <div className="w-1/4 grid grid-cols-2 gap-2 content-start">
+        <div className="w-1/4 grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 content-start">
           {others.slice(Math.ceil(others.length / 2)).map(([id, p]) => (
-            <div key={id} ref={(el) => { boardRefs.current[id] = el; }}>
+            <div
+              key={id}
+              ref={(el) => { boardRefs.current[id] = el; }}
+              onClick={() => { if (!selfAlive && isLive(p)) setWatchId(id); }}
+              className={`${!selfAlive && isLive(p) ? 'cursor-pointer hover:opacity-80' : ''} ${watchId === id ? 'ring-2 ring-cyan-400 rounded-xl' : ''}`}
+            >
               <MiniBoard
                 height={p.backlog}
                 max={bossMode && id === bossUid ? BOSS_MAX_BACKLOG : MAX_BACKLOG}
