@@ -1506,8 +1506,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
           {/* 着弾予告ゲージ（受信おじゃま）。固定長トラックを常に表示し、下から量ぶん点灯。
               トラック全体のサイズは一定なので、量が増減してもウィジェットは上下しない。 */}
-          <div className={`absolute left-0 bottom-24 z-20 flex flex-col items-center gap-1 pointer-events-none transition-opacity duration-200 ${totalIncoming > 0 ? 'opacity-100' : 'opacity-0'}`}>
-            <div className="text-sm font-bold text-red-400 mb-0.5 animate-pulse h-5">{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
+          <div className="absolute left-0 bottom-24 z-20 flex flex-col items-center gap-1 pointer-events-none">
+            <div className={`text-sm font-bold text-red-400 mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
             <div className="w-6 flex flex-col-reverse gap-[4px]">
               {Array.from({ length: Math.min(selfMax, 16) }).map((_, i) => {
                 const filled = i < Math.min(totalIncoming, 16);
