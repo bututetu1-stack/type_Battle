@@ -2001,7 +2001,6 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: '千代田', reading: 'ちよだ' },
     { display: '葛城', reading: 'かつらぎ' },
     { display: '雲龍', reading: 'うんりゅう' },
-    { display: '信濃', reading: 'しなの' },
     // 潜水艦・補助艦
     { display: '秋津洲', reading: 'あきつしま' },
     { display: '瑞穂', reading: 'みずほ' },
@@ -2013,7 +2012,7 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: '鹿島', reading: 'かしま' },
     // 装備
     { display: '酸素魚雷', reading: 'さんそぎょらい' },
-    { display: '零式艦戦', reading: 'れいしきかんせん' },
+    { display: '零式艦上戦闘機', reading: 'ぜろしきかんじょうせんとうき' },
     { display: '彗星', reading: 'すいせい' },
     { display: '天山', reading: 'てんざん' },
     { display: '流星', reading: 'りゅうせい' },
