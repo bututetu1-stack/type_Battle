@@ -1307,7 +1307,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             </div>
           )}
 
-          <div className="flex-1 min-h-0 flex flex-col items-center justify-end pb-8 relative z-10">
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-start pt-12 pb-8 relative z-10">
             {gameState === 'playing' && (
               <div className="absolute top-2 right-0 text-right">
                 <div className="text-xs text-gray-500">ALIVE</div>
@@ -1378,7 +1378,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             )}
 
 
-            <div className="mb-8 text-center h-16 flex items-end justify-center">
+            <div className="shrink-0 mb-8 text-center h-16 flex items-end justify-center">
               {combo > 2 && (
                 <div className="animate-in slide-in-from-bottom-4 text-3xl font-black italic text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.6)] flex items-center gap-2">
                   <Zap className="w-8 h-8 fill-cyan-400" /> {combo} COMBO!
@@ -1386,7 +1386,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               )}
             </div>
 
-            <div className="w-full max-w-lg flex flex-col justify-end h-96 relative">
+            <div className="shrink-0 w-full max-w-lg flex flex-col justify-end h-96 relative">
               <div className="flex flex-col-reverse gap-2 mb-4 overflow-hidden mask-image-top">
                 {backlog
                   .slice(1)
@@ -1408,6 +1408,14 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   ))}
               </div>
               {renderCurrentWord()}
+            </div>
+
+            {/* 可変スペーサー: アイテム効果ゲージの増減をここで吸収し、上のお題グループを動かさないようにする */}
+            <div className="flex-1 min-h-0 w-full" />
+
+            {/* グループ3: アイテムスロット〜アタックゲージ（画面下部に固定）。
+                効果ゲージが増減しても上のスペーサーが吸収するため、お題グループは動かない。 */}
+            <div className="shrink-0 w-full flex flex-col items-center">
               {/* アイテムスロット（攻撃/防御/妨害）。入力方式に応じて選択強調 or 割当キーを表示。 */}
               {gameState === 'playing' && (
                 <div className="flex flex-col items-center gap-1">
@@ -1452,7 +1460,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   </div>
                 </div>
               )}
-            </div>
 
             {/* 発動中アイテムの残り時間カウントダウン（保持アイテムの下）。
                 常に固定高さの枠を確保し、効果の出現/消失で他の要素が上下しないようにする。 */}
@@ -1495,6 +1502,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
             <div className="mt-3">
               <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={Math.min(playerKOs, cfgBadgeCap)} threshold={cfgGaugeMode === 'char' ? cfgGaugeChars : attackThreshold} unit={cfgGaugeMode === 'char' ? '文字' : 'クリア'} />
+            </div>
             </div>
           </div>
 
