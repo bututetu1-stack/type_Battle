@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Swords, User, Globe, Loader2 } from 'lucide-react';
+import { Swords, User, Globe, Loader2, Settings } from 'lucide-react';
 import { ensureSignedIn } from './lib/firebase';
 import SoloGame from './components/SoloGame';
 import Lobby from './components/Lobby';
 import OnlineRoom from './components/OnlineRoom';
+import PlayerSettings from './components/PlayerSettings';
 
 type View = 'home' | 'solo' | 'lobby' | 'room';
 
@@ -13,6 +14,7 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   const [name, setName] = useState('');
   const [roomId, setRoomId] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   // オンライン用に匿名サインイン（バックグラウンドで先行実行）。
   useEffect(() => {
@@ -74,9 +76,16 @@ export default function App() {
         >
           {uid ? <Globe className="w-5 h-5" /> : <Loader2 className="w-5 h-5 animate-spin" />} オンライン対戦
         </button>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="bg-neutral-800/70 hover:bg-neutral-700 rounded-xl px-6 py-3 font-bold flex items-center justify-center gap-2 transition-colors text-gray-300"
+        >
+          <Settings className="w-5 h-5" /> プレイヤー設定
+        </button>
       </div>
 
       {authError && <p className="text-red-400 text-sm mt-6">{authError}</p>}
+      {showSettings && <PlayerSettings onClose={() => setShowSettings(false)} />}
     </div>
   );
 }

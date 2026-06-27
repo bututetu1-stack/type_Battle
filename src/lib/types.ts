@@ -28,6 +28,7 @@ export interface Dummy {
   lastItem?: ItemType; // 直近に使ったアイテム（演出用）
   itemAt?: number; // 直近にアイテムを使った時刻
   atk?: number; // プレイヤーを攻撃した回数（strongターゲット用）
+  str?: number; // CPUの強さ（0..1）。個体ごとに独立した思考・挙動の元
 }
 
 // お宝単語クリアで獲得できるアイテム種別。

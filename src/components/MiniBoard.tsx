@@ -8,6 +8,7 @@ interface MiniBoardProps {
   hit?: boolean; // 直近に自分が攻撃した対象
   incoming?: boolean; // 直近に自分を攻撃してきた相手
   itemEmoji?: string; // 直近に使用したアイテムのアイコン
+  str?: number; // CPUの強さ(0..1)。表示でわかるよう★で表現
 }
 
 // 周囲プレイヤー（または solo のダミー）を表す小さな盤面ゲージ。
@@ -21,6 +22,7 @@ export default function MiniBoard({
   hit,
   incoming,
   itemEmoji,
+  str,
 }: MiniBoardProps) {
   if (isKO) {
     return (
@@ -61,6 +63,16 @@ export default function MiniBoard({
       </div>
       {combo !== undefined && combo > 2 && (
         <div className="absolute top-0.5 right-0.5 text-[9px] font-bold text-cyan-300">{combo}c</div>
+      )}
+      {str !== undefined && (
+        // 強さを★1〜3で表示（強いほど赤寄り）。
+        <div
+          className={`absolute top-0.5 left-0.5 text-[8px] font-bold ${
+            str >= 0.66 ? 'text-red-400' : str >= 0.33 ? 'text-yellow-400' : 'text-gray-500'
+          }`}
+        >
+          {'★'.repeat(str >= 0.66 ? 3 : str >= 0.33 ? 2 : 1)}
+        </div>
       )}
       {itemEmoji && (
         <div className="absolute top-0.5 left-0.5 text-sm animate-in zoom-in duration-200 drop-shadow">{itemEmoji}</div>

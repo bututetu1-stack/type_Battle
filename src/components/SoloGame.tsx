@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause, ArrowLeft,
-  Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine,
+  Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine, Settings,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, THEMES } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
 import { ITEM_CAT, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode } from '../lib/items';
+import { loadKeyConfig, keyLabel, type KeyConfig } from '../lib/keyconfig';
+import PlayerSettings from './PlayerSettings';
 import type { Dummy, GameStatus, ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
@@ -93,6 +95,7 @@ const HP_MAX = 24;
 // カスタム設定の永続化（タイトルに戻ってもリセットされない）。
 interface CustomCfg {
   initial: number; min: number; accel: number; theme: string; hp: number; enemies: number;
+  cpuStr: number; // CPUの平均的な強さ 0〜10
   autoFull: boolean; // 完全オート（有利不利を見て自動で使用）
   use: Record<ItemCat, UseMode>; // カテゴリ別の使い方（保持/即時）
 }
@@ -100,7 +103,7 @@ const validMode = (v: unknown): UseMode => (v === 'instant' ? 'instant' : 'hold'
 function loadCfg(): CustomCfg {
   const def: CustomCfg = {
     initial: INITIAL_SPAWN_INTERVAL, min: MIN_SPAWN_INTERVAL, accel: DEFAULT_ACCEL,
-    theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT,
+    theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT, cpuStr: 5,
     autoFull: false, use: { attack: 'hold', defense: 'hold', disrupt: 'hold' },
   };
   try {
@@ -114,6 +117,7 @@ function loadCfg(): CustomCfg {
         theme: typeof o.theme === 'string' ? o.theme : def.theme,
         hp: typeof o.hp === 'number' ? Math.min(HP_MAX, Math.max(HP_MIN, o.hp)) : def.hp,
         enemies: typeof o.enemies === 'number' ? Math.min(MAX_DUMMIES, Math.max(1, o.enemies)) : def.enemies,
+        cpuStr: typeof o.cpuStr === 'number' ? Math.min(10, Math.max(0, o.cpuStr)) : def.cpuStr,
         autoFull: typeof o.autoFull === 'boolean' ? o.autoFull : def.autoFull,
         use: o.use && typeof o.use === 'object'
           ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), disrupt: validMode(o.use.disrupt) }
@@ -140,6 +144,9 @@ const CPU_NAMES = [
   'タイピー', 'カナ丸', 'ローマ', 'ことだま', 'はやて', 'シフト', 'エンター', 'スペース',
   'バックスペース', 'キャップス', 'コンボ', 'チェイン', 'おじゃま', 'おたから', 'シールド',
   'ブレーキ', 'ラピッド', 'ボム', 'ターゲット', 'ロイヤル',
+  // 21〜30人目以降の名前
+  'クイック', 'フラッシュ', 'ミラージュ', 'サンダー', 'ブリッツ', 'ノヴァ', 'ゼロ', 'アルファ',
+  'オメガ', 'ファントム', 'クリムゾン', 'コメット', 'ストライク', 'ヴァイパー', 'ジェット',
 ];
 
 export default function SoloGame({ onExit }: { onExit: () => void }) {
@@ -188,6 +195,12 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [shake, setShake] = useState(false);
   const [useFlash, setUseFlash] = useState<ItemType | null>(null);
   const [parryFx, setParryFx] = useState(false); // 受け流し成功エフェクト
+  const [showSettings, setShowSettings] = useState(false); // プレイヤー設定モーダル
+  const [keyCfg, setKeyCfg] = useState<KeyConfig>(() => loadKeyConfig());
+  const keyConfigRef = useRef<KeyConfig>(keyCfg);
+  useEffect(() => { keyConfigRef.current = keyCfg; }, [keyCfg]);
+  const settingsOpenRef = useRef(false);
+  useEffect(() => { settingsOpenRef.current = showSettings; }, [showSettings]);
   const centerRef = useRef<HTMLDivElement>(null);
   const dummyRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const beamIdRef = useRef(0);
@@ -212,17 +225,19 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgAccel, setCfgAccel] = useState(initialCfg.accel);
   const [cfgHp, setCfgHp] = useState(initialCfg.hp);
   const [cfgEnemies, setCfgEnemies] = useState(initialCfg.enemies);
+  const [cfgCpuStr, setCfgCpuStr] = useState(initialCfg.cpuStr);
   const [cfgAutoFull, setCfgAutoFull] = useState(initialCfg.autoFull);
   const [cfgUse, setCfgUse] = useState<Record<ItemCat, UseMode>>(initialCfg.use);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
   useEffect(() => {
     try {
       localStorage.setItem(CFG_KEY, JSON.stringify({
-        initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies,
+        initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies, cpuStr: cfgCpuStr,
         autoFull: cfgAutoFull, use: cfgUse,
       }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgAutoFull, cfgUse]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgAutoFull, cfgUse]);
+  const cpuStrengthRef = useRef(initialCfg.cpuStr / 10); // 0..1 の目標強さ
   // ゲーム中に参照するための ref（設定はスタート画面で変える想定）。
   const autoFullRef = useRef(cfgAutoFull);
   const useModeRef = useRef(cfgUse);
@@ -567,17 +582,17 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     return () => clearInterval(id);
   }, [gameState, applyItem, setSlot]);
 
-  // 選択中スロットのアイテムを発動（Enter）。
-  const fireSelected = useCallback(() => {
-    const cat = selectedSlotRef.current;
+  // 指定スロットのアイテムを発動。
+  const fireSlot = useCallback((cat: ItemCat) => {
     const item = slotsRef.current[cat];
     if (!item) return;
     sfx.use();
     applyItem(item);
     setSlot(cat, null);
   }, [applyItem, setSlot]);
-
-  // 選択スロットを切り替え（Space）。
+  // 選択中スロットを発動（cycle方式の発動キー）。
+  const fireSelected = useCallback(() => { fireSlot(selectedSlotRef.current); }, [fireSlot]);
+  // 選択スロットを切り替え（cycle方式の切替キー）。
   const cycleSlot = useCallback(() => {
     setSelectedSlot((c) => CAT_ORDER[(CAT_ORDER.indexOf(c) + 1) % CAT_ORDER.length]);
   }, []);
@@ -615,10 +630,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     slotsRef.current = { attack: null, defense: null, disrupt: null };
     setStartTime(Date.now());
     setEndTime(null);
-    // カスタム設定を反映（HP＝積載限界、敵数）。
+    // カスタム設定を反映（HP＝積載限界、敵数、CPUの強さ）。
     maxBacklogRef.current = cfgHp;
     setMaxBacklog(cfgHp);
     setDummyCount(cfgEnemies);
+    cpuStrengthRef.current = cfgCpuStr / 10;
     accelRef.current = cfgAccel;
     minRef.current = cfgMin;
     rapidUntilRef.current = 0;
@@ -635,14 +651,19 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setAttackProgress(0);
     setSpawnInterval(cfgInitial);
     setGameState('playing');
-    // 敵数ぶんのダミーを作り直す（カスタムで数が変わるため）。
+    // 敵数ぶんのダミーを作り直す。各CPUは目標強さの周りにばらつかせた個別の str を持つ
+    // （＝強いCPU・弱いCPUが混在し、平均が設定値になる。個体ごとに独立した挙動の元）。
+    const target = cfgCpuStr / 10;
     setDummies(
-      Array.from({ length: cfgEnemies }).map((_, i) => ({
-        id: i, height: Math.floor(Math.random() * 5), isKO: false, name: cpuName(i), combo: 0, atk: 0,
-      })),
+      Array.from({ length: cfgEnemies }).map((_, i) => {
+        const str = Math.min(1, Math.max(0, target + (Math.random() - 0.5) * 0.7));
+        return {
+          id: i, height: Math.floor(Math.random() * 5), isKO: false, name: cpuName(i), combo: 0, atk: 0, str,
+        };
+      }),
     );
     sfx.start();
-  }, [cfgInitial, cfgMin, cfgAccel, cfgHp, cfgEnemies, updatePending, nextWord]);
+  }, [cfgInitial, cfgMin, cfgAccel, cfgHp, cfgEnemies, cfgCpuStr, updatePending, nextWord]);
 
   const gameOver = useCallback(() => {
     setGameState('gameover');
@@ -655,6 +676,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // --- 入力処理 ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (settingsOpenRef.current) return; // 設定モーダル表示中はゲーム操作を受け付けない
       const { gameState } = stateRef.current;
       resumeAudio();
       if ((gameState === 'start' || gameState === 'gameover' || gameState === 'win') && e.key === ' ') {
@@ -662,10 +684,22 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         startGame();
         return;
       }
-      // プレイ中: スペースで選択スロット切替、Enterで発動。スペースはお題に使わないので安全。
-      if (gameState === 'playing' && e.key === ' ') { e.preventDefault(); cycleSlot(); return; }
-      if (gameState === 'playing' && e.key === 'Enter') { e.preventDefault(); fireSelected(); return; }
-      if (gameState === 'playing' && e.key === 'Tab') { e.preventDefault(); cycleTargetMode(); return; }
+      // プレイ中: キーコンフィグに従ってアイテム操作・ターゲット切替。
+      if (gameState === 'playing') {
+        const kc = keyConfigRef.current;
+        if (e.key === kc.target) { e.preventDefault(); cycleTargetMode(); return; }
+        if (kc.inputMode === 'cycle') {
+          if (e.key === kc.cycle) { e.preventDefault(); cycleSlot(); return; }
+          if (e.key === kc.fire) { e.preventDefault(); fireSelected(); return; }
+        } else {
+          // 直接キー式: 各スロットのキーで即発動。
+          let handled = false;
+          for (const cat of CAT_ORDER) {
+            if (e.key === kc.slots[cat]) { e.preventDefault(); fireSlot(cat); handled = true; break; }
+          }
+          if (handled) return;
+        }
+      }
       if (gameState !== 'playing' || e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
       const key = e.key.toLowerCase();
@@ -709,20 +743,23 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [startGame, fireSelected, cycleSlot, fireAttack, grantItem, cycleTargetMode, offsetIncoming]);
+  }, [startGame, fireSelected, cycleSlot, fireSlot, fireAttack, grantItem, cycleTargetMode, offsetIncoming]);
 
   // --- CPUの挙動: 自滅ランダムウォーク + プレイヤーへの攻撃 + アイテム使用 ---
   useEffect(() => {
     if (gameState !== 'playing') return;
     const interval = setInterval(() => {
-      // 盤面の上下動（最終的に倒せる余地を作るためやや上昇寄り）
+      // 盤面の上下動。CPUごとの強さ(str)で「処理が速い＝下がりやすい」を表現する。
+      // 強いCPUほど height が下がりやすく（生き残る）、弱いCPUは溜まって自滅しやすい。
       setDummies((prev) =>
         prev.map((d) => {
           if (d.isKO) return d;
-          let newHeight = d.height + (Math.random() > 0.45 ? 1 : -1);
+          const s = d.str ?? 0.5;
+          const downProb = 0.4 + s * 0.45; // 強いほど下がる（クリアする）確率が高い
+          let newHeight = d.height + (Math.random() < downProb ? -1 : 1);
           if (newHeight < 0) newHeight = 0;
           let combo = d.combo ?? 0;
-          combo = Math.random() > 0.5 ? combo + 1 : 0; // 演出用のそれっぽい連鎖
+          combo = Math.random() < 0.4 + s * 0.4 ? combo + 1 : 0; // 強いほど連鎖が伸びやすい
           if (newHeight > maxBacklogRef.current) {
             sfx.eliminate();
             return { ...d, height: 0, isKO: true, combo: 0 };
@@ -733,14 +770,19 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
       const alive = dummiesRef.current.filter((d) => !d.isKO);
       if (alive.length === 0) return;
+      const target = cpuStrengthRef.current; // 0..1 目標強さ
 
       // 一部のCPUがプレイヤーを攻撃（着弾予告ゲージに追加）。
-      // 攻撃が集中しすぎないよう、控えめな頻度・少量に抑える。
-      // さらに、すでに予告がたまっている時は追撃を控える（理不尽な飽和を防ぐ）。
+      // 攻撃頻度は全体の強さ設定に比例。攻撃者は強いCPUほど選ばれやすい（個体差）。
       const incomingNow = pendingRef.current.reduce((s, e) => s + e.amount, 0);
-      if (incomingNow < 4 && Math.random() < 0.2) {
-        const attacker = alive[Math.floor(Math.random() * alive.length)];
-        const amount = Math.random() < 0.8 ? 1 : 2; // ほぼ1、たまに2
+      const attackChance = 0.1 + target * 0.3;
+      if (incomingNow < 4 && Math.random() < attackChance) {
+        // str を重みにして攻撃者を選ぶ（強いCPUが主な脅威になる）。
+        const totW = alive.reduce((sum, d) => sum + 0.2 + (d.str ?? 0.5), 0);
+        let acc = Math.random() * totW;
+        let attacker = alive[0];
+        for (const d of alive) { acc -= 0.2 + (d.str ?? 0.5); if (acc <= 0) { attacker = d; break; } }
+        const amount = Math.random() < 0.5 + (attacker.str ?? 0.5) * 0.4 ? (Math.random() < 0.6 ? 2 : 1) : 1;
         lastAttackerRef.current = attacker.id;
         setDummies((prev) => prev.map((d) => (d.id === attacker.id ? { ...d, atk: (d.atk ?? 0) + 1 } : d)));
         updatePending([
@@ -1081,6 +1123,13 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           >
             {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
           </button>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="text-gray-500 hover:text-gray-300 self-center"
+            title="プレイヤー設定（キー設定）"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
         </div>
       </header>
 
@@ -1097,6 +1146,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 hit={hitDummy === d.id}
                 incoming={incomingDummy === d.id}
                 itemEmoji={d.itemAt && Date.now() - d.itemAt < 1500 ? ITEM_EMOJI[d.lastItem as ItemType] : undefined}
+                str={d.str}
               />
             </div>
           ))}
@@ -1181,22 +1231,26 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   ))}
               </div>
               {renderCurrentWord()}
-              {/* アイテムスロット（攻撃/防御/妨害）。選択中を強調。[Space]切替 / [Enter]発動 */}
+              {/* アイテムスロット（攻撃/防御/妨害）。入力方式に応じて選択強調 or 割当キーを表示。 */}
               {gameState === 'playing' && (
                 <div className="flex flex-col items-center gap-1">
                   <div className="flex justify-center gap-2">
                     {CAT_META.map((c) => {
                       const item = slots[c.key];
-                      const sel = selectedSlot === c.key;
+                      const direct = keyCfg.inputMode === 'direct';
+                      const sel = !direct && selectedSlot === c.key;
                       return (
                         <button
                           key={c.key}
-                          onClick={() => setSelectedSlot(c.key)}
+                          onClick={() => (direct ? fireSlot(c.key) : setSelectedSlot(c.key))}
                           className={`min-w-[5.5rem] rounded-lg border px-2 py-1 flex flex-col items-center transition-colors ${
                             sel ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'border-white/10 bg-neutral-900/80'
                           }`}
                         >
-                          <span className={`text-[9px] font-bold ${c.color}`}>{c.label}</span>
+                          <span className={`text-[9px] font-bold ${c.color}`}>
+                            {c.label}
+                            {direct && <span className="ml-1 text-gray-400 font-mono">[{keyLabel(keyCfg.slots[c.key])}]</span>}
+                          </span>
                           {item ? (
                             <span className="flex items-center gap-1">
                               <ItemIcon type={item} />
@@ -1210,7 +1264,14 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                     })}
                   </div>
                   <div className="text-[10px] text-gray-500">
-                    <span className="text-cyan-300 font-bold">[Space]</span> 切替 ／ <span className="text-cyan-300 font-bold">[Enter]</span> 発動
+                    {keyCfg.inputMode === 'cycle' ? (
+                      <>
+                        <span className="text-cyan-300 font-bold">[{keyLabel(keyCfg.cycle)}]</span> 切替 ／{' '}
+                        <span className="text-cyan-300 font-bold">[{keyLabel(keyCfg.fire)}]</span> 発動
+                      </>
+                    ) : (
+                      <>各スロットのキーで即発動</>
+                    )}
                   </div>
                 </div>
               )}
@@ -1352,6 +1413,23 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                         className="flex-1 accent-cyan-500"
                       />
                       <StepBtn onClick={() => setCfgEnemies((v) => Math.min(MAX_DUMMIES, v + 1))}>＋</StepBtn>
+                    </div>
+                  </div>
+                  <div className="block text-[11px] text-gray-400 mt-3">
+                    CPUの強さ（平均）: <span className="text-cyan-300 font-mono">{cfgCpuStr}</span>
+                    <span className="text-gray-600"> （強弱が混在し平均がこの値）</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <StepBtn onClick={() => setCfgCpuStr((v) => Math.max(0, v - 1))}>−</StepBtn>
+                      <input
+                        type="range"
+                        min={0}
+                        max={10}
+                        step={1}
+                        value={cfgCpuStr}
+                        onChange={(e) => setCfgCpuStr(Number(e.target.value))}
+                        className="flex-1 accent-cyan-500"
+                      />
+                      <StepBtn onClick={() => setCfgCpuStr((v) => Math.min(10, v + 1))}>＋</StepBtn>
                     </div>
                   </div>
 
@@ -1519,11 +1597,16 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 hit={hitDummy === d.id}
                 incoming={incomingDummy === d.id}
                 itemEmoji={d.itemAt && Date.now() - d.itemAt < 1500 ? ITEM_EMOJI[d.lastItem as ItemType] : undefined}
+                str={d.str}
               />
             </div>
           ))}
         </div>
       </main>
+
+      {showSettings && (
+        <PlayerSettings onClose={() => { setShowSettings(false); setKeyCfg(loadKeyConfig()); }} />
+      )}
 
       <style
         dangerouslySetInnerHTML={{

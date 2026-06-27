@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Swords, Zap, AlertTriangle, Crown, Shield, Wind, Pause, Sparkles,
-  Target, RotateCcw, LogOut, Volume2, VolumeX, Bomb, Lock,
+  Target, RotateCcw, LogOut, Volume2, VolumeX, Bomb, Lock, Settings,
 } from 'lucide-react';
 import { mulberry32, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord } from '../lib/words';
@@ -12,6 +12,8 @@ import {
 } from '../lib/room';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
 import { ITEM_CAT, CAT_META, CAT_ORDER, type ItemPrefs, type ItemCat, type UseMode } from '../lib/items';
+import { loadKeyConfig, keyLabel, type KeyConfig } from '../lib/keyconfig';
+import PlayerSettings from './PlayerSettings';
 import type { GameMode, ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
@@ -176,6 +178,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [damageFlash, setDamageFlash] = useState(false); // 被弾時の赤フラッシュ
   const [useFlash, setUseFlash] = useState<ItemType | null>(null); // 自分のアイテム発動演出
   const [parryFx, setParryFx] = useState(false); // 受け流し成功エフェクト
+  const [showSettings, setShowSettings] = useState(false); // プレイヤー設定モーダル
+  const [keyCfg, setKeyCfg] = useState<KeyConfig>(() => loadKeyConfig());
+  const keyConfigRef = useRef<KeyConfig>(keyCfg);
+  useEffect(() => { keyConfigRef.current = keyCfg; }, [keyCfg]);
+  const settingsOpenRef = useRef(false);
+  useEffect(() => { settingsOpenRef.current = showSettings; }, [showSettings]);
 
   const centerRef = useRef<HTMLDivElement>(null);
   const boardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -709,17 +717,15 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     return () => clearInterval(id);
   }, [started, status, applyItem, selfMax, setSlot]);
 
-  // 選択中スロットのアイテムを発動（Enter）。
-  const fireSelected = useCallback(() => {
-    const cat = selectedSlotRef.current;
+  // 指定スロットのアイテムを発動。
+  const fireSlot = useCallback((cat: ItemCat) => {
     const item = slotsRef.current[cat];
     if (!item) return;
     sfx.use();
     applyItem(item);
     setSlot(cat, null);
   }, [applyItem, setSlot]);
-
-  // 選択スロットを切り替え（Space）。
+  const fireSelected = useCallback(() => { fireSlot(selectedSlotRef.current); }, [fireSlot]);
   const cycleSlot = useCallback(() => {
     setSelectedSlot((c) => CAT_ORDER[(CAT_ORDER.indexOf(c) + 1) % CAT_ORDER.length]);
   }, []);
@@ -815,13 +821,22 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // 入力処理
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (settingsOpenRef.current) return; // 設定モーダル表示中はゲーム操作を受け付けない
       resumeAudio();
       if (!started || !selfAliveRef.current) return;
-      // スペース（またはEnter）でアイテム発動。スペースはお題に使わないので安全。
-      // スペースで選択スロット切替、Enterで発動。
-      if (e.key === ' ') { e.preventDefault(); cycleSlot(); return; }
-      if (e.key === 'Enter') { e.preventDefault(); fireSelected(); return; }
-      if (e.key === 'Tab') { e.preventDefault(); cycleTargetMode(); return; }
+      // キーコンフィグに従ってアイテム操作・ターゲット切替。
+      const kc = keyConfigRef.current;
+      if (e.key === kc.target) { e.preventDefault(); cycleTargetMode(); return; }
+      if (kc.inputMode === 'cycle') {
+        if (e.key === kc.cycle) { e.preventDefault(); cycleSlot(); return; }
+        if (e.key === kc.fire) { e.preventDefault(); fireSelected(); return; }
+      } else {
+        let handled = false;
+        for (const cat of CAT_ORDER) {
+          if (e.key === kc.slots[cat]) { e.preventDefault(); fireSlot(cat); handled = true; break; }
+        }
+        if (handled) return;
+      }
       if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
       const result = processKey(e.key.toLowerCase(), stateRef.current);
@@ -861,7 +876,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [started, launchAttack, sendAmount, fireSelected, cycleSlot, grantItem, cycleTargetMode, offsetIncoming]);
+  }, [started, launchAttack, sendAmount, fireSelected, cycleSlot, fireSlot, grantItem, cycleTargetMode, offsetIncoming]);
 
   // ベース供給＆加速ループ（シールド/ブレーキ対応）。
   useEffect(() => {
@@ -1171,6 +1186,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           <button onClick={toggleMute} className="text-gray-500 hover:text-gray-300" title={muted ? '効果音オン' : '効果音オフ'}>
             {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
           </button>
+          <button onClick={() => setShowSettings(true)} className="text-gray-500 hover:text-gray-300" title="プレイヤー設定（キー設定）">
+            <Settings className="w-5 h-5" />
+          </button>
         </div>
       </header>
 
@@ -1312,21 +1330,25 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   />
                 </div>
               )}
-              {/* アイテムスロット（攻撃/防御/妨害）。選択中を強調。[Space]切替 / [Enter]発動 */}
+              {/* アイテムスロット（攻撃/防御/妨害）。入力方式で表示を切替。 */}
               <div className="flex flex-col items-center gap-1">
                 <div className="flex justify-center gap-2">
                   {CAT_META.map((c) => {
                     const item = slots[c.key];
-                    const sel = selectedSlot === c.key;
+                    const direct = keyCfg.inputMode === 'direct';
+                    const sel = !direct && selectedSlot === c.key;
                     return (
                       <button
                         key={c.key}
-                        onClick={() => setSelectedSlot(c.key)}
+                        onClick={() => (direct ? fireSlot(c.key) : setSelectedSlot(c.key))}
                         className={`min-w-[5.5rem] rounded-lg border px-2 py-1 flex flex-col items-center transition-colors ${
                           sel ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'border-white/10 bg-neutral-900/80'
                         }`}
                       >
-                        <span className={`text-[9px] font-bold ${c.color}`}>{c.label}</span>
+                        <span className={`text-[9px] font-bold ${c.color}`}>
+                          {c.label}
+                          {direct && <span className="ml-1 text-gray-400 font-mono">[{keyLabel(keyCfg.slots[c.key])}]</span>}
+                        </span>
                         {item ? (
                           <span className="flex items-center gap-1">
                             <ItemIcon type={item} />
@@ -1340,7 +1362,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   })}
                 </div>
                 <div className="text-[10px] text-gray-500">
-                  <span className="text-cyan-300 font-bold">[Space]</span> 切替 ／ <span className="text-cyan-300 font-bold">[Enter]</span> 発動
+                  {keyCfg.inputMode === 'cycle' ? (
+                    <>
+                      <span className="text-cyan-300 font-bold">[{keyLabel(keyCfg.cycle)}]</span> 切替 ／{' '}
+                      <span className="text-cyan-300 font-bold">[{keyLabel(keyCfg.fire)}]</span> 発動
+                    </>
+                  ) : (
+                    <>各スロットのキーで即発動</>
+                  )}
                 </div>
               </div>
             </div>
@@ -1414,6 +1443,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           ))}
         </div>
       </main>
+
+      {showSettings && (
+        <PlayerSettings onClose={() => { setShowSettings(false); setKeyCfg(loadKeyConfig()); }} />
+      )}
 
       <style
         dangerouslySetInnerHTML={{
