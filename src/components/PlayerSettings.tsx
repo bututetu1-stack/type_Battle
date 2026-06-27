@@ -20,14 +20,14 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
     const onKey = (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (e.key === 'Escape') { setCapturing(null); return; }
-      const k = e.key;
+      if (e.code === 'Escape') { setCapturing(null); return; }
+      const k = e.code; // 左右Shiftなどを区別するため code を保存
       const next: KeyConfig = JSON.parse(JSON.stringify(cfg));
       if (capturing === 'cycle') next.cycle = k;
       else if (capturing === 'fire') next.fire = k;
       else if (capturing === 'target') next.target = k;
       else if (capturing.startsWith('slot:')) {
-        const cat = capturing.slice(5) as 'attack' | 'defense' | 'disrupt';
+        const cat = capturing.slice(5) as 'attack' | 'defense' | 'timed';
         next.slots[cat] = k;
       }
       update(next);

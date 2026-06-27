@@ -1,7 +1,8 @@
 // キーコンフィグ＆入力方式（プレイヤー個人設定。ソロ/オンライン共通）。
+// キーは KeyboardEvent.code で保持・比較する（左右Shiftなどを区別できる）。
 import type { ItemCat } from './items';
 
-// cycle=スロット切替(Space)＋発動(Enter) / direct=各スロットに割当てたキーで即発動
+// cycle=スロット切替＋発動 / direct=各スロットに割当てたキーで即発動
 export type InputMode = 'cycle' | 'direct';
 
 export interface KeyConfig {
@@ -17,14 +18,21 @@ const KEY = 'typeRoyale.keys';
 export function defaultKeyConfig(): KeyConfig {
   return {
     inputMode: 'cycle',
-    cycle: ' ',
+    cycle: 'Space',
     fire: 'Enter',
-    slots: { attack: '1', defense: '2', disrupt: '3' },
+    slots: { attack: 'Digit1', defense: 'Digit2', timed: 'Digit3' },
     target: 'Tab',
   };
 }
 
-const str = (v: unknown, d: string): string => (typeof v === 'string' && v.length > 0 ? v : d);
+// 旧データ(e.key保存)を code へ移行する。すでに code 形式ならそのまま。
+function toCode(v: unknown, d: string): string {
+  if (typeof v !== 'string' || v.length === 0) return d;
+  if (v === ' ') return 'Space';
+  if (/^[0-9]$/.test(v)) return `Digit${v}`;
+  if (/^[a-zA-Z]$/.test(v)) return `Key${v.toUpperCase()}`;
+  return v; // Enter / Tab / Escape / Space / ShiftLeft などはそのまま
+}
 
 export function loadKeyConfig(): KeyConfig {
   const def = defaultKeyConfig();
@@ -32,14 +40,17 @@ export function loadKeyConfig(): KeyConfig {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const o = JSON.parse(raw);
+      const s = o.slots && typeof o.slots === 'object' ? o.slots : {};
       return {
         inputMode: o.inputMode === 'direct' ? 'direct' : 'cycle',
-        cycle: str(o.cycle, def.cycle),
-        fire: str(o.fire, def.fire),
-        slots: o.slots && typeof o.slots === 'object'
-          ? { attack: str(o.slots.attack, def.slots.attack), defense: str(o.slots.defense, def.slots.defense), disrupt: str(o.slots.disrupt, def.slots.disrupt) }
-          : def.slots,
-        target: str(o.target, def.target),
+        cycle: toCode(o.cycle, def.cycle),
+        fire: toCode(o.fire, def.fire),
+        slots: {
+          attack: toCode(s.attack, def.slots.attack),
+          defense: toCode(s.defense, def.slots.defense),
+          timed: toCode(s.timed ?? s.disrupt, def.slots.timed),
+        },
+        target: toCode(o.target, def.target),
       };
     }
   } catch { /* 既定値 */ }
@@ -52,13 +63,24 @@ export function saveKeyConfig(c: KeyConfig): void {
   } catch { /* 保存不可環境は無視 */ }
 }
 
-// キーの表示名（' '→Space など）。
-export function keyLabel(k: string): string {
-  if (k === ' ') return 'Space';
-  if (k === 'ArrowUp') return '↑';
-  if (k === 'ArrowDown') return '↓';
-  if (k === 'ArrowLeft') return '←';
-  if (k === 'ArrowRight') return '→';
-  if (k === 'Escape') return 'Esc';
-  return k.length === 1 ? k.toUpperCase() : k;
+// code の表示名（Space, 1, A, L-Shift など）。
+export function keyLabel(code: string): string {
+  if (code === 'Space') return 'Space';
+  if (code === 'Enter') return 'Enter';
+  if (code === 'Tab') return 'Tab';
+  if (code === 'Escape') return 'Esc';
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Numpad')) return `Num${code.slice(6)}`;
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code === 'ShiftLeft') return 'L-Shift';
+  if (code === 'ShiftRight') return 'R-Shift';
+  if (code === 'ControlLeft') return 'L-Ctrl';
+  if (code === 'ControlRight') return 'R-Ctrl';
+  if (code === 'AltLeft') return 'L-Alt';
+  if (code === 'AltRight') return 'R-Alt';
+  if (code === 'ArrowUp') return '↑';
+  if (code === 'ArrowDown') return '↓';
+  if (code === 'ArrowLeft') return '←';
+  if (code === 'ArrowRight') return '→';
+  return code;
 }

@@ -1,14 +1,15 @@
 // アイテムの分類と「使い方」設定（ソロ/オンライン共通）。
 import type { ItemType } from './types';
 
-// アイテムの大分類（攻撃/防御/妨害）。使い方設定・効果欄・スロットの分類に使う。
-export type ItemCat = 'attack' | 'defense' | 'disrupt';
+// アイテムの大分類（攻撃/防御/持続効果）。使い方設定・効果欄・スロットの分類に使う。
+// timed = 一定時間効果が続くタイプ（ブレーキ/連射/連鎖キープ/受け流し/フリーズ/トーテム）。
+export type ItemCat = 'attack' | 'defense' | 'timed';
 // 使い方: hold=保持(手動) / instant=即時(拾った瞬間) / auto=オート(良い時に自動) /
 //          usenew=新着即時(スロットが埋まっている時、新しく来た方を自動発動して既存は保持)
 export type UseMode = 'hold' | 'instant' | 'auto' | 'usenew';
 
-// スロットの巡回順（Spaceでこの順に切り替える）。
-export const CAT_ORDER: ItemCat[] = ['attack', 'defense', 'disrupt'];
+// スロットの巡回順（切替キーでこの順に切り替える）。
+export const CAT_ORDER: ItemCat[] = ['attack', 'defense', 'timed'];
 
 // 使い方モードの表示ラベル。
 export const USE_MODES: { key: UseMode; label: string; desc: string }[] = [
@@ -19,20 +20,19 @@ export const USE_MODES: { key: UseMode; label: string; desc: string }[] = [
 ];
 
 export const ITEM_CAT: Record<ItemType, ItemCat> = {
-  // 攻撃
-  longbomb: 'attack', rapid: 'attack', snipe: 'attack', burst: 'attack', heavy: 'attack', gaugedown: 'attack',
-  meteor: 'attack', quake: 'attack', rally: 'attack', focus: 'attack',
-  // 防御
-  shield: 'defense', clear: 'defense', brake: 'defense', keep: 'defense', barrier: 'defense', freeze: 'defense',
-  purge: 'defense', guard: 'defense', totem: 'defense', shrink: 'defense', regen: 'defense',
-  // 妨害
-  parry: 'disrupt', flood: 'disrupt', drain: 'disrupt', mirror: 'disrupt',
+  // 攻撃（相手におじゃまを送る系・自己強化）
+  longbomb: 'attack', snipe: 'attack', burst: 'attack', heavy: 'attack', flood: 'attack', drain: 'attack',
+  mirror: 'attack', gaugedown: 'attack', meteor: 'attack', quake: 'attack', rally: 'attack', focus: 'attack',
+  // 防御（即時に自分を守る系）
+  shield: 'defense', clear: 'defense', purge: 'defense', guard: 'defense', barrier: 'defense', shrink: 'defense', regen: 'defense',
+  // 持続効果（一定時間続く系）
+  brake: 'timed', rapid: 'timed', keep: 'timed', parry: 'timed', totem: 'timed', freeze: 'timed',
 };
 
 export const CAT_META: { key: ItemCat; label: string; color: string }[] = [
   { key: 'attack', label: '攻撃', color: 'text-orange-300' },
   { key: 'defense', label: '防御', color: 'text-cyan-300' },
-  { key: 'disrupt', label: '妨害', color: 'text-fuchsia-300' },
+  { key: 'timed', label: '持続', color: 'text-fuchsia-300' },
 ];
 
 // 「使い方」設定（プレイヤー個人の設定）。autoFull=完全オート。
@@ -47,7 +47,7 @@ const validMode = (v: unknown): UseMode =>
   v === 'instant' || v === 'auto' || v === 'usenew' ? v : 'hold';
 
 export function defaultItemPrefs(): ItemPrefs {
-  return { autoFull: false, use: { attack: 'hold', defense: 'hold', disrupt: 'hold' } };
+  return { autoFull: false, use: { attack: 'hold', defense: 'hold', timed: 'hold' } };
 }
 
 export function loadItemPrefs(): ItemPrefs {
@@ -59,7 +59,7 @@ export function loadItemPrefs(): ItemPrefs {
       return {
         autoFull: typeof o.autoFull === 'boolean' ? o.autoFull : def.autoFull,
         use: o.use && typeof o.use === 'object'
-          ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), disrupt: validMode(o.use.disrupt) }
+          ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), timed: validMode(o.use.timed ?? o.use.disrupt) }
           : def.use,
       };
     }

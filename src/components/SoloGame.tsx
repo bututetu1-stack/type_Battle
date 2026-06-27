@@ -47,8 +47,8 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   shield: { name: 'シールド', icon: '🛡', desc: '次の自動供給を1回無効化' },
   clear: { name: 'おじゃま一掃', icon: '🌀', desc: 'バックログのおじゃまを消す' },
   brake: { name: 'ブレーキ', icon: '⏸', desc: '自動供給を5秒間ストップ' },
-  longbomb: { name: 'ロング送信', icon: '📨', desc: '敵に長文(相殺不可)を送る' },
-  rapid: { name: '連射', icon: '⚡', desc: '8秒間 1クリアごとに1攻撃' },
+  longbomb: { name: 'ロング送信', icon: '📨', desc: '敵へ長文おじゃま(相殺不可)を送る' },
+  rapid: { name: '連射', icon: '⚡', desc: '8秒間 1クリアごとにおじゃま+1' },
   keep: { name: '連鎖キープ', icon: '🔒', desc: '10秒間ミスしても連鎖が切れない' },
   shrink: { name: '短縮', icon: '✂', desc: '溜まったワードを全て短い単語に変換' },
   parry: { name: '受け流し', icon: '🪃', desc: '8秒間 被攻撃を他の相手へ逸らす' },
@@ -65,14 +65,13 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   freeze: { name: 'フリーズ', icon: '🧊', desc: '5秒間 着弾予告と自動供給を停止' },
   purge: { name: '大掃除', icon: '🧹', desc: 'バックログを全消去（逆転のチャンス）' },
   guard: { name: 'ガード', icon: '🧱', desc: '次の自動供給を2回ぶん防ぐ' },
-  // 攻撃
-  snipe: { name: '狙撃', icon: '🎯', desc: '狙った相手へ即+3' },
-  burst: { name: 'バースト', icon: '💥', desc: '全ての相手へ一斉に+2' },
-  heavy: { name: '強撃', icon: '🔨', desc: '連鎖に応じた大攻撃を即送信' },
-  // 妨害
-  flood: { name: 'フラッド', icon: '🌊', desc: '相手へ大量(+4)のおじゃま' },
-  drain: { name: 'ドレイン', icon: '🩸', desc: '自分を2減らし相手へ+2' },
-  mirror: { name: 'ミラー', icon: '🪞', desc: '不利なほど強い反撃を送る' },
+  // 攻撃（送る数字は全ておじゃまの数）
+  snipe: { name: '狙撃', icon: '🎯', desc: '狙った相手へおじゃま+3' },
+  burst: { name: 'バースト', icon: '💥', desc: '全ての相手へおじゃま+2' },
+  heavy: { name: '強撃', icon: '🔨', desc: '連鎖に応じたおじゃまを即送信' },
+  flood: { name: 'フラッド', icon: '🌊', desc: '相手へおじゃま+4' },
+  drain: { name: 'ドレイン', icon: '🩸', desc: '自分を2減らし相手へおじゃま+2' },
+  mirror: { name: 'ミラー', icon: '🪞', desc: '不利なほど強いおじゃまを送る' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡', clear: '🌀', brake: '⏸', longbomb: '📨', rapid: '⚡', keep: '🔒',
@@ -104,7 +103,7 @@ function loadCfg(): CustomCfg {
   const def: CustomCfg = {
     initial: INITIAL_SPAWN_INTERVAL, min: MIN_SPAWN_INTERVAL, accel: DEFAULT_ACCEL,
     theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT, cpuStr: 5,
-    autoFull: false, use: { attack: 'hold', defense: 'hold', disrupt: 'hold' },
+    autoFull: false, use: { attack: 'hold', defense: 'hold', timed: 'hold' },
   };
   try {
     const raw = localStorage.getItem(CFG_KEY);
@@ -120,7 +119,7 @@ function loadCfg(): CustomCfg {
         cpuStr: typeof o.cpuStr === 'number' ? Math.min(10, Math.max(0, o.cpuStr)) : def.cpuStr,
         autoFull: typeof o.autoFull === 'boolean' ? o.autoFull : def.autoFull,
         use: o.use && typeof o.use === 'object'
-          ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), disrupt: validMode(o.use.disrupt) }
+          ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), timed: validMode(o.use.timed ?? o.use.disrupt) }
           : def.use,
       };
     }
@@ -172,7 +171,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
   const [playerKOs, setPlayerKOs] = useState(0);
   // アイテムは攻撃/防御/妨害の3スロットで保持。Spaceで選択切替、Enterで発動。
-  const [slots, setSlots] = useState<Record<ItemCat, ItemType | null>>({ attack: null, defense: null, disrupt: null });
+  const [slots, setSlots] = useState<Record<ItemCat, ItemType | null>>({ attack: null, defense: null, timed: null });
   const [selectedSlot, setSelectedSlot] = useState<ItemCat>('attack');
 
   const [missFlash, setMissFlash] = useState(false);
@@ -625,9 +624,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setKeysTyped(0);
     setMissCount(0);
     setPlayerKOs(0);
-    setSlots({ attack: null, defense: null, disrupt: null });
+    setSlots({ attack: null, defense: null, timed: null });
     setSelectedSlot('attack');
-    slotsRef.current = { attack: null, defense: null, disrupt: null };
+    slotsRef.current = { attack: null, defense: null, timed: null };
     setStartTime(Date.now());
     setEndTime(null);
     // カスタム設定を反映（HP＝積載限界、敵数、CPUの強さ）。
@@ -684,18 +683,18 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         startGame();
         return;
       }
-      // プレイ中: キーコンフィグに従ってアイテム操作・ターゲット切替。
+      // プレイ中: キーコンフィグ(code)に従ってアイテム操作・ターゲット切替。
       if (gameState === 'playing') {
         const kc = keyConfigRef.current;
-        if (e.key === kc.target) { e.preventDefault(); cycleTargetMode(); return; }
+        if (e.code === kc.target) { e.preventDefault(); cycleTargetMode(); return; }
         if (kc.inputMode === 'cycle') {
-          if (e.key === kc.cycle) { e.preventDefault(); cycleSlot(); return; }
-          if (e.key === kc.fire) { e.preventDefault(); fireSelected(); return; }
+          if (e.code === kc.cycle) { e.preventDefault(); cycleSlot(); return; }
+          if (e.code === kc.fire) { e.preventDefault(); fireSelected(); return; }
         } else {
           // 直接キー式: 各スロットのキーで即発動。
           let handled = false;
           for (const cat of CAT_ORDER) {
-            if (e.key === kc.slots[cat]) { e.preventDefault(); fireSlot(cat); handled = true; break; }
+            if (e.code === kc.slots[cat]) { e.preventDefault(); fireSlot(cat); handled = true; break; }
           }
           if (handled) return;
         }

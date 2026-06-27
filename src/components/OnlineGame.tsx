@@ -34,8 +34,8 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   shield: { name: 'シールド', desc: '次の自動供給を1回無効化' },
   clear: { name: 'おじゃま一掃', desc: 'バックログのおじゃまを消す' },
   brake: { name: 'ブレーキ', desc: '自動供給を5秒間ストップ' },
-  longbomb: { name: 'ロング送信', desc: '相手に長文(相殺不可)を送りつける' },
-  rapid: { name: '連射', desc: '8秒間 1クリアごとに1攻撃' },
+  longbomb: { name: 'ロング送信', desc: '相手へ長文おじゃま(相殺不可)を送る' },
+  rapid: { name: '連射', desc: '8秒間 1クリアごとにおじゃま+1' },
   keep: { name: '連鎖キープ', desc: '10秒間ミスしても連鎖が切れない' },
   shrink: { name: '短縮', desc: '溜まったワードを全て短い単語に変換' },
   parry: { name: '受け流し', desc: '一定時間 被攻撃を他の相手に逸らす' },
@@ -50,12 +50,12 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   freeze: { name: 'フリーズ', desc: '5秒間 着弾予告と自動供給を停止' },
   purge: { name: '大掃除', desc: 'バックログを全消去（逆転のチャンス）' },
   guard: { name: 'ガード', desc: '次の自動供給を2回ぶん防ぐ' },
-  snipe: { name: '狙撃', desc: '狙った相手へ即+3' },
-  burst: { name: 'バースト', desc: '全ての相手へ一斉に+2' },
-  heavy: { name: '強撃', desc: '連鎖に応じた大攻撃を即送信' },
-  flood: { name: 'フラッド', desc: '相手へ大量(+4)のおじゃま' },
-  drain: { name: 'ドレイン', desc: '自分を2減らし相手へ+2' },
-  mirror: { name: 'ミラー', desc: '不利なほど強い反撃を送る' },
+  snipe: { name: '狙撃', desc: '狙った相手へおじゃま+3' },
+  burst: { name: 'バースト', desc: '全ての相手へおじゃま+2' },
+  heavy: { name: '強撃', desc: '連鎖に応じたおじゃまを即送信' },
+  flood: { name: 'フラッド', desc: '相手へおじゃま+4' },
+  drain: { name: 'ドレイン', desc: '自分を2減らし相手へおじゃま+2' },
+  mirror: { name: 'ミラー', desc: '不利なほど強いおじゃまを送る' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡',
@@ -162,7 +162,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [pending, setPending] = useState<Telegraph[]>([]);
   const [attackFlash, setAttackFlash] = useState<{ amount: number; name: string } | null>(null);
   // アイテムは攻撃/防御/妨害の3スロットで保持。Spaceで選択切替、Enterで発動。
-  const [slots, setSlots] = useState<Record<ItemCat, ItemType | null>>({ attack: null, defense: null, disrupt: null });
+  const [slots, setSlots] = useState<Record<ItemCat, ItemType | null>>({ attack: null, defense: null, timed: null });
   const [selectedSlot, setSelectedSlot] = useState<ItemCat>('attack');
   const [itemFlash, setItemFlash] = useState(false);
   const [targetMode, setTargetMode] = useState<TargetMode>('random');
@@ -328,9 +328,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     endTimeRef.current = 0;
     setKeysTyped(0);
     setMissCount(0);
-    setSlots({ attack: null, defense: null, disrupt: null });
+    setSlots({ attack: null, defense: null, timed: null });
     setSelectedSlot('attack');
-    slotsRef.current = { attack: null, defense: null, disrupt: null };
+    slotsRef.current = { attack: null, defense: null, timed: null };
     // 新しいゲーム開始時に自分の状態をリセット（再戦対応）。
     writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '' });
   }, [seed, roomId, uid, genWord]);
@@ -824,16 +824,16 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       if (settingsOpenRef.current) return; // 設定モーダル表示中はゲーム操作を受け付けない
       resumeAudio();
       if (!started || !selfAliveRef.current) return;
-      // キーコンフィグに従ってアイテム操作・ターゲット切替。
+      // キーコンフィグ(code)に従ってアイテム操作・ターゲット切替。
       const kc = keyConfigRef.current;
-      if (e.key === kc.target) { e.preventDefault(); cycleTargetMode(); return; }
+      if (e.code === kc.target) { e.preventDefault(); cycleTargetMode(); return; }
       if (kc.inputMode === 'cycle') {
-        if (e.key === kc.cycle) { e.preventDefault(); cycleSlot(); return; }
-        if (e.key === kc.fire) { e.preventDefault(); fireSelected(); return; }
+        if (e.code === kc.cycle) { e.preventDefault(); cycleSlot(); return; }
+        if (e.code === kc.fire) { e.preventDefault(); fireSelected(); return; }
       } else {
         let handled = false;
         for (const cat of CAT_ORDER) {
-          if (e.key === kc.slots[cat]) { e.preventDefault(); fireSlot(cat); handled = true; break; }
+          if (e.code === kc.slots[cat]) { e.preventDefault(); fireSlot(cat); handled = true; break; }
         }
         if (handled) return;
       }

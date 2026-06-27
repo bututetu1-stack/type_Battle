@@ -64,7 +64,7 @@ export type ItemType =
   | 'mirror'; // 自分が不利なほど強い反撃を送る
 
 // アイテムの大分類（演出/説明用）。
-export type ItemCategory = 'defense' | 'attack' | 'disrupt' | 'boss';
+export type ItemCategory = 'defense' | 'attack' | 'timed' | 'boss';
 
 // ゲームモード。royale=バトルロワイヤル（全員対全員）, boss=多対一（挑戦者 対 ボス）。
 export type GameMode = 'royale' | 'boss';
