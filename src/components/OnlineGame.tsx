@@ -216,7 +216,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
   const [hitId, setHitId] = useState<string | null>(null); // 自分が攻撃した相手
   const [incomingId, setIncomingId] = useState<string | null>(null); // 自分を攻撃してきた相手
-  const [toasts, setToasts] = useState<{ id: number; text: string; kind: 'ko' | 'in' | 'item' }[]>([]);
+  const [toasts, setToasts] = useState<{ id: number; text: string; kind: 'ko' | 'in' | 'item'; at: number }[]>([]);
   const [shake, setShake] = useState(false);
   const [damageFlash, setDamageFlash] = useState(false); // 被弾時の赤フラッシュ
   const [useFlash, setUseFlash] = useState<ItemType | null>(null); // 自分のアイテム発動演出
@@ -297,8 +297,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
   const pushToast = useCallback((text: string, kind: 'ko' | 'in' | 'item') => {
     const id = toastIdRef.current++;
-    setToasts((t) => [...t, { id, text, kind }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 1700);
+    setToasts((t) => [...t, { id, text, kind, at: Date.now() }].slice(-24));
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 5000);
   }, []);
 
   const addBeam = useCallback((x1: number, y1: number, x2: number, y2: number, color: string) => {
@@ -1347,25 +1347,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </svg>
       )}
 
-      {/* 通知トースト（被弾・撃破・脱落・アイテム） */}
-      <div className="fixed top-20 right-4 z-50 flex flex-col gap-1 items-end pointer-events-none">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className={`px-3 py-1.5 rounded-lg text-sm font-bold shadow-lg animate-in slide-in-from-right-4 fade-in duration-200 ${
-              t.kind === 'ko'
-                ? 'bg-orange-600/90 text-white'
-                : t.kind === 'item'
-                  ? 'bg-yellow-600/90 text-black'
-                  : 'bg-red-950/90 text-red-200 border border-red-500/40'
-            }`}
-          >
-            {t.kind === 'ko' ? '🏆 ' : t.kind === 'item' ? '✨ ' : '⚠ '}
-            {t.text}
-          </div>
-        ))}
-      </div>
-
       {/* 自分のアイテム発動演出（名前＋ざっくり効果説明） */}
       {useFlash && (
         <div className="fixed top-[8.5rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in zoom-in duration-200 flex flex-col items-center gap-1">
@@ -1380,9 +1361,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       {boardFx && (
         <>
           <div className="fixed inset-0 pointer-events-none z-40 board-fx-flash" style={{ boxShadow: 'inset 0 0 160px 50px rgba(217,70,239,0.45)' }} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-            <div className="board-fx-banner bg-fuchsia-600/95 text-white font-black text-2xl px-7 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border-2 border-white/50">
-              <span className="text-3xl">{ITEM_EMOJI[boardFx]}</span>
+          <div className="fixed inset-x-0 bottom-6 z-50 flex justify-center pointer-events-none">
+            <div className="board-fx-banner bg-fuchsia-600/95 text-white font-black text-xl px-6 py-2.5 rounded-2xl shadow-2xl flex items-center gap-3 border-2 border-white/50">
+              <span className="text-2xl">{ITEM_EMOJI[boardFx]}</span>
               盤面が変化！ <span className="text-fuchsia-100">{ITEM_META[boardFx].name}</span>
             </div>
           </div>
@@ -1579,6 +1560,32 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               <div className="font-mono text-2xl font-bold text-gray-300">
                 {aliveCount}
                 <span className="text-sm text-gray-600"> / {totalCount}</span>
+              </div>
+            </div>
+
+            {/* ログ（ALIVEの下・入力の右側の空白を使用）。上＝アイテム使用 / 下＝攻撃・撃破 */}
+            <div className="absolute top-16 right-0 w-40 z-20 flex flex-col gap-2 pointer-events-none">
+              <div>
+                <div className="text-[9px] font-bold text-yellow-300/80 mb-0.5 text-right">アイテム使用</div>
+                <div className="flex flex-col gap-0.5 items-end">
+                  {toasts.filter((t) => t.kind === 'item').slice(-5).map((t) => (
+                    <div key={t.id} className="max-w-full truncate px-2 py-0.5 rounded bg-yellow-600/80 text-black text-[10px] font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200">
+                      ✨ {t.text}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-[9px] font-bold text-orange-300/80 mb-0.5 text-right">攻撃・撃破</div>
+                <div className="flex flex-col gap-0.5 items-end">
+                  {toasts.filter((t) => t.kind === 'ko' || t.kind === 'in').slice(-6).map((t) => (
+                    <div key={t.id} className={`max-w-full truncate px-2 py-0.5 rounded text-[10px] font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200 ${
+                      t.kind === 'ko' ? 'bg-orange-600/85 text-white' : 'bg-red-950/85 text-red-200 border border-red-500/40'
+                    }`}>
+                      {t.kind === 'ko' ? '🏆 ' : '⚠ '}{t.text}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
