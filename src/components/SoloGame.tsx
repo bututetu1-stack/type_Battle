@@ -1296,17 +1296,20 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}
 
-          {/* 着弾予告ゲージ（CPUからの攻撃）。列全体に固定配置し、効果ゲージ出現でも上下しない。 */}
-          {totalIncoming > 0 && gameState === 'playing' && (
-            <div className="absolute left-0 top-[18%] bottom-24 z-20 flex flex-col items-center justify-end gap-1 pointer-events-none">
-              <div className="text-sm font-bold text-red-400 mb-1 animate-pulse">⚠ {totalIncoming}</div>
-              {/* 段階式ゲージ：1おじゃま=固定長ブロックを下から量ぶん積み上げる（大きめ＝視認性UP）。 */}
-              <div className="w-6 flex-1 flex flex-col-reverse justify-start gap-[4px] overflow-hidden">
-                {Array.from({ length: Math.min(totalIncoming, maxBacklog) }).map((_, i) => (
-                  <div key={i} className="w-full h-[18px] shrink-0 rounded bg-red-500 border border-red-300/50 shadow-[0_0_7px_rgba(239,68,68,0.65)]" />
-                ))}
+          {/* 着弾予告ゲージ（CPUからの攻撃）。固定長トラックを常に表示し、下から量ぶん点灯。
+              トラック全体のサイズは一定なので、量が増減してもウィジェットは上下しない。 */}
+          {gameState === 'playing' && (
+            <div className={`absolute left-0 bottom-24 z-20 flex flex-col items-center gap-1 pointer-events-none transition-opacity duration-200 ${totalIncoming > 0 ? 'opacity-100' : 'opacity-0'}`}>
+              <div className="text-sm font-bold text-red-400 mb-0.5 animate-pulse h-5">{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
+              <div className="w-6 flex flex-col-reverse gap-[4px]">
+                {Array.from({ length: Math.min(maxBacklog, 16) }).map((_, i) => {
+                  const filled = i < Math.min(totalIncoming, 16);
+                  return (
+                    <div key={i} className={`w-full h-[16px] rounded ${filled ? 'bg-red-500 border border-red-300/50 shadow-[0_0_7px_rgba(239,68,68,0.65)]' : 'bg-neutral-800/50 border border-neutral-700/40'}`} />
+                  );
+                })}
               </div>
-              <div className="text-[10px] text-gray-400 text-center leading-tight">おじゃま<br />着弾予告</div>
+              <div className="text-[10px] text-gray-400 text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
             </div>
           )}
 
