@@ -22,7 +22,7 @@ import AttackGauge from './AttackGauge';
 const MAX_BACKLOG = 12;
 const INITIAL_SPAWN_INTERVAL = 4000;
 const MIN_SPAWN_INTERVAL = 1000;
-const WRITE_INTERVAL = 400;
+const WRITE_INTERVAL = 150; // サマリ書込み間隔。観戦の入力画面を滑らかに見せるため短め（小さなJSONなので負荷は軽微）。
 const TELEGRAPH_DELAY = 2500; // 着弾予告→確定までの猶予（相殺の反応時間を確保）
 const PINCH_RATIO = 0.7;
 const PINCH_MULT = 1.5;
@@ -833,6 +833,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         else for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord());
       }
       if (words.length > 0) {
+        sfx.damage(); // 被弾SE（おじゃまが実際にバックログへ入った瞬間）
         setBacklog((prev) => {
           const next = [...prev, ...words];
           if (next.length > selfMax) {
@@ -1026,6 +1027,19 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const bossAlive = bossMode ? !!bossPlayer && isLive(bossPlayer) : false;
   const bossHp = bossPlayer ? Math.max(0, BOSS_MAX_BACKLOG - (bossPlayer.backlog || 0)) : 0;
 
+  // 観戦: 脱落したら自分の入力画面を他プレイヤーの入力画面に切り替える。
+  // 観戦対象が未選択/脱落した場合は、自分を倒した相手→先頭の生存者の順で自動選択。
+  useEffect(() => {
+    if (selfAlive || status !== 'playing') return;
+    const aliveOthers = Object.entries(players).filter(([id, p]) => id !== uid && isLive(p));
+    if (aliveOthers.length === 0) { if (watchId) setWatchId(null); return; }
+    if (!watchId || !aliveOthers.some(([id]) => id === watchId)) {
+      const koBy = lastAttackerRef.current;
+      const pref = aliveOthers.find(([id]) => id === koBy) ?? aliveOthers[0];
+      setWatchId(pref[0]);
+    }
+  }, [selfAlive, status, players, uid, watchId]);
+
   // 発動中の時間制限アイテム（残り時間カウントダウン表示用）。
   const activeEffects: { type: ItemType; until: number; color: string }[] = (
     [
@@ -1200,38 +1214,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       {!selfAlive && status === 'playing' && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 bg-red-950/80 border border-red-500/40 rounded-lg px-6 py-2 text-center">
           <div className="text-red-300 font-bold">TOP OUT — {rank} 位</div>
-          <div className="text-xs text-gray-400">観戦中… 盤面をクリックすると入力画面を覗けます</div>
+          <div className="text-xs text-gray-400">観戦中… 盤面をクリックで観戦相手を切り替え</div>
         </div>
       )}
-
-      {/* 観戦: 選んだプレイヤーの現在ワードと入力進捗を表示 */}
-      {watchId && !selfAlive && (() => {
-        const wp = players[watchId];
-        if (!wp || !isLive(wp)) return null;
-        const reading = wp.curReading ?? '';
-        const idx = Math.min(wp.curIdx ?? 0, reading.length);
-        return (
-          <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[min(92vw,28rem)] bg-neutral-900/95 border border-cyan-500/40 rounded-xl px-5 py-3 shadow-2xl backdrop-blur">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-bold text-cyan-300 flex items-center gap-1">👁 {wp.name} を観戦中</span>
-              <button onClick={() => setWatchId(null)} className="text-gray-500 hover:text-gray-200 text-xs">✕ 閉じる</button>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-100">{wp.curDisplay || '—'}</div>
-              <div className="text-base font-mono tracking-wide mt-1">
-                <span className="text-gray-600">{reading.slice(0, idx)}</span>
-                <span className="text-cyan-200">{reading.slice(idx)}</span>
-              </div>
-              <div className="text-sm font-mono text-emerald-300 mt-1 min-h-[1.25rem]">{wp.curTyping || ''}<span className="animate-pulse">▍</span></div>
-            </div>
-            <div className="flex justify-between text-[11px] text-gray-500 mt-2">
-              <span>残り {wp.backlog} 個</span>
-              <span>{wp.combo} 連鎖</span>
-              <span>{wp.kpm} KPM</span>
-            </div>
-          </div>
-        );
-      })()}
 
       <header className="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-neutral-900/50 z-10">
         <div className="flex items-center gap-3">
@@ -1260,8 +1245,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </div>
       </header>
 
-      <main className="flex-1 flex w-full max-w-7xl mx-auto p-4 gap-4 h-[calc(100vh-4rem)]">
-        <div className="w-1/4 grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 content-start">
+      <main className="flex-1 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]">
+        <div className="flex-1 grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {others.slice(0, Math.ceil(others.length / 2)).map(([id, p]) => (
             <div
               key={id}
@@ -1288,6 +1273,44 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           {isDanger && selfAlive && started && (
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}
+          {/* 観戦オーバーレイ: 脱落したら中央の自分の入力画面を観戦相手の入力画面に置き換える。 */}
+          {!selfAlive && status === 'playing' && (() => {
+            const wp = watchId ? players[watchId] : undefined;
+            if (!wp) return (
+              <div className="absolute inset-0 z-30 flex items-center justify-center text-gray-500">観戦できるプレイヤーがいません</div>
+            );
+            const reading = wp.curReading ?? '';
+            const idx = Math.min(wp.curIdx ?? 0, reading.length);
+            const wpMax = bossMode && watchId === bossUid ? BOSS_MAX_BACKLOG : MAX_BACKLOG;
+            return (
+              <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-neutral-950/95 rounded-2xl px-4">
+                <div className="text-sm font-bold text-cyan-300 flex items-center gap-2">👁 {wp.name} を観戦中</div>
+                {/* 残りバックログ（HP）バー */}
+                <div className="w-full max-w-xs">
+                  <div className="flex justify-between text-[11px] text-gray-500 mb-0.5">
+                    <span>残り {wp.backlog} / {wpMax}</span>
+                    <span>{wp.combo ?? 0} 連鎖 · {wp.kpm ?? 0} KPM</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-neutral-800 overflow-hidden border border-neutral-700">
+                    <div
+                      className={`h-full transition-[width] duration-200 ${wp.backlog >= wpMax - 3 ? 'bg-red-500' : 'bg-cyan-500'}`}
+                      style={{ width: `${Math.min(100, (wp.backlog / wpMax) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+                {/* 現在のワードと入力進捗 */}
+                <div className="w-full max-w-lg bg-neutral-900/80 border border-cyan-500/30 rounded-xl px-6 py-8 text-center shadow-2xl">
+                  <div className="text-4xl font-black text-gray-100 mb-3 break-all">{wp.curDisplay || '—'}</div>
+                  <div className="text-xl font-mono tracking-wide">
+                    <span className="text-gray-600">{reading.slice(0, idx)}</span>
+                    <span className="text-cyan-200">{reading.slice(idx)}</span>
+                  </div>
+                  <div className="text-lg font-mono text-emerald-300 mt-3 min-h-[1.5rem]">{wp.curTyping || ''}<span className="animate-pulse">▍</span></div>
+                </div>
+                <div className="text-[11px] text-gray-600">他の盤面をクリックすると観戦相手を切り替えられます</div>
+              </div>
+            );
+          })()}
           <div className="flex-1 flex flex-col items-center justify-end pb-8 relative z-10">
             {/* ボスモードの状況表示（挑戦者にはボスHP、ボスには自分のHP）。 */}
             {bossMode && started && (
@@ -1498,7 +1521,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           </div>
         </div>
 
-        <div className="w-1/4 grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 content-start">
+        <div className="flex-1 grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {others.slice(Math.ceil(others.length / 2)).map(([id, p]) => (
             <div
               key={id}

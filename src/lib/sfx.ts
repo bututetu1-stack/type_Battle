@@ -72,6 +72,11 @@ export const sfx = {
     blip(300, 0.18, 'sawtooth', 0.07);
     blip(150, 0.22, 'sawtooth', 0.07, 0.1);
   },
+  // 被弾（攻撃を受けた）: 鈍い下降音。
+  damage: () => {
+    blip(220, 0.1, 'square', 0.07);
+    blip(130, 0.16, 'sawtooth', 0.06, 0.05);
+  },
   eliminate: () => {
     blip(330, 0.1, 'triangle', 0.05);
     blip(196, 0.16, 'triangle', 0.05, 0.07);

@@ -920,6 +920,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         else for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord());
       }
       if (words.length === 0) return;
+      sfx.damage(); // 被弾SE（おじゃまが実際にバックログへ入った瞬間）
       setBacklog((prev) => {
         const next = [...prev, ...words];
         if (next.length >= maxBacklogRef.current) {
@@ -1174,8 +1175,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         </div>
       </header>
 
-      <main className="flex-1 flex w-full max-w-7xl mx-auto p-4 gap-4 h-[calc(100vh-4rem)]">
-        <div className="w-1/4 grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 content-start">
+      <main className="flex-1 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]">
+        <div className="flex-1 grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {dummies.slice(0, Math.ceil(dummies.length / 2)).map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
               <MiniBoard
@@ -1643,7 +1644,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           )}
         </div>
 
-        <div className="w-1/4 grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-2 content-start">
+        <div className="flex-1 grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {dummies.slice(Math.ceil(dummies.length / 2)).map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
               <MiniBoard
