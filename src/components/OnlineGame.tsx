@@ -1648,10 +1648,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             {totalIncoming > 0 && (
               <div className="absolute left-0 bottom-8 top-1/3 flex flex-col items-center justify-end gap-1">
                 <div className="text-xs font-bold text-red-400 mb-1 animate-pulse">⚠ {totalIncoming}</div>
-                {/* 段階式ゲージ：1おじゃま=1ブロック。切れ目を空けて視認性を上げる。 */}
-                <div className="w-4 flex-1 flex flex-col-reverse gap-[3px] justify-start">
+                {/* 段階式ゲージ：1おじゃま=固定長ブロックを下から量ぶん積み上げる。 */}
+                <div className="w-4 flex-1 flex flex-col-reverse justify-start gap-[3px] overflow-hidden">
                   {Array.from({ length: Math.min(totalIncoming, MAX_BACKLOG) }).map((_, i) => (
-                    <div key={i} className="w-full flex-1 min-h-[6px] rounded-[3px] bg-red-500 border border-red-300/40 shadow-[0_0_5px_rgba(239,68,68,0.55)]" />
+                    <div key={i} className="w-full h-3 shrink-0 rounded-[3px] bg-red-500 border border-red-300/40 shadow-[0_0_5px_rgba(239,68,68,0.55)]" />
                   ))}
                 </div>
                 <div className="text-[9px] text-gray-500 text-center leading-tight">おじゃま<br />着弾予告</div>
