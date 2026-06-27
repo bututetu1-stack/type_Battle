@@ -7,7 +7,7 @@ import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, THEMES, toggleThemeSelection } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
-import { ITEM_CAT, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode } from '../lib/items';
+import { ITEM_CAT, ITEM_RARITY, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode } from '../lib/items';
 import { loadKeyConfig, keyLabel, type KeyConfig } from '../lib/keyconfig';
 import PlayerSettings from './PlayerSettings';
 import type { Dummy, GameStatus, ItemType, TargetMode, Word } from '../lib/types';
@@ -622,23 +622,16 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const ratio = Math.min(1, stateRef.current.backlog.length / maxBacklogRef.current);
     const weighted: { item: ItemType; w: number }[] = [];
     for (const it of ALL_ITEMS) {
-      if (it === 'gaugedown') {
-        if (gaugeDownObtainedRef.current) continue; // 一人一個まで
-        weighted.push({ item: it, w: 0.25 + ratio * 1.0 }); // 低確率・不利ほど出やすい
-      } else if (it === 'maxhp') {
-        if (hpUpCountRef.current >= MAX_HP_UP) continue; // 上限に達したら出さない
-        weighted.push({ item: it, w: 0.5 }); // レア寄り
-      } else if (it === 'luck') {
-        weighted.push({ item: it, w: 0.6 }); // やや低確率
-      } else if (it === 'goldify') {
-        weighted.push({ item: it, w: 0.5 + ratio * 1.0 }); // 不利ほど出やすい
-      } else if (it === 'shrink') {
-        weighted.push({ item: it, w: 0.5 + ratio * 1.8 }); // 不利ほど出やすい
-      } else if (it === 'totem') {
-        weighted.push({ item: it, w: 0.7 });
-      } else {
-        weighted.push({ item: it, w: 1 });
-      }
+      if (it === 'gaugedown' && gaugeDownObtainedRef.current) continue; // 一人一個まで
+      if (it === 'maxhp' && hpUpCountRef.current >= MAX_HP_UP) continue; // 上限に達したら出さない
+      // 基本重み（逆転系は不利なほど出やすい）。
+      let w = 1;
+      if (it === 'gaugedown') w = 0.25 + ratio * 1.0;
+      else if (it === 'shrink') w = 0.5 + ratio * 1.8;
+      else if (it === 'goldify') w = 0.5 + ratio * 1.0;
+      // レアリティ係数を乗算（トーテム/大掃除などの強力アイテムを抑える）。
+      w *= ITEM_RARITY[it] ?? 1;
+      weighted.push({ item: it, w });
     }
     const total = weighted.reduce((s, x) => s + x.w, 0);
     let acc = r * total;

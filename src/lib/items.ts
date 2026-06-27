@@ -33,6 +33,29 @@ export const ITEM_CAT: Record<ItemType, ItemCat> = {
   reflect: 'timed', overcharge: 'timed', siphon: 'timed',
 };
 
+// アイテムのレアリティ係数（ドロップ重みの乗数。1.0=標準、低いほど出にくい）。
+// 強力すぎて出すぎると感じるものを抑える。未指定は 1.0。
+export const ITEM_RARITY: Partial<Record<ItemType, number>> = {
+  totem: 0.3, // 不死のトーテム（一定時間無敵級）→ かなりレアに
+  purge: 0.4, // 大掃除（盤面ほぼリセット）→ レアに
+  gaugedown: 0.7,
+  freeze: 0.6,
+  guard: 0.7,
+  barrier: 0.75,
+  maxhp: 0.7,
+  luck: 0.8,
+  goldify: 0.8,
+  meteor: 0.6,
+  quake: 0.5,
+  regen: 0.7,
+  longbomb: 0.8,
+  reflect: 0.7,
+  overcharge: 0.8,
+  siphon: 0.7,
+  thunder: 0.7,
+  jammer: 0.7,
+};
+
 export const CAT_META: { key: ItemCat; label: string; color: string }[] = [
   { key: 'attack', label: '攻撃', color: 'text-orange-300' },
   { key: 'defense', label: '防御', color: 'text-cyan-300' },

@@ -11,7 +11,7 @@ import {
   type RoomPlayer, type RoomStatus,
 } from '../lib/room';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
-import { ITEM_CAT, CAT_META, CAT_ORDER, type ItemPrefs, type ItemCat, type UseMode } from '../lib/items';
+import { ITEM_CAT, ITEM_RARITY, CAT_META, CAT_ORDER, type ItemPrefs, type ItemCat, type UseMode } from '../lib/items';
 import { loadKeyConfig, keyLabel, type KeyConfig } from '../lib/keyconfig';
 import PlayerSettings from './PlayerSettings';
 import type { GameMode, ItemType, TargetMode, Word } from '../lib/types';
@@ -813,6 +813,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       let w = 1;
       if (kind === 'def') w = 1 + disadv * 2.5;
       else if (kind === 'atk') w = 1 + (1 - disadv) * 2.5;
+      w *= ITEM_RARITY[it] ?? 1; // レアリティ係数（大掃除など強力アイテムを抑える）
       return { it, w };
     });
     const total = weighted.reduce((s, x) => s + x.w, 0);
