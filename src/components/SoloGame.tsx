@@ -4,7 +4,7 @@ import {
   Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine, Settings,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
-import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, THEMES } from '../lib/words';
+import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, THEMES, toggleThemeSelection } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
 import { ITEM_CAT, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode } from '../lib/items';
@@ -479,7 +479,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       } else if (item === 'shrink') {
         // 溜まっているワード（処理待ちの山）を全て短い単語に変換して打ちやすくする。
         // いま打っている先頭(index 0)はそのまま残す。
-        setBacklog((prev) => prev.map((w, i) => (i === 0 ? w : makeShortWord(w.type))));
+        setBacklog((prev) => prev.map((w, i) => (i === 0 ? w : makeShortWord(w.type, themeRef.current))));
       } else if (item === 'parry') {
         parryUntilRef.current = Date.now() + PARRY_DURATION;
       } else if (item === 'gaugedown') {
@@ -494,7 +494,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       else if (item === 'guard') guardCountRef.current = 2;
       else if (item === 'purge') {
         // 大掃除: バックログを丸ごと空にし、簡単な単語を1つだけ残す（逆転のチャンス）。
-        setBacklog([makeShortWord('normal')]);
+        setBacklog([makeShortWord('normal', themeRef.current)]);
         setTokenIndex(0);
         setCurrentTyping('');
         setTypedRomaji([]);
@@ -990,7 +990,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       const words: Word[] = [];
       for (const e of due) {
         if (e.word) words.push(makeOjamaWordFrom(e.word.display, e.word.reading));
-        else for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord());
+        else for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord(themeRef.current));
       }
       if (words.length === 0) return;
       sfx.damage(); // 被弾SE（おじゃまが実際にバックログへ入った瞬間）
@@ -1703,21 +1703,24 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   </div>
                 </div>
 
-              {/* 出題テーマ選択 */}
+              {/* 出題テーマ選択（複数選択可。「すべて」を選ぶと全語彙） */}
               <div className="mb-6 w-full max-w-sm">
-                <div className="text-xs text-gray-500 mb-1.5 text-center">出題テーマ</div>
+                <div className="text-xs text-gray-500 mb-1.5 text-center">出題テーマ（複数選択可）</div>
                 <div className="flex flex-wrap gap-1.5 justify-center">
-                  {THEMES.map((t) => (
-                    <button
-                      key={t.id}
-                      onClick={() => setTheme(t.id)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
-                        theme === t.id ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
+                  {THEMES.map((t) => {
+                    const sel = t.id === 'all' ? theme === 'all' || theme === '' : theme.split(',').includes(t.id);
+                    return (
+                      <button
+                        key={t.id}
+                        onClick={() => setTheme((cur) => toggleThemeSelection(cur, t.id))}
+                        className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
+                          sel ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                        }`}
+                      >
+                        {t.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

@@ -624,6 +624,248 @@ export const WORD_POOL: WordEntry[] = [
   { display: '灯台下暗し', reading: 'とうだいもとくらし' },
   { display: '僕', reading: 'ぼく' },
   { display: 'カジキマグロ', reading: 'かじきまぐろ' },
+  // 語彙拡充: 自然・天気
+  { display: '朝焼け', reading: 'あさやけ' },
+  { display: '夕焼け', reading: 'ゆうやけ' },
+  { display: '雷雨', reading: 'らいう' },
+  { display: '稲妻', reading: 'いなずま' },
+  { display: '虹', reading: 'にじ' },
+  { display: '霜柱', reading: 'しもばしら' },
+  { display: '木枯らし', reading: 'こがらし' },
+  { display: '春一番', reading: 'はるいちばん' },
+  { display: '五月晴れ', reading: 'さつきばれ' },
+  { display: '入道雲', reading: 'にゅうどうぐも' },
+  { display: '蜃気楼', reading: 'しんきろう' },
+  { display: '大気圏', reading: 'たいきけん' },
+  { display: '成層圏', reading: 'せいそうけん' },
+  { display: '偏西風', reading: 'へんせいふう' },
+  { display: '黄砂', reading: 'こうさ' },
+  { display: '小春日和', reading: 'こはるびより' },
+  { display: '木漏れ日', reading: 'こもれび' },
+  { display: '砂浜', reading: 'すなはま' },
+  { display: '干潟', reading: 'ひがた' },
+  { display: '渓谷', reading: 'けいこく' },
+  { display: '鍾乳洞', reading: 'しょうにゅうどう' },
+  { display: '溶岩', reading: 'ようがん' },
+  { display: '地殻', reading: 'ちかく' },
+  { display: '断層', reading: 'だんそう' },
+  { display: '満月', reading: 'まんげつ' },
+  { display: '三日月', reading: 'みかづき' },
+  { display: '流れ星', reading: 'ながれぼし' },
+  { display: '銀河', reading: 'ぎんが' },
+  { display: '彗星', reading: 'すいせい' },
+  { display: '日食', reading: 'にっしょく' },
+  // 語彙拡充: 動物・生き物
+  { display: '麒麟', reading: 'きりん' },
+  { display: '駱駝', reading: 'らくだ' },
+  { display: '栗鼠', reading: 'りす' },
+  { display: '土竜', reading: 'もぐら' },
+  { display: '蝙蝠', reading: 'こうもり' },
+  { display: '梟', reading: 'ふくろう' },
+  { display: '啄木鳥', reading: 'きつつき' },
+  { display: '翡翠', reading: 'かわせみ' },
+  { display: '雲雀', reading: 'ひばり' },
+  { display: '燕', reading: 'つばめ' },
+  { display: '鶯', reading: 'うぐいす' },
+  { display: '蟷螂', reading: 'かまきり' },
+  { display: '兜虫', reading: 'かぶとむし' },
+  { display: '鍬形', reading: 'くわがた' },
+  { display: '蛍', reading: 'ほたる' },
+  { display: '蜻蛉', reading: 'とんぼ' },
+  { display: '海月', reading: 'くらげ' },
+  { display: '海星', reading: 'ひとで' },
+  { display: '蛸', reading: 'たこ' },
+  { display: '烏賊', reading: 'いか' },
+  { display: '鮟鱇', reading: 'あんこう' },
+  { display: '河豚', reading: 'ふぐ' },
+  { display: '鰻', reading: 'うなぎ' },
+  { display: '鯨', reading: 'くじら' },
+  { display: '海豚', reading: 'いるか' },
+  { display: '海獺', reading: 'らっこ' },
+  { display: '樹懶', reading: 'なまけもの' },
+  { display: '狐', reading: 'きつね' },
+  { display: '狸', reading: 'たぬき' },
+  { display: '狼', reading: 'おおかみ' },
+  // 語彙拡充: 食べ物
+  { display: '唐揚げ', reading: 'からあげ' },
+  { display: '天ぷら', reading: 'てんぷら' },
+  { display: '刺身', reading: 'さしみ' },
+  { display: '蕎麦', reading: 'そば' },
+  { display: '饂飩', reading: 'うどん' },
+  { display: '餃子', reading: 'ぎょうざ' },
+  { display: '焼売', reading: 'しゅうまい' },
+  { display: '麻婆豆腐', reading: 'まーぼーどうふ' },
+  { display: '回鍋肉', reading: 'ほいこーろー' },
+  { display: '青椒肉絲', reading: 'ちんじゃおろーす' },
+  { display: '酢豚', reading: 'すぶた' },
+  { display: '春巻き', reading: 'はるまき' },
+  { display: '肉まん', reading: 'にくまん' },
+  { display: '大福', reading: 'だいふく' },
+  { display: '羊羹', reading: 'ようかん' },
+  { display: '最中', reading: 'もなか' },
+  { display: '煎餅', reading: 'せんべい' },
+  { display: '饅頭', reading: 'まんじゅう' },
+  { display: '善哉', reading: 'ぜんざい' },
+  { display: '雑炊', reading: 'ぞうすい' },
+  { display: '味噌汁', reading: 'みそしる' },
+  { display: '漬物', reading: 'つけもの' },
+  { display: '卵焼き', reading: 'たまごやき' },
+  { display: '目玉焼き', reading: 'めだまやき' },
+  { display: '茶碗蒸し', reading: 'ちゃわんむし' },
+  { display: '肉じゃが', reading: 'にくじゃが' },
+  { display: '豚汁', reading: 'とんじる' },
+  { display: '牛丼', reading: 'ぎゅうどん' },
+  { display: '親子丼', reading: 'おやこどん' },
+  { display: '天丼', reading: 'てんどん' },
+  { display: '海鮮丼', reading: 'かいせんどん' },
+  { display: '焼き鳥', reading: 'やきとり' },
+  // 語彙拡充: 体・健康
+  { display: '鎖骨', reading: 'さこつ' },
+  { display: '肩甲骨', reading: 'けんこうこつ' },
+  { display: '背骨', reading: 'せぼね' },
+  { display: '肋骨', reading: 'ろっこつ' },
+  { display: '骨盤', reading: 'こつばん' },
+  { display: '関節', reading: 'かんせつ' },
+  { display: '筋肉', reading: 'きんにく' },
+  { display: '心臓', reading: 'しんぞう' },
+  { display: '肝臓', reading: 'かんぞう' },
+  { display: '腎臓', reading: 'じんぞう' },
+  { display: '血管', reading: 'けっかん' },
+  { display: '神経', reading: 'しんけい' },
+  { display: '細胞', reading: 'さいぼう' },
+  { display: '免疫', reading: 'めんえき' },
+  { display: '体温', reading: 'たいおん' },
+  { display: '血圧', reading: 'けつあつ' },
+  { display: '脈拍', reading: 'みゃくはく' },
+  { display: '呼吸', reading: 'こきゅう' },
+  { display: '消化', reading: 'しょうか' },
+  { display: '代謝', reading: 'たいしゃ' },
+  // 語彙拡充: 感情・心
+  { display: '喜び', reading: 'よろこび' },
+  { display: '悲しみ', reading: 'かなしみ' },
+  { display: '怒り', reading: 'いかり' },
+  { display: '驚き', reading: 'おどろき' },
+  { display: '恐れ', reading: 'おそれ' },
+  { display: '緊張', reading: 'きんちょう' },
+  { display: '興奮', reading: 'こうふん' },
+  { display: '退屈', reading: 'たいくつ' },
+  { display: '憧れ', reading: 'あこがれ' },
+  { display: '嫉妬', reading: 'しっと' },
+  { display: '後悔', reading: 'こうかい' },
+  { display: '感謝', reading: 'かんしゃ' },
+  { display: '尊敬', reading: 'そんけい' },
+  { display: '信頼', reading: 'しんらい' },
+  { display: '希望', reading: 'きぼう' },
+  { display: '絶望', reading: 'ぜつぼう' },
+  { display: '勇気', reading: 'ゆうき' },
+  { display: '覚悟', reading: 'かくご' },
+  { display: '我慢', reading: 'がまん' },
+  { display: '辛抱', reading: 'しんぼう' },
+  // 語彙拡充: 動作（動詞）
+  { display: '走る', reading: 'はしる' },
+  { display: '跳ねる', reading: 'はねる' },
+  { display: '潜る', reading: 'もぐる' },
+  { display: '滑る', reading: 'すべる' },
+  { display: '転がる', reading: 'ころがる' },
+  { display: '味わう', reading: 'あじわう' },
+  { display: '閃く', reading: 'ひらめく' },
+  { display: '諦める', reading: 'あきらめる' },
+  { display: '挑む', reading: 'いどむ' },
+  { display: '競う', reading: 'きそう' },
+  { display: '戦う', reading: 'たたかう' },
+  { display: '攻める', reading: 'せめる' },
+  { display: '逃げる', reading: 'にげる' },
+  { display: '隠れる', reading: 'かくれる' },
+  { display: '貫く', reading: 'つらぬく' },
+  { display: '蘇る', reading: 'よみがえる' },
+  { display: '企む', reading: 'たくらむ' },
+  { display: '繕う', reading: 'つくろう' },
+  { display: '労る', reading: 'いたわる' },
+  { display: '紡ぐ', reading: 'つむぐ' },
+  // 語彙拡充: 性質（形容詞・形容動詞）
+  { display: '美しい', reading: 'うつくしい' },
+  { display: '醜い', reading: 'みにくい' },
+  { display: '眩しい', reading: 'まぶしい' },
+  { display: '蒸し暑い', reading: 'むしあつい' },
+  { display: '柔らかい', reading: 'やわらかい' },
+  { display: '鋭い', reading: 'するどい' },
+  { display: '鈍い', reading: 'にぶい' },
+  { display: '賢い', reading: 'かしこい' },
+  { display: '素直', reading: 'すなお' },
+  { display: '頑固', reading: 'がんこ' },
+  { display: '臆病', reading: 'おくびょう' },
+  { display: '大胆', reading: 'だいたん' },
+  { display: '慎重', reading: 'しんちょう' },
+  { display: '丁寧', reading: 'ていねい' },
+  { display: '派手', reading: 'はで' },
+  { display: '地味', reading: 'じみ' },
+  { display: '豪華', reading: 'ごうか' },
+  { display: '質素', reading: 'しっそ' },
+  { display: '気紛れ', reading: 'きまぐれ' },
+  { display: '健気', reading: 'けなげ' },
+  // 語彙拡充: 場所
+  { display: '神社', reading: 'じんじゃ' },
+  { display: '鳥居', reading: 'とりい' },
+  { display: '城跡', reading: 'しろあと' },
+  { display: '桟橋', reading: 'さんばし' },
+  { display: '堤防', reading: 'ていぼう' },
+  { display: '港町', reading: 'みなとまち' },
+  { display: '城下町', reading: 'じょうかまち' },
+  { display: '商店街', reading: 'しょうてんがい' },
+  { display: '路地裏', reading: 'ろじうら' },
+  { display: '交差点', reading: 'こうさてん' },
+  { display: '歩道橋', reading: 'ほどうきょう' },
+  { display: '踏切', reading: 'ふみきり' },
+  { display: '終着駅', reading: 'しゅうちゃくえき' },
+  { display: '展望台', reading: 'てんぼうだい' },
+  { display: '美術館', reading: 'びじゅつかん' },
+  { display: '博物館', reading: 'はくぶつかん' },
+  { display: '水族館', reading: 'すいぞくかん' },
+  { display: '植物園', reading: 'しょくぶつえん' },
+  { display: '遊園地', reading: 'ゆうえんち' },
+  { display: '温泉街', reading: 'おんせんがい' },
+  // 語彙拡充: 科学・技術
+  { display: '人工知能', reading: 'じんこうちのう' },
+  { display: '機械学習', reading: 'きかいがくしゅう' },
+  { display: '暗号資産', reading: 'あんごうしさん' },
+  { display: '量子力学', reading: 'りょうしりきがく' },
+  { display: '相対性理論', reading: 'そうたいせいりろん' },
+  { display: '万有引力', reading: 'ばんゆういんりょく' },
+  { display: '電磁波', reading: 'でんじは' },
+  { display: '半導体', reading: 'はんどうたい' },
+  { display: '集積回路', reading: 'しゅうせきかいろ' },
+  { display: '周波数', reading: 'しゅうはすう' },
+  { display: '真空', reading: 'しんくう' },
+  { display: '原子核', reading: 'げんしかく' },
+  { display: '中性子', reading: 'ちゅうせいし' },
+  { display: '元素', reading: 'げんそ' },
+  { display: '周期表', reading: 'しゅうきひょう' },
+  { display: '光合成', reading: 'こうごうせい' },
+  { display: '遺伝子', reading: 'いでんし' },
+  { display: '進化論', reading: 'しんかろん' },
+  { display: '微生物', reading: 'びせいぶつ' },
+  { display: '生態系', reading: 'せいたいけい' },
+  // 語彙拡充: 文化・その他
+  { display: '太極拳', reading: 'たいきょくけん' },
+  { display: '流鏑馬', reading: 'やぶさめ' },
+  { display: '相撲', reading: 'すもう' },
+  { display: '横綱', reading: 'よこづな' },
+  { display: '土俵', reading: 'どひょう' },
+  { display: '歌舞伎', reading: 'かぶき' },
+  { display: '浄瑠璃', reading: 'じょうるり' },
+  { display: '落語', reading: 'らくご' },
+  { display: '茶道', reading: 'さどう' },
+  { display: '華道', reading: 'かどう' },
+  { display: '盆栽', reading: 'ぼんさい' },
+  { display: '折り紙', reading: 'おりがみ' },
+  { display: '風鈴', reading: 'ふうりん' },
+  { display: '提灯', reading: 'ちょうちん' },
+  { display: '浴衣', reading: 'ゆかた' },
+  { display: '草履', reading: 'ぞうり' },
+  { display: '扇子', reading: 'せんす' },
+  { display: '蝋燭', reading: 'ろうそく' },
+  { display: '行灯', reading: 'あんどん' },
+  { display: '屏風', reading: 'びょうぶ' },
 ];
 
 // ローマ字入力マッピング（柔軟な入力に対応）
@@ -793,6 +1035,31 @@ function buildWord(entry: WordEntry, type: WordType, prefix: string): Word {
 // localType=true のとき、種別（お宝/おじゃま）だけはクライアントごとにローカル乱数で決める。
 //   → 出題する単語列（エントリ）はシード共有で全員同じだが、お宝の出現は各自に保証される
 //     （オンラインでお宝＝アイテムが特定プレイヤーにしか出ない問題への対策）。
+// テーマの複数選択をトグルする。'all' は排他（選ぶと他を解除）。
+// 個別テーマを選ぶと 'all' を外す。空になったら 'all' に戻す。カンマ区切り文字列で返す。
+export function toggleThemeSelection(current: string, id: string): string {
+  if (id === 'all') return 'all';
+  const set = new Set((current || '').split(',').map((s) => s.trim()).filter((s) => s && s !== 'all'));
+  if (set.has(id)) set.delete(id);
+  else set.add(id);
+  const arr = [...set];
+  return arr.length ? arr.join(',') : 'all';
+}
+
+// テーマ指定から出題プールを解決する。
+// theme は単一ID（'all'/'food' 等）またはカンマ区切りの複数指定（'food,it'）。
+// 'all' か未指定は全語彙（WORD_POOL＋全テーマプールをマージ）。
+export function poolForThemes(theme: string = 'all'): WordEntry[] {
+  const ids = (theme || 'all').split(',').map((s) => s.trim()).filter(Boolean);
+  if (ids.length === 0 || ids.includes('all')) return ALL_POOL;
+  const merged: WordEntry[] = [];
+  for (const id of ids) {
+    const p = THEME_POOLS[id];
+    if (p) merged.push(...p);
+  }
+  return merged.length ? merged : ALL_POOL;
+}
+
 export const generateWord = (
   rng: RNG,
   theme: string = 'all',
@@ -801,7 +1068,7 @@ export const generateWord = (
   treasureProb = 0.2,
   treasureBonus = 0, // 「お宝出現率アップ」アイテムなどの恒久ボーナス（加算）
 ): Word => {
-  const pool = THEME_POOLS[theme] ?? WORD_POOL;
+  const pool = poolForThemes(theme);
   let entry = pool[Math.floor(rng() * pool.length)];
   // 直近に出た単語と被ったら引き直す（プールが十分大きいときのみ）。
   // プールサイズに応じて試行回数を増やし、近接重複をしっかり避ける。
@@ -831,17 +1098,20 @@ export const generateWord = (
 };
 
 // 受信したおじゃま用の単語（常に ojama）。攻撃由来なので Math.random で選ぶ。
-export const makeOjamaWord = (): Word => {
-  const entry = WORD_POOL[Math.floor(Math.random() * WORD_POOL.length)];
+// theme を渡すと、選択テーマの語彙からおじゃまを選ぶ（テーマと無関係な語が来ないように）。
+export const makeOjamaWord = (theme: string = 'all'): Word => {
+  const pool = poolForThemes(theme);
+  const entry = pool[Math.floor(Math.random() * pool.length)];
   return buildWord(entry, 'ojama', 'o');
 };
 
-// 3〜4文字の短い単語プール（アイテム「短縮」用）。
-const SHORT_POOL: WordEntry[] = WORD_POOL.filter((w) => w.reading.length >= 3 && w.reading.length <= 4);
-
 // 短い単語を生成（アイテム「短縮」でバックログを軽くするのに使う）。
-export const makeShortWord = (type: WordType = 'normal'): Word => {
-  const entry = SHORT_POOL[Math.floor(Math.random() * SHORT_POOL.length)];
+// テーマ内の短い語を優先し、無ければ全体の短い語から選ぶ。
+export const makeShortWord = (type: WordType = 'normal', theme: string = 'all'): Word => {
+  const pool = poolForThemes(theme);
+  const shorts = pool.filter((w) => w.reading.length >= 3 && w.reading.length <= 4);
+  const src = shorts.length ? shorts : ALL_POOL.filter((w) => w.reading.length >= 3 && w.reading.length <= 4);
+  const entry = src[Math.floor(Math.random() * src.length)];
   return buildWord(entry, type, 's');
 };
 
@@ -1586,6 +1856,23 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: '四面楚歌', reading: 'しめんそか' },
     { display: '本末転倒', reading: 'ほんまつてんとう' },
     { display: '優柔不断', reading: 'ゆうじゅうふだん' },
+    { display: '風林火山', reading: 'ふうりんかざん' },
+    { display: '一騎当千', reading: 'いっきとうせん' },
+    { display: '質実剛健', reading: 'しつじつごうけん' },
+    { display: '喜怒哀楽', reading: 'きどあいらく' },
+    { display: '花鳥風月', reading: 'かちょうふうげつ' },
+    { display: '起承転結', reading: 'きしょうてんけつ' },
+    { display: '才色兼備', reading: 'さいしょくけんび' },
+    { display: '公明正大', reading: 'こうめいせいだい' },
+    { display: '唯我独尊', reading: 'ゆいがどくそん' },
+    { display: '諸行無常', reading: 'しょぎょうむじょう' },
+    { display: '色即是空', reading: 'しきそくぜくう' },
+    { display: '臥薪嘗胆', reading: 'がしんしょうたん' },
+    { display: '疾風迅雷', reading: 'しっぷうじんらい' },
+    { display: '東奔西走', reading: 'とうほんせいそう' },
+    { display: '不撓不屈', reading: 'ふとうふくつ' },
+    { display: '森羅万象', reading: 'しんらばんしょう' },
+    { display: '危機一髪', reading: 'ききいっぱつ' },
   ],
   kancolle: [
     // 艦娘（艦名）
@@ -1630,7 +1917,7 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: '響', reading: 'ひびき' },
     { display: '暁', reading: 'あかつき' },
     { display: '電', reading: 'いなづま' },
-    { display: '雷', reading: 'いかづち' },
+    { display: '雷', reading: 'いかずち' },
     { display: '綾波', reading: 'あやなみ' },
     { display: '敷波', reading: 'しきなみ' },
     { display: '叢雲', reading: 'むらくも' },
@@ -1771,3 +2058,17 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: '港湾棲姫', reading: 'こうわんせいき' },
   ],
 };
+
+// 「すべて」用の総合プール = WORD_POOL ＋ 全テーマプールをマージし、display+reading で重複排除。
+// テーマ専用語（艦これ・四字熟語など）も「すべて」で出題されるようにする。
+export const ALL_POOL: WordEntry[] = (() => {
+  const seen = new Set<string>();
+  const out: WordEntry[] = [];
+  for (const e of [...WORD_POOL, ...Object.values(THEME_POOLS).flat()]) {
+    const key = e.display + '|' + e.reading;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return out;
+})();

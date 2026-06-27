@@ -668,7 +668,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       else if (item === 'guard') guardCountRef.current = 2;
       else if (item === 'purge') {
         // 大掃除: バックログを丸ごと空にし、簡単な単語を1つだけ残す（逆転のチャンス）。
-        setBacklog([makeShortWord('normal')]);
+        setBacklog([makeShortWord('normal', categoryRef.current)]);
         setTokenIndex(0);
         setCurrentTyping('');
         setTypedRomaji([]);
@@ -956,7 +956,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       const words: Word[] = [];
       for (const e of due) {
         if (e.word) words.push(makeOjamaWordFrom(e.word.display, e.word.reading));
-        else for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord());
+        else for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord(categoryRef.current));
       }
       if (words.length > 0) {
         sfx.damage(); // 被弾SE（おじゃまが実際にバックログへ入った瞬間）

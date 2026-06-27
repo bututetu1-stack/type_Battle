@@ -20,7 +20,7 @@ import {
   removeAllCpus,
   type RoomSnapshot,
 } from '../lib/room';
-import { THEMES } from '../lib/words';
+import { THEMES, toggleThemeSelection } from '../lib/words';
 import { loadItemPrefs, saveItemPrefs, CAT_META, USE_MODES, ITEM_CAT, type ItemPrefs } from '../lib/items';
 import type { ItemType } from '../lib/types';
 import OnlineGame, { ITEM_META, ITEM_EMOJI } from './OnlineGame';
@@ -338,24 +338,28 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
           </div>
         )}
 
-        {/* 出題テーマ（ホストが選択） */}
+        {/* 出題テーマ（ホストが選択・複数選択可） */}
         <div className="mb-6">
-          <div className="text-xs text-gray-500 mb-1.5">出題テーマ {isHost ? '（ホストが選択）' : ''}</div>
+          <div className="text-xs text-gray-500 mb-1.5">出題テーマ（複数選択可）{isHost ? '（ホストが選択）' : ''}</div>
           <div className="flex flex-wrap gap-1.5">
-            {THEMES.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => isHost && setRoomCategory(roomId, t.id)}
-                disabled={!isHost}
-                className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
-                  (meta.category || 'all') === t.id
-                    ? 'bg-cyan-600 text-white'
-                    : 'bg-neutral-800 text-gray-400 ' + (isHost ? 'hover:bg-neutral-700' : 'opacity-60')
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
+            {THEMES.map((t) => {
+              const cat = meta.category || 'all';
+              const sel = t.id === 'all' ? cat === 'all' || cat === '' : cat.split(',').includes(t.id);
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => isHost && setRoomCategory(roomId, toggleThemeSelection(cat, t.id))}
+                  disabled={!isHost}
+                  className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
+                    sel
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-neutral-800 text-gray-400 ' + (isHost ? 'hover:bg-neutral-700' : 'opacity-60')
+                  }`}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
