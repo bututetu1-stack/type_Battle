@@ -27,6 +27,7 @@ export interface RoomMeta {
   createdAt: number;
   mode?: 'royale' | 'boss'; // ゲームモード（未設定は royale）
   bossUid?: string; // boss モードでのボス（既定はホスト）
+  itemRate?: number; // お宝(アイテム)出現率 0〜100（未設定は既定値）
 }
 
 export interface RoomPlayer {
@@ -109,6 +110,7 @@ export async function createRoom(uid: string, name: string): Promise<string> {
     createdAt: Date.now(),
     mode: 'royale',
     bossUid: '',
+    itemRate: 30,
   };
   await set(ref(db, `rooms/${roomId}/meta`), meta);
   await set(ref(db, `rooms/${roomId}/players/${uid}`), newPlayer(name, true));
@@ -164,6 +166,11 @@ export async function setRoomCategory(roomId: string, category: string): Promise
 // ホスト操作: ゲームモードを変更（待機中）。boss の場合はホストをボスにする。
 export async function setRoomMode(roomId: string, mode: 'royale' | 'boss', hostUid: string): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { mode, bossUid: mode === 'boss' ? hostUid : '' });
+}
+
+// ホスト操作: お宝(アイテム)出現率を変更（待機中、0〜100）。
+export async function setRoomItemRate(roomId: string, itemRate: number): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { itemRate: Math.min(100, Math.max(0, Math.round(itemRate))) });
 }
 
 // ホスト操作: カウントダウン付きで開始。startAt をサーバ基準の未来時刻に設定。

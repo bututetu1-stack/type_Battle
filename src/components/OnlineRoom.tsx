@@ -7,6 +7,7 @@ import {
   startGame,
   setRoomCategory,
   setRoomMode,
+  setRoomItemRate,
   type RoomSnapshot,
 } from '../lib/room';
 import { THEMES } from '../lib/words';
@@ -82,6 +83,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         category={meta.category || 'all'}
         mode={meta.mode === 'boss' ? 'boss' : 'royale'}
         bossUid={meta.bossUid || meta.hostUid}
+        itemRate={typeof meta.itemRate === 'number' ? meta.itemRate : 30}
         players={players}
         onExit={handleLeave}
       />
@@ -167,6 +169,29 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
               👑 ボスは {players[meta.bossUid || meta.hostUid]?.name ?? 'ホスト'}。他の参加者が協力して討伐します。
             </p>
           )}
+        </div>
+
+        {/* お宝(アイテム)出現率（ホストが選択） */}
+        <div className="mb-5">
+          <div className="text-xs text-gray-500 mb-1.5 flex items-center justify-between">
+            <span>お宝（アイテム）出現率 {isHost ? '（ホストが選択）' : ''}</span>
+            <span className="text-yellow-300 font-mono font-bold">
+              {typeof meta.itemRate === 'number' ? meta.itemRate : 30}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={typeof meta.itemRate === 'number' ? meta.itemRate : 30}
+            onChange={(e) => isHost && setRoomItemRate(roomId, Number(e.target.value))}
+            disabled={!isHost}
+            className="w-full accent-yellow-500 disabled:opacity-60"
+          />
+          <p className="text-[10px] text-gray-600 mt-0.5">
+            高いほどアイテムが多く出ます。出る内容は有利/不利で変化（不利なら防御・逆転、有利なら攻撃が出やすい）。
+          </p>
         </div>
 
         {/* 出題テーマ（ホストが選択） */}

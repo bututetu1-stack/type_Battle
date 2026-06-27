@@ -488,6 +488,7 @@ export const generateWord = (
   theme: string = 'all',
   recent: string[] = [],
   localType = false,
+  treasureProb = 0.2,
 ): Word => {
   const pool = THEME_POOLS[theme] ?? WORD_POOL;
   let entry = pool[Math.floor(rng() * pool.length)];
@@ -502,11 +503,11 @@ export const generateWord = (
   const rand = localType ? Math.random() : seededRand;
   let type: WordType = 'normal';
   if (localType) {
-    // オンライン: 相手から大量におじゃまが飛んでくるぶん、お宝で打つ単語の割合が
-    // 薄まりがち。お宝を多め（約20%）、自動供給のおじゃまは少なめ（約8%）にして
-    // アイテム入手の機会を確保する。
-    if (rand < 0.2) type = 'treasure';
-    else if (rand < 0.28) type = 'ojama';
+    // オンライン: お宝の出現率はホストが 0〜100% で設定可能（treasureProb）。
+    // 相手から飛んでくるおじゃまで割合が薄まるため、自動供給のおじゃまは少なめ（約8%）。
+    const tp = Math.min(1, Math.max(0, treasureProb));
+    if (rand < tp) type = 'treasure';
+    else if (rand < tp + 0.08) type = 'ojama';
   } else {
     // ソロ: お宝 約12% / おじゃま 約20%。
     if (rand < 0.12) type = 'treasure';

@@ -81,6 +81,15 @@ const ITEM_EMOJI: Record<ItemType, string> = {
   drain: '🩸',
   mirror: '🪞',
 };
+// アイテムの大分類。def=防御/逆転（不利なほど出やすい）, atk=攻撃（有利なほど出やすい）, util=その他。
+const ITEM_KIND: Record<ItemType, 'def' | 'atk' | 'util'> = {
+  shield: 'def', clear: 'def', brake: 'def', keep: 'util', shrink: 'def', parry: 'def',
+  gaugedown: 'def', totem: 'def', barrier: 'def', freeze: 'def', purge: 'def', guard: 'def',
+  regen: 'def', mirror: 'def',
+  longbomb: 'atk', rapid: 'atk', meteor: 'atk', quake: 'atk', rally: 'atk', focus: 'atk',
+  snipe: 'atk', burst: 'atk', heavy: 'atk', flood: 'atk', drain: 'atk',
+};
+
 const RAPID_DURATION = 8000;
 const KEEP_DURATION = 10000;
 const PARRY_DURATION = 8000; // 受け流し（被攻撃を他プレイヤーへ逸らす）の効果時間
@@ -122,11 +131,12 @@ interface OnlineGameProps {
   category: string;
   mode: GameMode;
   bossUid: string;
+  itemRate: number;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, players, onExit }: OnlineGameProps) {
   // ボスモード関連の派生フラグ。
   const bossMode = mode === 'boss';
   const isBoss = bossMode && uid === bossUid;
@@ -193,6 +203,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   useEffect(() => {
     categoryRef.current = category;
   }, [category]);
+  const itemRateRef = useRef(itemRate);
+  useEffect(() => {
+    itemRateRef.current = itemRate;
+  }, [itemRate]);
   const pendingRef = useRef<Telegraph[]>([]);
   const updatePending = useCallback((next: Telegraph[]) => {
     pendingRef.current = next;
@@ -266,8 +280,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     wordRngRef.current = rng;
     itemRngRef.current = mulberry32((seed ^ 0x9e3779b9) >>> 0);
     const th = categoryRef.current;
-    // 種別はローカル乱数で（お宝＝アイテムが各プレイヤーに確実に出るように）。
-    setBacklog([generateWord(rng, th, [], true), generateWord(rng, th, [], true), generateWord(rng, th, [], true)]);
+    // 種別はローカル乱数で（お宝＝アイテムが各プレイヤーに確実に出るように）。出現率はホスト設定。
+    const tp = itemRateRef.current / 100;
+    setBacklog([generateWord(rng, th, [], true, tp), generateWord(rng, th, [], true, tp), generateWord(rng, th, [], true, tp)]);
     attackProgressRef.current = 0;
     setAttackProgress(0);
     keepUntilRef.current = 0;
@@ -586,12 +601,28 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     } else {
       items = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'parry', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror'];
     }
-    const pick = rng ? items[Math.floor(rng() * items.length)] : items[0];
+    // 有利/不利でドロップ内容を変える: 不利（バックログが多い）なら防御/逆転、
+    // 有利（少ない）なら攻撃が出やすくなるよう重み付け抽選する。
+    const disadv = Math.min(1, stateRef.current.backlog.length / selfMax); // 0..1
+    const weighted = items.map((it) => {
+      const kind = ITEM_KIND[it];
+      let w = 1;
+      if (kind === 'def') w = 1 + disadv * 2.5;
+      else if (kind === 'atk') w = 1 + (1 - disadv) * 2.5;
+      return { it, w };
+    });
+    const total = weighted.reduce((s, x) => s + x.w, 0);
+    let acc = (rng ? rng() : Math.random()) * total;
+    let pick: ItemType = items[0];
+    for (const x of weighted) {
+      acc -= x.w;
+      if (acc <= 0) { pick = x.it; break; }
+    }
     setHeldItem(pick);
     sfx.item();
     setItemFlash(true);
     setTimeout(() => setItemFlash(false), 1000);
-  }, [applyItem, bossMode, isBoss]);
+  }, [applyItem, bossMode, isBoss, selfMax]);
 
   const useItem = useCallback(() => {
     const item = heldItemRef.current;
@@ -754,7 +785,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             return prev;
           }
           const rng = wordRngRef.current;
-          return rng ? [...prev, generateWord(rng, categoryRef.current, [], true)] : prev;
+          return rng ? [...prev, generateWord(rng, categoryRef.current, [], true, itemRateRef.current / 100)] : prev;
         });
       }
       setSpawnInterval((prev) => Math.max(MIN_SPAWN_INTERVAL, prev * 0.98));
