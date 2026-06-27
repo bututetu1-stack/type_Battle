@@ -30,6 +30,9 @@ export interface RoomMeta {
   itemRate?: number; // お宝(アイテム)出現率 0〜100（未設定は既定値）
   hp?: number; // 各プレイヤーの積載上限（HP）。未設定は既定値
   spawnMs?: number; // 自動供給の初期間隔(ms)。小さいほど速い。未設定は既定値
+  attackGauge?: number; // 何クリアで攻撃を発射するか（既定5）
+  attackCap?: number; // 1回の攻撃量の上限（既定5）
+  comboStep?: number; // 何連鎖ごとに攻撃量+1（既定5）
 }
 
 export interface RoomPlayer {
@@ -53,6 +56,8 @@ export interface RoomPlayer {
   curReading?: string; // 現在打っているワードの読み（かな）
   curIdx?: number; // 確定済みトークン数（おおよその進捗）
   curTyping?: string; // 入力途中のローマ字
+  curRomaji?: string; // 現在ワードの全ローマ字（観戦表示用）
+  curRomajiDone?: number; // 確定済みローマ字の文字数（観戦表示用）
 }
 
 export interface RoomSnapshot {
@@ -122,6 +127,9 @@ export async function createRoom(uid: string, name: string): Promise<string> {
     itemRate: 30,
     hp: 12,
     spawnMs: 4000,
+    attackGauge: 5,
+    attackCap: 5,
+    comboStep: 5,
   };
   await set(ref(db, `rooms/${roomId}/meta`), meta);
   await set(ref(db, `rooms/${roomId}/players/${uid}`), newPlayer(name, true));
@@ -164,7 +172,7 @@ export function writePlayerSummary(
   uid: string,
   summary: Partial<
     Pick<RoomPlayer, 'backlog' | 'combo' | 'kpm' | 'badges' | 'alive' | 'rank' | 'koBy' | 'lastItem' | 'itemAt'
-      | 'curDisplay' | 'curReading' | 'curIdx' | 'curTyping'>
+      | 'curDisplay' | 'curReading' | 'curIdx' | 'curTyping' | 'curRomaji' | 'curRomajiDone'>
   >,
 ): void {
   update(ref(db, `rooms/${roomId}/players/${uid}`), { ...summary, lastSeen: Date.now() }).catch(() => {});
@@ -193,6 +201,17 @@ export async function setRoomHp(roomId: string, hp: number): Promise<void> {
 // ホスト操作: 自動供給の初期間隔(ms)を変更（待機中、1500〜8000。小さいほど速い）。
 export async function setRoomSpawnMs(roomId: string, spawnMs: number): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { spawnMs: Math.min(8000, Math.max(1500, Math.round(spawnMs))) });
+}
+
+// ホスト操作: 攻撃まわりの設定を変更（待機中）。
+export async function setRoomAttackGauge(roomId: string, v: number): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { attackGauge: Math.min(10, Math.max(2, Math.round(v))) });
+}
+export async function setRoomAttackCap(roomId: string, v: number): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { attackCap: Math.min(12, Math.max(2, Math.round(v))) });
+}
+export async function setRoomComboStep(roomId: string, v: number): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { comboStep: Math.min(15, Math.max(2, Math.round(v))) });
 }
 
 // --- CPU（ホストがシミュレートする擬似プレイヤー）---

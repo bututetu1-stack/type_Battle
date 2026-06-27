@@ -50,13 +50,13 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   rally: { name: '総攻撃', desc: '挑戦者: ボスへ即時の大攻撃' },
   focus: { name: '会心', desc: '挑戦者: 次のボスへの攻撃を倍化' },
   barrier: { name: 'バリア', desc: '次の被弾を1回まるごと防ぐ' },
-  freeze: { name: 'フリーズ', desc: '5秒間 着弾予告と自動供給を停止' },
+  freeze: { name: 'フリーズ', desc: '5秒間 被攻撃を無効化＋自動供給を停止' },
   purge: { name: '大掃除', desc: 'バックログを全消去（逆転のチャンス）' },
-  guard: { name: 'ガード', desc: '次の自動供給を2回ぶん防ぐ' },
-  snipe: { name: '狙撃', desc: '狙った相手へおじゃま+3' },
+  guard: { name: '超シールド', desc: 'シールドの上位互換。自動供給を2回ぶん防ぐ' },
+  snipe: { name: '狙撃', desc: '最も危険な相手にトドメの一撃（おじゃま+4）' },
   burst: { name: 'バースト', desc: '全ての相手へおじゃま+2' },
   heavy: { name: '強撃', desc: '連鎖に応じたおじゃまを即送信' },
-  flood: { name: 'フラッド', desc: '相手へおじゃま+4' },
+  flood: { name: 'フラッド', desc: '狙った相手へ濁流の波状おじゃま（相殺しにくい）' },
   drain: { name: 'ドレイン', desc: '自分を2減らし相手へおじゃま+2' },
   mirror: { name: 'ミラー', desc: '不利なほど強いおじゃまを送る' },
   goldify: { name: 'ゴールド化', desc: '溜まっているワードを全てお宝に変える' },
@@ -146,17 +146,24 @@ interface OnlineGameProps {
   itemRate: number;
   hp?: number;
   spawnMs?: number;
+  attackGauge?: number;
+  attackCap?: number;
+  comboStep?: number;
   itemPrefs: ItemPrefs;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, itemPrefs, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, itemPrefs, players, onExit }: OnlineGameProps) {
   // ボスモード関連の派生フラグ。
   const bossMode = mode === 'boss';
   const isBoss = bossMode && uid === bossUid;
   const playerHp = typeof hp === 'number' ? hp : MAX_BACKLOG; // ホスト設定のHP（積載上限）
   const baseSelfMax = isBoss ? BOSS_MAX_BACKLOG : playerHp; // 自分の基礎上限（ボスはHPが多い）
+  // 攻撃まわりの設定（ホスト設定。試合中は固定）。
+  const atkGauge = typeof attackGauge === 'number' ? attackGauge : 5; // 何クリアで発射
+  const atkCap = typeof attackCap === 'number' ? attackCap : ATTACK_CAP; // 攻撃量の上限
+  const cStep = typeof comboStep === 'number' ? comboStep : 5; // 何連鎖ごとに+1
   const [hpBonus, setHpBonus] = useState(0); // HPアップ(maxhp)による積載上限の増分（永続）
   const selfMax = baseSelfMax + hpBonus; // 自分の上限
   const [started, setStarted] = useState(false);
@@ -524,20 +531,20 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // 連鎖マイルストーン攻撃: 倍率・上限を適用して送信。
   const launchAttack = useCallback(
     (comboVal: number) => {
-      // 5クリアごとに発射。攻撃量は連鎖に応じる（連鎖が低くても最低1は撃てる）。
-      let amount = Math.max(1, Math.floor(comboVal / 5));
+      // ゲージ発射ごとに、攻撃量は連鎖に応じて増える（cStep 連鎖ごとに+1）。
+      let amount = 1 + Math.floor(comboVal / cStep);
       if (stateRef.current.backlog.length / selfMax >= PINCH_RATIO) amount = Math.round(amount * PINCH_MULT);
       const badges = Object.values(playersRef.current).filter((p) => p.koBy === uid).length;
       amount = Math.round(amount * (1 + 0.25 * Math.min(badges, 4)));
-      amount = Math.min(amount, ATTACK_CAP);
+      amount = Math.min(amount, atkCap);
       // 会心: 次のボスへの攻撃を倍化（上限を少し緩める）。
       if (focusNextRef.current) {
         focusNextRef.current = false;
-        amount = Math.min(amount * 2, ATTACK_CAP * 2);
+        amount = Math.min(amount * 2, atkCap * 2);
       }
       sendAmount(amount);
     },
-    [uid, sendAmount, selfMax],
+    [uid, sendAmount, selfMax, cStep, atkCap],
   );
 
   // アイテム効果適用（所持状態のクリアは行わない）。
@@ -624,11 +631,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       }
       // --- 攻撃 ---
       else if (item === 'snipe') {
-        const t = pickTarget();
+        // 狙撃: 最も危険な（バックログが多い）相手にトドメの単発大ダメージ。
+        const cands = Object.entries(playersRef.current).filter(([id, p]) => id !== uid && isLive(p) && (!bossMode || isBoss || id === bossUid));
+        const t = cands.length ? cands.reduce((b, c) => (c[1].backlog > b[1].backlog ? c : b))[0] : null;
         if (t) {
-          sendAttack(roomId, t, uid, 3);
+          sendAttack(roomId, t, uid, 4);
           fireBeam(t);
-          setAttackFlash({ amount: 3, name: `${playersRef.current[t]?.name || '相手'} を狙撃` });
+          setAttackFlash({ amount: 4, name: `${playersRef.current[t]?.name || '相手'} を狙撃` });
           setTimeout(() => setAttackFlash(null), 800);
           sfx.attack();
         }
@@ -655,11 +664,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       }
       // --- 妨害 ---
       else if (item === 'flood') {
+        // フラッド: 狙った相手へ +1 を5連発（個別の着弾予告＝相殺しにくい波状攻撃）。
         const t = pickTarget();
         if (t) {
-          sendAttack(roomId, t, uid, 4);
+          for (let i = 0; i < 5; i++) sendAttack(roomId, t, uid, 1);
           fireBeam(t);
-          setAttackFlash({ amount: 4, name: `${playersRef.current[t]?.name || '相手'} へフラッド` });
+          setAttackFlash({ amount: 5, name: `${playersRef.current[t]?.name || '相手'} へフラッド波状` });
           setTimeout(() => setAttackFlash(null), 800);
           sfx.attack();
         }
@@ -797,6 +807,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   useEffect(() => {
     if (!started) return;
     const unsub = subscribeAttacks(roomId, uid, (ev) => {
+      // フリーズ中に来た攻撃は無効化（予告に積まず破棄）。解除後にまとめて来ない。
+      if (Date.now() < freezeUntilRef.current) {
+        const fromName = playersRef.current[ev.from]?.name || '相手';
+        pushToast(`フリーズで ${fromName} の攻撃を無効化`, 'item');
+        return;
+      }
       if (ev.from) {
         lastAttackerRef.current = ev.from;
         fireIncoming(ev.from);
@@ -917,8 +933,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         offsetIncoming(1);
         // ゲージはクリア数で進む（ミスでは減らない）。5クリアごとに発射。
         attackProgressRef.current += 1;
-        if (attackProgressRef.current >= 5) {
-          attackProgressRef.current -= 5;
+        if (attackProgressRef.current >= atkGauge) {
+          attackProgressRef.current -= atkGauge;
           launchAttack(newCombo);
         }
         setAttackProgress(attackProgressRef.current);
@@ -965,11 +981,18 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
   // サマリのスロットリング書込（バッジ＋観戦用の現在ワード/入力進捗も反映）。
   const summaryRef = useRef<Parameters<typeof writePlayerSummary>[2]>({ backlog: 0, combo: 0, kpm: 0, badges: 0 });
-  summaryRef.current = {
-    backlog: backlog.length, combo, kpm: calculateKPM(), badges: myBadges,
-    curDisplay: backlog[0]?.display ?? '', curReading: backlog[0]?.reading ?? '',
-    curIdx: tokenIndex, curTyping: currentTyping,
-  };
+  {
+    // 観戦表示用に、現在ワードの全ローマ字と確定済み文字数を計算する。
+    const cur = backlog[0];
+    const tokens = cur?.tokens ?? [];
+    const curRomaji = tokens.map((t) => t.romaji[0]).join('');
+    const curRomajiDone = tokens.slice(0, tokenIndex).reduce((s, t) => s + t.romaji[0].length, 0) + currentTyping.length;
+    summaryRef.current = {
+      backlog: backlog.length, combo, kpm: calculateKPM(), badges: myBadges,
+      curDisplay: cur?.display ?? '', curReading: cur?.reading ?? '',
+      curIdx: tokenIndex, curTyping: currentTyping, curRomaji, curRomajiDone,
+    };
+  }
   useEffect(() => {
     if (!started) return;
     const id = setInterval(() => {
@@ -1039,12 +1062,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             s.backlog -= 1;
             s.combo += 1;
             s.progress += 1;
-            if (s.progress >= 5) {
-              s.progress -= 5;
+            if (s.progress >= atkGauge) {
+              s.progress -= atkGauge;
               const targets = Object.entries(playersRef.current).filter(([tid, tp]) => tid !== id && isLive(tp));
               if (targets.length > 0) {
                 const t = targets[Math.floor(Math.random() * targets.length)];
-                sendAttack(roomId, t[0], id, Math.min(5, 1 + Math.floor(s.combo / 5)));
+                sendAttack(roomId, t[0], id, Math.min(atkCap, 1 + Math.floor(s.combo / cStep)));
               }
             }
           }
@@ -1069,7 +1092,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       clearInterval(interval);
       unsubs.forEach((u) => u());
     };
-  }, [uid, hostUid, started, status, roomId, playerHp, spawnMs]);
+  }, [uid, hostUid, started, status, roomId, playerHp, spawnMs, atkGauge, atkCap, cStep]);
 
   // テトリス99のように、自分以外の攻防もアンビエントなビームで可視化する。
   // 実データの全攻撃は購読していないため、それっぽいビームを散らす表現。
@@ -1387,7 +1410,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             );
             const reading = wp.curReading ?? '';
             const idx = Math.min(wp.curIdx ?? 0, reading.length);
-            const wpMax = bossMode && watchId === bossUid ? BOSS_MAX_BACKLOG : MAX_BACKLOG;
+            const romaji = wp.curRomaji ?? '';
+            const rdone = Math.min(wp.curRomajiDone ?? 0, romaji.length);
+            const wpMax = bossMode && watchId === bossUid ? BOSS_MAX_BACKLOG : (typeof hp === 'number' ? hp : MAX_BACKLOG);
             return (
               <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-neutral-950/95 rounded-2xl px-4">
                 <div className="text-sm font-bold text-cyan-300 flex items-center gap-2">👁 {wp.name} を観戦中</div>
@@ -1404,14 +1429,19 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                     />
                   </div>
                 </div>
-                {/* 現在のワードと入力進捗 */}
+                {/* 現在のワードと入力進捗（自分の盤面と同じく、ローマ字でどこまで打ったか表示） */}
                 <div className="w-full max-w-lg bg-neutral-900/80 border border-cyan-500/30 rounded-xl px-6 py-8 text-center shadow-2xl">
-                  <div className="text-4xl font-black text-gray-100 mb-3 break-all">{wp.curDisplay || '—'}</div>
-                  <div className="text-xl font-mono tracking-wide">
+                  <div className="text-4xl font-black text-gray-100 mb-2 break-all">{wp.curDisplay || '—'}</div>
+                  <div className="text-base font-mono tracking-wide mb-3">
                     <span className="text-gray-600">{reading.slice(0, idx)}</span>
                     <span className="text-cyan-200">{reading.slice(idx)}</span>
                   </div>
-                  <div className="text-lg font-mono text-emerald-300 mt-3 min-h-[1.5rem]">{wp.curTyping || ''}<span className="animate-pulse">▍</span></div>
+                  {/* ローマ字の入力進捗（打った部分=緑／カーソル／未入力=灰） */}
+                  <div className="text-2xl font-mono tracking-wide break-all">
+                    <span className="text-emerald-300">{romaji.slice(0, rdone)}</span>
+                    <span className="text-white animate-pulse">▍</span>
+                    <span className="text-gray-500">{romaji.slice(rdone)}</span>
+                  </div>
                 </div>
                 <div className="text-[11px] text-gray-600">他の盤面をクリックすると観戦相手を切り替えられます</div>
               </div>
@@ -1622,7 +1652,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             </div>
 
             <div className="mt-3">
-              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={myBadges} />
+              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={myBadges} threshold={atkGauge} />
             </div>
           </div>
         </div>

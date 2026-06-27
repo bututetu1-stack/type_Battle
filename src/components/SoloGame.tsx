@@ -62,14 +62,14 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   focus: { name: '会心', icon: '🎯', desc: '挑戦者: 次のボスへの攻撃を倍化' },
   // 防御
   barrier: { name: 'バリア', icon: '🛡️', desc: '次の被弾を1回まるごと防ぐ' },
-  freeze: { name: 'フリーズ', icon: '🧊', desc: '5秒間 着弾予告と自動供給を停止' },
+  freeze: { name: 'フリーズ', icon: '🧊', desc: '5秒間 被攻撃を無効化＋自動供給を停止' },
   purge: { name: '大掃除', icon: '🧹', desc: 'バックログを全消去（逆転のチャンス）' },
-  guard: { name: 'ガード', icon: '🧱', desc: '次の自動供給を2回ぶん防ぐ' },
+  guard: { name: '超シールド', icon: '🧱', desc: 'シールドの上位互換。自動供給を2回ぶん防ぐ' },
   // 攻撃（送る数字は全ておじゃまの数）
-  snipe: { name: '狙撃', icon: '🎯', desc: '狙った相手へおじゃま+3' },
+  snipe: { name: '狙撃', icon: '🎯', desc: '最も危険な相手にトドメの一撃（おじゃま+4）' },
   burst: { name: 'バースト', icon: '💥', desc: '全ての相手へおじゃま+2' },
   heavy: { name: '強撃', icon: '🔨', desc: '連鎖に応じたおじゃまを即送信' },
-  flood: { name: 'フラッド', icon: '🌊', desc: '相手へおじゃま+4' },
+  flood: { name: 'フラッド', icon: '🌊', desc: '狙った相手へ濁流の大量おじゃま+7' },
   drain: { name: 'ドレイン', icon: '🩸', desc: '自分を2減らし相手へおじゃま+2' },
   mirror: { name: 'ミラー', icon: '🪞', desc: '不利なほど強いおじゃまを送る' },
   // お宝/HP
@@ -106,6 +106,9 @@ interface CustomCfg {
   initial: number; min: number; accel: number; theme: string; hp: number; enemies: number;
   cpuStr: number; // CPUの平均的な強さ 0〜10
   treasureRate: number; // お宝の出現率（%）
+  attackGauge: number; // 何クリアで攻撃を発射するか（ゲージの数）
+  attackCap: number; // 1回の攻撃量の上限
+  comboStep: number; // 何連鎖ごとに攻撃量が+1されるか
   autoFull: boolean; // 完全オート（有利不利を見て自動で使用）
   use: Record<ItemCat, UseMode>; // カテゴリ別の使い方（保持/即時）
 }
@@ -114,6 +117,7 @@ function loadCfg(): CustomCfg {
   const def: CustomCfg = {
     initial: INITIAL_SPAWN_INTERVAL, min: MIN_SPAWN_INTERVAL, accel: DEFAULT_ACCEL,
     theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT, cpuStr: 5, treasureRate: 20,
+    attackGauge: ATTACK_THRESHOLD, attackCap: ATTACK_CAP, comboStep: 5,
     autoFull: false, use: { attack: 'hold', defense: 'hold', timed: 'hold' },
   };
   try {
@@ -129,6 +133,9 @@ function loadCfg(): CustomCfg {
         enemies: typeof o.enemies === 'number' ? Math.min(MAX_DUMMIES, Math.max(1, o.enemies)) : def.enemies,
         cpuStr: typeof o.cpuStr === 'number' ? Math.min(10, Math.max(0, o.cpuStr)) : def.cpuStr,
         treasureRate: typeof o.treasureRate === 'number' ? Math.min(80, Math.max(0, o.treasureRate)) : def.treasureRate,
+        attackGauge: typeof o.attackGauge === 'number' ? Math.min(10, Math.max(2, o.attackGauge)) : def.attackGauge,
+        attackCap: typeof o.attackCap === 'number' ? Math.min(12, Math.max(2, o.attackCap)) : def.attackCap,
+        comboStep: typeof o.comboStep === 'number' ? Math.min(15, Math.max(2, o.comboStep)) : def.comboStep,
         autoFull: typeof o.autoFull === 'boolean' ? o.autoFull : def.autoFull,
         use: o.use && typeof o.use === 'object'
           ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), timed: validMode(o.use.timed ?? o.use.disrupt) }
@@ -241,6 +248,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgEnemies, setCfgEnemies] = useState(initialCfg.enemies);
   const [cfgCpuStr, setCfgCpuStr] = useState(initialCfg.cpuStr);
   const [cfgTreasureRate, setCfgTreasureRate] = useState(initialCfg.treasureRate);
+  const [cfgAttackGauge, setCfgAttackGauge] = useState(initialCfg.attackGauge);
+  const [cfgAttackCap, setCfgAttackCap] = useState(initialCfg.attackCap);
+  const [cfgComboStep, setCfgComboStep] = useState(initialCfg.comboStep);
   const [cfgAutoFull, setCfgAutoFull] = useState(initialCfg.autoFull);
   const [cfgUse, setCfgUse] = useState<Record<ItemCat, UseMode>>(initialCfg.use);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
@@ -248,10 +258,15 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     try {
       localStorage.setItem(CFG_KEY, JSON.stringify({
         initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies, cpuStr: cfgCpuStr,
-        treasureRate: cfgTreasureRate, autoFull: cfgAutoFull, use: cfgUse,
+        treasureRate: cfgTreasureRate, attackGauge: cfgAttackGauge, attackCap: cfgAttackCap, comboStep: cfgComboStep,
+        autoFull: cfgAutoFull, use: cfgUse,
       }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAutoFull, cfgUse]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgAutoFull, cfgUse]);
+  const attackCapRef = useRef(initialCfg.attackCap);
+  const comboStepRef = useRef(initialCfg.comboStep);
+  useEffect(() => { attackCapRef.current = cfgAttackCap; }, [cfgAttackCap]);
+  useEffect(() => { comboStepRef.current = cfgComboStep; }, [cfgComboStep]);
   const cpuStrengthRef = useRef(initialCfg.cpuStr / 10); // 0..1 の目標強さ
   const treasureRateRef = useRef(initialCfg.treasureRate / 100); // お宝の基本出現率（0..1）
   useEffect(() => { treasureRateRef.current = cfgTreasureRate / 100; }, [cfgTreasureRate]);
@@ -368,7 +383,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   }, [updatePending]);
 
   // 指定量を攻撃: まず受信予告と相殺 → 余剰をターゲットへ。
-  const fireAttack = useCallback((amount: number) => {
+  // forcedTarget を渡すと 狙い設定を無視して特定の相手へ撃つ（狙撃のトドメ用）。
+  const fireAttack = useCallback((amount: number, forcedTarget?: Dummy | null) => {
     if (amount <= 0) return;
     // 相殺（ただし長文＝ロング送信は相殺対象外で必ず着弾する）。
     let remaining = amount;
@@ -387,7 +403,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       setTimeout(() => setAttackFlash(null), 600);
       return;
     }
-    const target = pickTarget();
+    const target = (forcedTarget && !forcedTarget.isKO) ? forcedTarget : pickTarget();
     if (!target) return;
     const willKO = target.height + remaining > maxBacklogRef.current;
     setDummies((prev) =>
@@ -437,7 +453,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       } else if (item === 'parry') {
         parryUntilRef.current = Date.now() + PARRY_DURATION;
       } else if (item === 'gaugedown') {
-        attackThresholdRef.current = Math.max(4, attackThresholdRef.current - 1);
+        attackThresholdRef.current = Math.max(2, attackThresholdRef.current - 1);
         setAttackThreshold(attackThresholdRef.current);
       } else if (item === 'totem') {
         totemUntilRef.current = Date.now() + TOTEM_DURATION;
@@ -453,7 +469,12 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setCurrentTyping('');
       }
       // --- 攻撃 ---
-      else if (item === 'snipe') fireAttack(3);
+      else if (item === 'snipe') {
+        // 狙撃: 最も危険な（積もっている）相手にトドメの一撃。狙い設定を無視。
+        const alive = dummiesRef.current.filter((d) => !d.isKO);
+        const mostLoaded = alive.length ? alive.reduce((b, c) => (c.height > b.height ? c : b)) : null;
+        fireAttack(4, mostLoaded);
+      }
       else if (item === 'heavy') fireAttack(Math.min(Math.max(2, Math.floor(stateRef.current.combo / 3)), 6));
       else if (item === 'burst') {
         // 全ての敵CPUへ一斉に +2。
@@ -477,7 +498,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         pushToast('バースト！ 全体+2', 'item');
       }
       // --- 妨害 ---
-      else if (item === 'flood') fireAttack(4);
+      else if (item === 'flood') fireAttack(7); // フラッド: 狙い相手へ濁流の大量おじゃま
       else if (item === 'mirror') fireAttack(Math.min(Math.max(1, Math.floor(stateRef.current.backlog.length / 3)), 6));
       else if (item === 'drain') {
         setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1, Math.max(1, prev.length - 2))]));
@@ -693,8 +714,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     freezeUntilRef.current = 0;
     barrierRef.current = false;
     guardCountRef.current = 0;
-    attackThresholdRef.current = ATTACK_THRESHOLD;
-    setAttackThreshold(ATTACK_THRESHOLD);
+    attackThresholdRef.current = cfgAttackGauge;
+    setAttackThreshold(cfgAttackGauge);
     gaugeDownObtainedRef.current = false;
     attackProgressRef.current = 0;
     setAttackProgress(0);
@@ -712,7 +733,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       }),
     );
     sfx.start();
-  }, [cfgInitial, cfgMin, cfgAccel, cfgHp, cfgEnemies, cfgCpuStr, updatePending, nextWord]);
+  }, [cfgInitial, cfgMin, cfgAccel, cfgHp, cfgEnemies, cfgCpuStr, cfgAttackGauge, updatePending, nextWord]);
 
   const gameOver = useCallback(() => {
     setGameState('gameover');
@@ -778,7 +799,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         attackProgressRef.current += 1;
         if (attackProgressRef.current >= attackThresholdRef.current) {
           attackProgressRef.current -= attackThresholdRef.current;
-          fireAttack(Math.min(Math.max(1, Math.floor(newCombo / 5)), ATTACK_CAP));
+          fireAttack(Math.min(1 + Math.floor(newCombo / comboStepRef.current), attackCapRef.current));
         }
         setAttackProgress(attackProgressRef.current);
         if (Date.now() < rapidUntilRef.current) fireAttack(1); // 連射: 1クリアごとに1攻撃
@@ -825,7 +846,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       // 攻撃頻度は全体の強さ設定に比例。攻撃者は強いCPUほど選ばれやすい（個体差）。
       const incomingNow = pendingRef.current.reduce((s, e) => s + e.amount, 0);
       const attackChance = 0.1 + target * 0.3;
-      if (incomingNow < 4 && Math.random() < attackChance) {
+      const frozen = Date.now() < freezeUntilRef.current; // フリーズ中は被攻撃を無効化
+      if (!frozen && incomingNow < 4 && Math.random() < attackChance) {
         // str を重みにして攻撃者を選ぶ（強いCPUが主な脅威になる）。
         const totW = alive.reduce((sum, d) => sum + 0.2 + (d.str ?? 0.5), 0);
         let acc = Math.random() * totW;
@@ -849,7 +871,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         const item = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
         setDummies((prev) => prev.map((d) => (d.id === user.id ? { ...d, lastItem: item, itemAt: Date.now() } : d)));
         const incomingNew = pendingRef.current.reduce((s, e) => s + e.amount, 0);
-        if (item === 'longbomb' && incomingNew < 6) {
+        if (item === 'longbomb' && incomingNew < 6 && Date.now() >= freezeUntilRef.current) {
           const lw = randomLongWord();
           lastAttackerRef.current = user.id;
           setDummies((prev) => prev.map((d) => (d.id === user.id ? { ...d, atk: (d.atk ?? 0) + 1 } : d)));
@@ -1510,6 +1532,34 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                         className="flex-1 accent-yellow-500"
                       />
                       <StepBtn onClick={() => setCfgTreasureRate((v) => Math.min(80, v + 5))}>＋</StepBtn>
+                    </div>
+                  </div>
+                  <div className="block text-[11px] text-gray-400 mt-3">
+                    アタックゲージ（何クリアで発射）: <span className="text-orange-300 font-mono">{cfgAttackGauge}</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <StepBtn onClick={() => setCfgAttackGauge((v) => Math.max(2, v - 1))}>−</StepBtn>
+                      <input type="range" min={2} max={10} step={1} value={cfgAttackGauge}
+                        onChange={(e) => setCfgAttackGauge(Number(e.target.value))} className="flex-1 accent-orange-500" />
+                      <StepBtn onClick={() => setCfgAttackGauge((v) => Math.min(10, v + 1))}>＋</StepBtn>
+                    </div>
+                  </div>
+                  <div className="block text-[11px] text-gray-400 mt-3">
+                    アタック数の上限: <span className="text-orange-300 font-mono">{cfgAttackCap}</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <StepBtn onClick={() => setCfgAttackCap((v) => Math.max(2, v - 1))}>−</StepBtn>
+                      <input type="range" min={2} max={12} step={1} value={cfgAttackCap}
+                        onChange={(e) => setCfgAttackCap(Number(e.target.value))} className="flex-1 accent-orange-500" />
+                      <StepBtn onClick={() => setCfgAttackCap((v) => Math.min(12, v + 1))}>＋</StepBtn>
+                    </div>
+                  </div>
+                  <div className="block text-[11px] text-gray-400 mt-3">
+                    アタック数が増える連鎖数: <span className="text-orange-300 font-mono">{cfgComboStep}</span>
+                    <span className="text-gray-600"> （この連鎖ごとに攻撃量+1）</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <StepBtn onClick={() => setCfgComboStep((v) => Math.max(2, v - 1))}>−</StepBtn>
+                      <input type="range" min={2} max={15} step={1} value={cfgComboStep}
+                        onChange={(e) => setCfgComboStep(Number(e.target.value))} className="flex-1 accent-orange-500" />
+                      <StepBtn onClick={() => setCfgComboStep((v) => Math.min(15, v + 1))}>＋</StepBtn>
                     </div>
                   </div>
 

@@ -10,6 +10,9 @@ import {
   setRoomItemRate,
   setRoomHp,
   setRoomSpawnMs,
+  setRoomAttackGauge,
+  setRoomAttackCap,
+  setRoomComboStep,
   addCpuPlayer,
   removeCpuPlayer,
   removeAllCpus,
@@ -98,6 +101,9 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         itemRate={typeof meta.itemRate === 'number' ? meta.itemRate : 30}
         hp={typeof meta.hp === 'number' ? meta.hp : 12}
         spawnMs={typeof meta.spawnMs === 'number' ? meta.spawnMs : 4000}
+        attackGauge={typeof meta.attackGauge === 'number' ? meta.attackGauge : 5}
+        attackCap={typeof meta.attackCap === 'number' ? meta.attackCap : 5}
+        comboStep={typeof meta.comboStep === 'number' ? meta.comboStep : 5}
         itemPrefs={itemPrefs}
         players={players}
         onExit={handleLeave}
@@ -246,6 +252,32 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
             className="w-full accent-cyan-500 disabled:opacity-60"
           />
           <p className="text-[10px] text-gray-600 mt-0.5">右ほど速い（おじゃま単語が早く積もります）。</p>
+        </div>
+
+        {/* 攻撃の設定（ホストが選択） */}
+        <div className="mb-5 grid grid-cols-3 gap-2">
+          {([
+            { key: 'gauge', label: 'アタックゲージ', val: typeof meta.attackGauge === 'number' ? meta.attackGauge : 5, min: 2, max: 10, set: setRoomAttackGauge },
+            { key: 'cap', label: 'アタック上限', val: typeof meta.attackCap === 'number' ? meta.attackCap : 5, min: 2, max: 12, set: setRoomAttackCap },
+            { key: 'step', label: '増加の連鎖数', val: typeof meta.comboStep === 'number' ? meta.comboStep : 5, min: 2, max: 15, set: setRoomComboStep },
+          ] as const).map((s) => (
+            <div key={s.key} className="bg-neutral-900/60 border border-white/10 rounded-lg p-2">
+              <div className="text-[10px] text-gray-500 mb-1 flex items-center justify-between">
+                <span>{s.label}</span>
+                <span className="text-orange-300 font-mono font-bold">{s.val}</span>
+              </div>
+              <input
+                type="range"
+                min={s.min}
+                max={s.max}
+                step={1}
+                value={s.val}
+                onChange={(e) => isHost && s.set(roomId, Number(e.target.value))}
+                disabled={!isHost}
+                className="w-full accent-orange-500 disabled:opacity-60"
+              />
+            </div>
+          ))}
         </div>
 
         {/* CPU追加（ホストのみ。royaleモード向け） */}
