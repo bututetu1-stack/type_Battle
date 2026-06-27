@@ -11,6 +11,7 @@ import {
   type RoomPlayer, type RoomStatus,
 } from '../lib/room';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
+import { ITEM_CAT, type ItemPrefs } from '../lib/items';
 import type { GameMode, ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
@@ -132,11 +133,12 @@ interface OnlineGameProps {
   mode: GameMode;
   bossUid: string;
   itemRate: number;
+  itemPrefs: ItemPrefs;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, itemPrefs, players, onExit }: OnlineGameProps) {
   // ボスモード関連の派生フラグ。
   const bossMode = mode === 'boss';
   const isBoss = bossMode && uid === bossUid;
@@ -208,6 +210,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   useEffect(() => {
     itemRateRef.current = itemRate;
   }, [itemRate]);
+  // アイテムの使い方設定（自分用）。ゲーム中に参照するため ref で保持。
+  const autoFullRef = useRef(itemPrefs.autoFull);
+  const useModeRef = useRef(itemPrefs.use);
+  useEffect(() => {
+    autoFullRef.current = itemPrefs.autoFull;
+    useModeRef.current = itemPrefs.use;
+  }, [itemPrefs]);
   const pendingRef = useRef<Telegraph[]>([]);
   const updatePending = useCallback((next: Telegraph[]) => {
     pendingRef.current = next;
@@ -643,11 +652,42 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       acc -= x.w;
       if (acc <= 0) { pick = x.it; break; }
     }
-    setHeldItem(pick);
     sfx.item();
     setItemFlash(true);
     setTimeout(() => setItemFlash(false), 1000);
+    // 使い方設定: カテゴリが「即時」なら拾った瞬間に発動。完全オートは保持して自動ループに任せる。
+    if (!autoFullRef.current && useModeRef.current[ITEM_CAT[pick]] === 'instant') {
+      sfx.use();
+      applyItem(pick);
+      setHeldItem(null);
+    } else {
+      setHeldItem(pick);
+    }
   }, [applyItem, bossMode, isBoss, selfMax]);
+
+  // 完全オート: 保持中のアイテムを、有利/不利に応じて良いタイミングで自動発動する。
+  useEffect(() => {
+    if (!started || status !== 'playing') return;
+    const id = setInterval(() => {
+      if (!autoFullRef.current || !selfAliveRef.current) return;
+      const item = heldItemRef.current;
+      if (!item) return;
+      const frac = stateRef.current.backlog.length / selfMax; // 不利度
+      const incoming = pendingRef.current.reduce((s, e) => s + e.amount, 0);
+      const cat = ITEM_CAT[item];
+      let use = false;
+      if (cat === 'defense') use = frac >= 0.55 || incoming >= 3;
+      else if (cat === 'attack') use = frac <= 0.5 && stateRef.current.combo >= 2;
+      else use = frac >= 0.45 || incoming >= 2;
+      if (frac >= 0.8) use = true; // 危険なら何でも発動
+      if (use) {
+        sfx.use();
+        applyItem(item);
+        setHeldItem(null);
+      }
+    }, 700);
+    return () => clearInterval(id);
+  }, [started, status, applyItem, selfMax]);
 
   const useItem = useCallback(() => {
     const item = heldItemRef.current;

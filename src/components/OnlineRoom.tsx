@@ -11,6 +11,7 @@ import {
   type RoomSnapshot,
 } from '../lib/room';
 import { THEMES } from '../lib/words';
+import { loadItemPrefs, saveItemPrefs, CAT_META, type ItemPrefs, type UseMode } from '../lib/items';
 import OnlineGame from './OnlineGame';
 
 interface OnlineRoomProps {
@@ -23,6 +24,9 @@ interface OnlineRoomProps {
 export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
   const [snap, setSnap] = useState<RoomSnapshot | null>(null);
   const [copied, setCopied] = useState(false);
+  // アイテムの使い方（自分の設定。ソロと共通の localStorage に保存）。
+  const [itemPrefs, setItemPrefs] = useState<ItemPrefs>(() => loadItemPrefs());
+  const updatePrefs = (p: ItemPrefs) => { setItemPrefs(p); saveItemPrefs(p); };
   const [starting, setStarting] = useState(false);
 
   useEffect(() => {
@@ -84,6 +88,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         mode={meta.mode === 'boss' ? 'boss' : 'royale'}
         bossUid={meta.bossUid || meta.hostUid}
         itemRate={typeof meta.itemRate === 'number' ? meta.itemRate : 30}
+        itemPrefs={itemPrefs}
         players={players}
         onExit={handleLeave}
       />
@@ -213,6 +218,48 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
               </button>
             ))}
           </div>
+        </div>
+
+        {/* アイテムの使い方（自分の設定） */}
+        <div className="mb-6 bg-neutral-900/60 border border-white/10 rounded-xl p-3">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-amber-200 font-bold">アイテムの使い方（自分用）</span>
+            <button
+              onClick={() => updatePrefs({ ...itemPrefs, autoFull: !itemPrefs.autoFull })}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                itemPrefs.autoFull ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+              }`}
+            >
+              完全オート {itemPrefs.autoFull ? 'ON' : 'OFF'}
+            </button>
+          </div>
+          {itemPrefs.autoFull ? (
+            <p className="text-[10px] text-emerald-300/80">
+              有利/不利を見て、いい感じのタイミングで自動発動します（手動 [Space] も可）。
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {CAT_META.map((c) => (
+                <div key={c.key} className="flex items-center justify-between">
+                  <span className={`text-[11px] font-bold ${c.color}`}>{c.label}</span>
+                  <div className="flex gap-1">
+                    {(['hold', 'instant'] as UseMode[]).map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => updatePrefs({ ...itemPrefs, use: { ...itemPrefs.use, [c.key]: m } })}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                          itemPrefs.use[c.key] === m ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                        }`}
+                      >
+                        {m === 'hold' ? '保持' : '即時'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              <p className="text-[10px] text-gray-600">即時＝拾った瞬間に自動発動 / 保持＝[Space]で手動発動</p>
+            </div>
+          )}
         </div>
 
         {/* 操作 */}

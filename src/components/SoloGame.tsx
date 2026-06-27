@@ -7,6 +7,7 @@ import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, THEMES } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
+import { ITEM_CAT, CAT_META, type ItemCat, type UseMode } from '../lib/items';
 import type { Dummy, GameStatus, ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
@@ -84,24 +85,6 @@ const ALL_ITEMS: ItemType[] = [
   'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror',
 ];
 
-// アイテムの大分類（攻撃/防御/妨害）。使い方設定・効果欄の分類に使う。
-type ItemCat = 'attack' | 'defense' | 'disrupt';
-const ITEM_CAT: Record<ItemType, ItemCat> = {
-  // 攻撃
-  longbomb: 'attack', rapid: 'attack', snipe: 'attack', burst: 'attack', heavy: 'attack', gaugedown: 'attack',
-  meteor: 'attack', quake: 'attack', rally: 'attack', focus: 'attack',
-  // 防御
-  shield: 'defense', clear: 'defense', brake: 'defense', keep: 'defense', barrier: 'defense', freeze: 'defense',
-  purge: 'defense', guard: 'defense', totem: 'defense', shrink: 'defense', regen: 'defense',
-  // 妨害
-  parry: 'disrupt', flood: 'disrupt', drain: 'disrupt', mirror: 'disrupt',
-};
-const CAT_META: { key: ItemCat; label: string; color: string }[] = [
-  { key: 'attack', label: '攻撃', color: 'text-orange-300' },
-  { key: 'defense', label: '防御', color: 'text-cyan-300' },
-  { key: 'disrupt', label: '妨害', color: 'text-fuchsia-300' },
-];
-type UseMode = 'hold' | 'instant';
 
 const MAX_DUMMIES = 30; // 敵数の上限（名前プールの都合）
 const HP_MIN = 6;
