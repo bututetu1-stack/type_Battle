@@ -492,9 +492,11 @@ export const generateWord = (
 ): Word => {
   const pool = THEME_POOLS[theme] ?? WORD_POOL;
   let entry = pool[Math.floor(rng() * pool.length)];
-  // 直近に出た単語と被ったら数回まで引き直す（プールが十分大きいときのみ）。
+  // 直近に出た単語と被ったら引き直す（プールが十分大きいときのみ）。
+  // プールサイズに応じて試行回数を増やし、近接重複をしっかり避ける。
   if (recent.length > 0 && pool.length > recent.length + 1) {
-    for (let i = 0; i < 8 && recent.includes(entry.display); i++) {
+    const tries = Math.min(40, pool.length);
+    for (let i = 0; i < tries && recent.includes(entry.display); i++) {
       entry = pool[Math.floor(rng() * pool.length)];
     }
   }

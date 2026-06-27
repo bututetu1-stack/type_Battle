@@ -84,16 +84,41 @@ const ALL_ITEMS: ItemType[] = [
   'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror',
 ];
 
+// アイテムの大分類（攻撃/防御/妨害）。使い方設定・効果欄の分類に使う。
+type ItemCat = 'attack' | 'defense' | 'disrupt';
+const ITEM_CAT: Record<ItemType, ItemCat> = {
+  // 攻撃
+  longbomb: 'attack', rapid: 'attack', snipe: 'attack', burst: 'attack', heavy: 'attack', gaugedown: 'attack',
+  meteor: 'attack', quake: 'attack', rally: 'attack', focus: 'attack',
+  // 防御
+  shield: 'defense', clear: 'defense', brake: 'defense', keep: 'defense', barrier: 'defense', freeze: 'defense',
+  purge: 'defense', guard: 'defense', totem: 'defense', shrink: 'defense', regen: 'defense',
+  // 妨害
+  parry: 'disrupt', flood: 'disrupt', drain: 'disrupt', mirror: 'disrupt',
+};
+const CAT_META: { key: ItemCat; label: string; color: string }[] = [
+  { key: 'attack', label: '攻撃', color: 'text-orange-300' },
+  { key: 'defense', label: '防御', color: 'text-cyan-300' },
+  { key: 'disrupt', label: '妨害', color: 'text-fuchsia-300' },
+];
+type UseMode = 'hold' | 'instant';
+
 const MAX_DUMMIES = 30; // 敵数の上限（名前プールの都合）
 const HP_MIN = 6;
 const HP_MAX = 24;
 
 // カスタム設定の永続化（タイトルに戻ってもリセットされない）。
-interface CustomCfg { initial: number; min: number; accel: number; theme: string; hp: number; enemies: number; }
+interface CustomCfg {
+  initial: number; min: number; accel: number; theme: string; hp: number; enemies: number;
+  autoFull: boolean; // 完全オート（有利不利を見て自動で使用）
+  use: Record<ItemCat, UseMode>; // カテゴリ別の使い方（保持/即時）
+}
+const validMode = (v: unknown): UseMode => (v === 'instant' ? 'instant' : 'hold');
 function loadCfg(): CustomCfg {
   const def: CustomCfg = {
     initial: INITIAL_SPAWN_INTERVAL, min: MIN_SPAWN_INTERVAL, accel: DEFAULT_ACCEL,
     theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT,
+    autoFull: false, use: { attack: 'hold', defense: 'hold', disrupt: 'hold' },
   };
   try {
     const raw = localStorage.getItem(CFG_KEY);
@@ -106,6 +131,10 @@ function loadCfg(): CustomCfg {
         theme: typeof o.theme === 'string' ? o.theme : def.theme,
         hp: typeof o.hp === 'number' ? Math.min(HP_MAX, Math.max(HP_MIN, o.hp)) : def.hp,
         enemies: typeof o.enemies === 'number' ? Math.min(MAX_DUMMIES, Math.max(1, o.enemies)) : def.enemies,
+        autoFull: typeof o.autoFull === 'boolean' ? o.autoFull : def.autoFull,
+        use: o.use && typeof o.use === 'object'
+          ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), disrupt: validMode(o.use.disrupt) }
+          : def.use,
       };
     }
   } catch { /* localStorage 不可環境は既定値 */ }
@@ -198,12 +227,22 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgAccel, setCfgAccel] = useState(initialCfg.accel);
   const [cfgHp, setCfgHp] = useState(initialCfg.hp);
   const [cfgEnemies, setCfgEnemies] = useState(initialCfg.enemies);
+  const [cfgAutoFull, setCfgAutoFull] = useState(initialCfg.autoFull);
+  const [cfgUse, setCfgUse] = useState<Record<ItemCat, UseMode>>(initialCfg.use);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
   useEffect(() => {
     try {
-      localStorage.setItem(CFG_KEY, JSON.stringify({ initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies }));
+      localStorage.setItem(CFG_KEY, JSON.stringify({
+        initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies,
+        autoFull: cfgAutoFull, use: cfgUse,
+      }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgAutoFull, cfgUse]);
+  // ゲーム中に参照するための ref（設定はスタート画面で変える想定）。
+  const autoFullRef = useRef(cfgAutoFull);
+  const useModeRef = useRef(cfgUse);
+  useEffect(() => { autoFullRef.current = cfgAutoFull; }, [cfgAutoFull]);
+  useEffect(() => { useModeRef.current = cfgUse; }, [cfgUse]);
   const accelRef = useRef(DEFAULT_ACCEL);
   const minRef = useRef(MIN_SPAWN_INTERVAL);
   const rapidUntilRef = useRef(0);
@@ -225,7 +264,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
   // 直近の単語履歴に追加（末尾8件まで保持）。
   const pushRecent = useCallback((display: string) => {
-    recentRef.current = [...recentRef.current, display].slice(-8);
+    recentRef.current = [...recentRef.current, display].slice(-20);
   }, []);
   // 重複を避けつつ次の単語を生成して履歴に積む。
   const nextWord = useCallback((): Word => {
@@ -491,11 +530,42 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       if (acc <= 0) { pick = x.item; break; }
     }
     if (pick === 'gaugedown') gaugeDownObtainedRef.current = true; // 以降は出さない
-    setHeldItem(pick);
     sfx.item();
     setItemFlash(true);
     setTimeout(() => setItemFlash(false), 1000);
+    // 使い方設定: カテゴリが「即時」なら拾った瞬間に発動。完全オートは保持して自動ループに任せる。
+    if (!autoFullRef.current && useModeRef.current[ITEM_CAT[pick]] === 'instant') {
+      sfx.use();
+      applyItem(pick);
+      setHeldItem(null);
+    } else {
+      setHeldItem(pick);
+    }
   }, [applyItem]);
+
+  // 完全オート: 保持中のアイテムを、有利/不利に応じて良いタイミングで自動発動する。
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+    const id = setInterval(() => {
+      if (!autoFullRef.current) return;
+      const item = heldItemRef.current;
+      if (!item) return;
+      const frac = stateRef.current.backlog.length / maxBacklogRef.current; // 不利度
+      const incoming = pendingRef.current.reduce((s, e) => s + e.amount, 0);
+      const cat = ITEM_CAT[item];
+      let use = false;
+      if (cat === 'defense') use = frac >= 0.55 || incoming >= 3; // ピンチで防御
+      else if (cat === 'attack') use = frac <= 0.5 && stateRef.current.combo >= 2; // 余裕＋連鎖で攻撃
+      else use = frac >= 0.45 || incoming >= 2; // 妨害は不利寄りで
+      if (frac >= 0.8) use = true; // 死にそうなら何でも発動
+      if (use) {
+        sfx.use();
+        applyItem(item);
+        setHeldItem(null);
+      }
+    }, 700);
+    return () => clearInterval(id);
+  }, [gameState, applyItem]);
 
   const useItem = useCallback(() => {
     const item = heldItemRef.current;
@@ -1252,6 +1322,48 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                       <StepBtn onClick={() => setCfgEnemies((v) => Math.min(MAX_DUMMIES, v + 1))}>＋</StepBtn>
                     </div>
                   </div>
+
+                  {/* アイテムの使い方 */}
+                  <div className="mt-4 border-t border-white/10 pt-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] text-amber-200 font-bold">アイテムの使い方</span>
+                      <button
+                        onClick={() => setCfgAutoFull((v) => !v)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                          cfgAutoFull ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                        }`}
+                      >
+                        完全オート {cfgAutoFull ? 'ON' : 'OFF'}
+                      </button>
+                    </div>
+                    {cfgAutoFull ? (
+                      <p className="text-[10px] text-emerald-300/80">
+                        有利/不利を見て、いい感じのタイミングで自動発動します（手動 [Space] も可）。
+                      </p>
+                    ) : (
+                      <div className="flex flex-col gap-1.5">
+                        {CAT_META.map((c) => (
+                          <div key={c.key} className="flex items-center justify-between">
+                            <span className={`text-[11px] font-bold ${c.color}`}>{c.label}</span>
+                            <div className="flex gap-1">
+                              {(['hold', 'instant'] as UseMode[]).map((m) => (
+                                <button
+                                  key={m}
+                                  onClick={() => setCfgUse((u) => ({ ...u, [c.key]: m }))}
+                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                                    cfgUse[c.key] === m ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                                  }`}
+                                >
+                                  {m === 'hold' ? '保持' : '即時'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        <p className="text-[10px] text-gray-600">即時＝拾った瞬間に自動発動 / 保持＝[Space]で手動発動</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
               {/* 出題テーマ選択 */}
@@ -1284,12 +1396,19 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <div className="text-gray-400 font-bold mb-1.5 flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-yellow-400" /> アイテム効果（お宝🟨で入手 → [Space]で使用）
                 </div>
-                <div className="flex flex-col gap-1 text-left text-gray-400">
-                  {ALL_ITEMS.map((t) => (
-                    <div key={t}>
-                      <span className="mr-1">{ITEM_META[t].icon}</span>
-                      <span className="text-gray-300 font-bold">{ITEM_META[t].name}</span>
-                      <span className="text-gray-500"> … {ITEM_META[t].desc}</span>
+                <div className="flex flex-col gap-2 text-left text-gray-400">
+                  {CAT_META.map((c) => (
+                    <div key={c.key}>
+                      <div className={`text-[11px] font-black mb-0.5 ${c.color}`}>{c.label}</div>
+                      <div className="flex flex-col gap-1">
+                        {ALL_ITEMS.filter((t) => ITEM_CAT[t] === c.key).map((t) => (
+                          <div key={t}>
+                            <span className="mr-1">{ITEM_META[t].icon}</span>
+                            <span className="text-gray-300 font-bold">{ITEM_META[t].name}</span>
+                            <span className="text-gray-500"> … {ITEM_META[t].desc}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>

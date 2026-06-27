@@ -198,6 +198,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const barrierRef = useRef(false); // バリア（次の被弾を1回防ぐ）
   const guardCountRef = useRef(0); // ガード（自動供給を複数回防ぐ）
   const focusNextRef = useRef(false); // 会心: 次のボスへの攻撃を倍化
+  const recentRef = useRef<string[]>([]); // 直近に出した単語（近接重複の回避・全員同一）
   const attackProgressRef = useRef(0);
   const categoryRef = useRef(category);
   useEffect(() => {
@@ -211,6 +212,15 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const updatePending = useCallback((next: Telegraph[]) => {
     pendingRef.current = next;
     setPending(next);
+  }, []);
+
+  // 単語生成（近接重複を避ける）。エントリ列はシード共有なので recent も全員同一になり、
+  // 引き直しの rng 消費数も一致＝同期は崩れない。種別はローカル乱数（localType）。
+  const genWord = useCallback((): Word => {
+    const rng = wordRngRef.current!;
+    const w = generateWord(rng, categoryRef.current, recentRef.current, true, itemRateRef.current / 100);
+    recentRef.current = [...recentRef.current, w.display].slice(-20);
+    return w;
   }, []);
 
   const pushToast = useCallback((text: string, kind: 'ko' | 'in' | 'item') => {
@@ -279,10 +289,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     const rng = mulberry32(seed >>> 0);
     wordRngRef.current = rng;
     itemRngRef.current = mulberry32((seed ^ 0x9e3779b9) >>> 0);
-    const th = categoryRef.current;
     // 種別はローカル乱数で（お宝＝アイテムが各プレイヤーに確実に出るように）。出現率はホスト設定。
-    const tp = itemRateRef.current / 100;
-    setBacklog([generateWord(rng, th, [], true, tp), generateWord(rng, th, [], true, tp), generateWord(rng, th, [], true, tp)]);
+    recentRef.current = [];
+    setBacklog([genWord(), genWord(), genWord()]);
     attackProgressRef.current = 0;
     setAttackProgress(0);
     keepUntilRef.current = 0;
@@ -296,7 +305,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     setMissCount(0);
     // 新しいゲーム開始時に自分の状態をリセット（再戦対応）。
     writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '' });
-  }, [seed, roomId, uid]);
+  }, [seed, roomId, uid, genWord]);
 
   // startAt に達したらゲーム開始。それまではカウントダウン（秒ごとにビープ）。
   const lastBeepRef = useRef(99);
@@ -803,8 +812,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             topOut();
             return prev;
           }
-          const rng = wordRngRef.current;
-          return rng ? [...prev, generateWord(rng, categoryRef.current, [], true, itemRateRef.current / 100)] : prev;
+          return wordRngRef.current ? [...prev, genWord()] : prev;
         });
       }
       setSpawnInterval((prev) => Math.max(MIN_SPAWN_INTERVAL, prev * 0.98));
@@ -812,7 +820,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     };
     timerId = setTimeout(loop, spawnInterval);
     return () => clearTimeout(timerId);
-  }, [started, selfAlive, spawnInterval, topOut, selfMax, status]);
+  }, [started, selfAlive, spawnInterval, topOut, selfMax, status, genWord]);
 
   // サマリのスロットリング書込（バッジも反映）。
   const summaryRef = useRef({ backlog: 0, combo: 0, kpm: 0, badges: 0 });
