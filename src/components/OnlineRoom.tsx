@@ -11,7 +11,7 @@ import {
   type RoomSnapshot,
 } from '../lib/room';
 import { THEMES } from '../lib/words';
-import { loadItemPrefs, saveItemPrefs, CAT_META, type ItemPrefs, type UseMode } from '../lib/items';
+import { loadItemPrefs, saveItemPrefs, CAT_META, USE_MODES, type ItemPrefs } from '../lib/items';
 import OnlineGame from './OnlineGame';
 
 interface OnlineRoomProps {
@@ -240,24 +240,27 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
           ) : (
             <div className="flex flex-col gap-1.5">
               {CAT_META.map((c) => (
-                <div key={c.key} className="flex items-center justify-between">
-                  <span className={`text-[11px] font-bold ${c.color}`}>{c.label}</span>
-                  <div className="flex gap-1">
-                    {(['hold', 'instant'] as UseMode[]).map((m) => (
+                <div key={c.key} className="flex items-center justify-between gap-2">
+                  <span className={`text-[11px] font-bold ${c.color} w-8 shrink-0`}>{c.label}</span>
+                  <div className="flex gap-1 flex-wrap justify-end">
+                    {USE_MODES.map((m) => (
                       <button
-                        key={m}
-                        onClick={() => updatePrefs({ ...itemPrefs, use: { ...itemPrefs.use, [c.key]: m } })}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                          itemPrefs.use[c.key] === m ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                        key={m.key}
+                        onClick={() => updatePrefs({ ...itemPrefs, use: { ...itemPrefs.use, [c.key]: m.key } })}
+                        title={m.desc}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                          itemPrefs.use[c.key] === m.key ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
                         }`}
                       >
-                        {m === 'hold' ? '保持' : '即時'}
+                        {m.label}
                       </button>
                     ))}
                   </div>
                 </div>
               ))}
-              <p className="text-[10px] text-gray-600">即時＝拾った瞬間に自動発動 / 保持＝[Space]で手動発動</p>
+              <p className="text-[9px] text-gray-600 leading-tight">
+                保持=[Enter]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 新着=1つ保持し被ったら新しい方を発動
+              </p>
             </div>
           )}
         </div>

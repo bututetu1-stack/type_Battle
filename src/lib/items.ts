@@ -1,9 +1,22 @@
 // アイテムの分類と「使い方」設定（ソロ/オンライン共通）。
 import type { ItemType } from './types';
 
-// アイテムの大分類（攻撃/防御/妨害）。使い方設定・効果欄の分類に使う。
+// アイテムの大分類（攻撃/防御/妨害）。使い方設定・効果欄・スロットの分類に使う。
 export type ItemCat = 'attack' | 'defense' | 'disrupt';
-export type UseMode = 'hold' | 'instant';
+// 使い方: hold=保持(手動) / instant=即時(拾った瞬間) / auto=オート(良い時に自動) /
+//          usenew=新着即時(スロットが埋まっている時、新しく来た方を自動発動して既存は保持)
+export type UseMode = 'hold' | 'instant' | 'auto' | 'usenew';
+
+// スロットの巡回順（Spaceでこの順に切り替える）。
+export const CAT_ORDER: ItemCat[] = ['attack', 'defense', 'disrupt'];
+
+// 使い方モードの表示ラベル。
+export const USE_MODES: { key: UseMode; label: string; desc: string }[] = [
+  { key: 'hold', label: '保持', desc: '[Enter]で手動発動（被ったら古い方を自動発動）' },
+  { key: 'instant', label: '即時', desc: '拾った瞬間に自動発動' },
+  { key: 'auto', label: 'オート', desc: '有利/不利を見て良い時に自動発動' },
+  { key: 'usenew', label: '新着', desc: '1つ保持し、被ったら新しく来た方を自動発動' },
+];
 
 export const ITEM_CAT: Record<ItemType, ItemCat> = {
   // 攻撃
@@ -30,7 +43,8 @@ export interface ItemPrefs {
 
 // 設定はカスタム設定と同じ localStorage キーに同居させる（ソロ/オンライン共通）。
 const PREFS_KEY = 'typeRoyale.custom';
-const validMode = (v: unknown): UseMode => (v === 'instant' ? 'instant' : 'hold');
+const validMode = (v: unknown): UseMode =>
+  v === 'instant' || v === 'auto' || v === 'usenew' ? v : 'hold';
 
 export function defaultItemPrefs(): ItemPrefs {
   return { autoFull: false, use: { attack: 'hold', defense: 'hold', disrupt: 'hold' } };

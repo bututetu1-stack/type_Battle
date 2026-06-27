@@ -11,7 +11,7 @@ import {
   type RoomPlayer, type RoomStatus,
 } from '../lib/room';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
-import { ITEM_CAT, type ItemPrefs } from '../lib/items';
+import { ITEM_CAT, CAT_META, CAT_ORDER, type ItemPrefs, type ItemCat, type UseMode } from '../lib/items';
 import type { GameMode, ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
@@ -159,7 +159,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [missFlash, setMissFlash] = useState(false);
   const [pending, setPending] = useState<Telegraph[]>([]);
   const [attackFlash, setAttackFlash] = useState<{ amount: number; name: string } | null>(null);
-  const [heldItem, setHeldItem] = useState<ItemType | null>(null);
+  // アイテムは攻撃/防御/妨害の3スロットで保持。Spaceで選択切替、Enterで発動。
+  const [slots, setSlots] = useState<Record<ItemCat, ItemType | null>>({ attack: null, defense: null, disrupt: null });
+  const [selectedSlot, setSelectedSlot] = useState<ItemCat>('attack');
   const [itemFlash, setItemFlash] = useState(false);
   const [targetMode, setTargetMode] = useState<TargetMode>('random');
   const [muted, setMuted] = useState(false);
@@ -188,7 +190,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const stateRef = useRef<PlayerState>({ backlog, tokenIndex, currentTyping, combo, gameState: 'playing' });
   const selfAliveRef = useRef(true);
   const playersRef = useRef(players);
-  const heldItemRef = useRef(heldItem);
+  const slotsRef = useRef(slots);
+  const selectedSlotRef = useRef(selectedSlot);
   const targetModeRef = useRef(targetMode);
   const lastAttackerRef = useRef('');
   const shieldRef = useRef(false);
@@ -279,7 +282,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   }, [backlog, tokenIndex, currentTyping, combo]);
   useEffect(() => { selfAliveRef.current = selfAlive; }, [selfAlive]);
   useEffect(() => { playersRef.current = players; }, [players]);
-  useEffect(() => { heldItemRef.current = heldItem; }, [heldItem]);
+  useEffect(() => { slotsRef.current = slots; }, [slots]);
+  useEffect(() => { selectedSlotRef.current = selectedSlot; }, [selectedSlot]);
+  const setSlot = useCallback((cat: ItemCat, val: ItemType | null) => {
+    setSlots((s) => ({ ...s, [cat]: val }));
+    slotsRef.current = { ...slotsRef.current, [cat]: val };
+  }, []);
   useEffect(() => { targetModeRef.current = targetMode; }, [targetMode]);
 
   const calculateKPM = useCallback(() => {
@@ -312,6 +320,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     endTimeRef.current = 0;
     setKeysTyped(0);
     setMissCount(0);
+    setSlots({ attack: null, defense: null, disrupt: null });
+    setSelectedSlot('attack');
+    slotsRef.current = { attack: null, defense: null, disrupt: null };
     // 新しいゲーム開始時に自分の状態をリセット（再戦対応）。
     writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '' });
   }, [seed, roomId, uid, genWord]);
@@ -623,7 +634,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   );
 
   const grantItem = useCallback(() => {
-    if (heldItemRef.current) applyItem(heldItemRef.current); // 既存を自動発動してスタック
     const rng = itemRngRef.current;
     let items: ItemType[];
     if (bossMode && isBoss) {
@@ -655,47 +665,64 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     sfx.item();
     setItemFlash(true);
     setTimeout(() => setItemFlash(false), 1000);
-    // 使い方設定: カテゴリが「即時」なら拾った瞬間に発動。完全オートは保持して自動ループに任せる。
-    if (!autoFullRef.current && useModeRef.current[ITEM_CAT[pick]] === 'instant') {
+    // 使い方設定に従ってスロットへ格納/発動する。
+    const cat = ITEM_CAT[pick];
+    const mode: UseMode = autoFullRef.current ? 'auto' : useModeRef.current[cat];
+    const existing = slotsRef.current[cat];
+    if (mode === 'instant') {
       sfx.use();
       applyItem(pick);
-      setHeldItem(null);
+    } else if (mode === 'usenew') {
+      if (existing) { sfx.use(); applyItem(pick); } // 既存を保持し、新着を発動
+      else setSlot(cat, pick);
     } else {
-      setHeldItem(pick);
+      // hold / auto: スロットが埋まっていたら古い方を自動発動し、新着を保持。
+      if (existing) applyItem(existing);
+      setSlot(cat, pick);
     }
-  }, [applyItem, bossMode, isBoss, selfMax]);
+  }, [applyItem, bossMode, isBoss, selfMax, setSlot]);
 
-  // 完全オート: 保持中のアイテムを、有利/不利に応じて良いタイミングで自動発動する。
+  // オート発動: スロット別に「オート」設定（または完全オート）のアイテムを良い時に自動発動。
   useEffect(() => {
     if (!started || status !== 'playing') return;
     const id = setInterval(() => {
-      if (!autoFullRef.current || !selfAliveRef.current) return;
-      const item = heldItemRef.current;
-      if (!item) return;
+      if (!selfAliveRef.current) return;
       const frac = stateRef.current.backlog.length / selfMax; // 不利度
       const incoming = pendingRef.current.reduce((s, e) => s + e.amount, 0);
-      const cat = ITEM_CAT[item];
-      let use = false;
-      if (cat === 'defense') use = frac >= 0.55 || incoming >= 3;
-      else if (cat === 'attack') use = frac <= 0.5 && stateRef.current.combo >= 2;
-      else use = frac >= 0.45 || incoming >= 2;
-      if (frac >= 0.8) use = true; // 危険なら何でも発動
-      if (use) {
-        sfx.use();
-        applyItem(item);
-        setHeldItem(null);
+      for (const cat of CAT_ORDER) {
+        const item = slotsRef.current[cat];
+        if (!item) continue;
+        const mode: UseMode = autoFullRef.current ? 'auto' : useModeRef.current[cat];
+        if (mode !== 'auto') continue;
+        let use = false;
+        if (cat === 'defense') use = frac >= 0.55 || incoming >= 3;
+        else if (cat === 'attack') use = frac <= 0.5 && stateRef.current.combo >= 2;
+        else use = frac >= 0.45 || incoming >= 2;
+        if (frac >= 0.8) use = true;
+        if (use) {
+          sfx.use();
+          applyItem(item);
+          setSlot(cat, null);
+        }
       }
     }, 700);
     return () => clearInterval(id);
-  }, [started, status, applyItem, selfMax]);
+  }, [started, status, applyItem, selfMax, setSlot]);
 
-  const useItem = useCallback(() => {
-    const item = heldItemRef.current;
+  // 選択中スロットのアイテムを発動（Enter）。
+  const fireSelected = useCallback(() => {
+    const cat = selectedSlotRef.current;
+    const item = slotsRef.current[cat];
     if (!item) return;
     sfx.use();
     applyItem(item);
-    setHeldItem(null);
-  }, [applyItem]);
+    setSlot(cat, null);
+  }, [applyItem, setSlot]);
+
+  // 選択スロットを切り替え（Space）。
+  const cycleSlot = useCallback(() => {
+    setSelectedSlot((c) => CAT_ORDER[(CAT_ORDER.indexOf(c) + 1) % CAT_ORDER.length]);
+  }, []);
 
   const cycleTargetMode = useCallback(() => {
     setTargetMode((m) => {
@@ -791,7 +818,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       resumeAudio();
       if (!started || !selfAliveRef.current) return;
       // スペース（またはEnter）でアイテム発動。スペースはお題に使わないので安全。
-      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); useItem(); return; }
+      // スペースで選択スロット切替、Enterで発動。
+      if (e.key === ' ') { e.preventDefault(); cycleSlot(); return; }
+      if (e.key === 'Enter') { e.preventDefault(); fireSelected(); return; }
       if (e.key === 'Tab') { e.preventDefault(); cycleTargetMode(); return; }
       if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
@@ -832,7 +861,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [started, launchAttack, sendAmount, useItem, grantItem, cycleTargetMode, offsetIncoming]);
+  }, [started, launchAttack, sendAmount, fireSelected, cycleSlot, grantItem, cycleTargetMode, offsetIncoming]);
 
   // ベース供給＆加速ループ（シールド/ブレーキ対応）。
   useEffect(() => {
@@ -1283,17 +1312,37 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   />
                 </div>
               )}
-              {/* 保持アイテム（次の単語を隠さないよう単語の下に表示） */}
-              {heldItem && (
-                <div className="flex justify-center">
-                  <div className="flex items-center gap-2 bg-neutral-900/90 border border-yellow-600/50 rounded-full px-3 py-1 shadow-lg shadow-yellow-900/30">
-                    <ItemIcon type={heldItem} />
-                    <span className="text-xs font-bold text-yellow-200">{ITEM_META[heldItem].name}</span>
-                    <span className="text-[10px] text-gray-400 hidden sm:inline">{ITEM_META[heldItem].desc}</span>
-                    <span className="text-[10px] text-cyan-300 font-bold">[Space]</span>
-                  </div>
+              {/* アイテムスロット（攻撃/防御/妨害）。選択中を強調。[Space]切替 / [Enter]発動 */}
+              <div className="flex flex-col items-center gap-1">
+                <div className="flex justify-center gap-2">
+                  {CAT_META.map((c) => {
+                    const item = slots[c.key];
+                    const sel = selectedSlot === c.key;
+                    return (
+                      <button
+                        key={c.key}
+                        onClick={() => setSelectedSlot(c.key)}
+                        className={`min-w-[5.5rem] rounded-lg border px-2 py-1 flex flex-col items-center transition-colors ${
+                          sel ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'border-white/10 bg-neutral-900/80'
+                        }`}
+                      >
+                        <span className={`text-[9px] font-bold ${c.color}`}>{c.label}</span>
+                        {item ? (
+                          <span className="flex items-center gap-1">
+                            <ItemIcon type={item} />
+                            <span className="text-[10px] font-bold text-yellow-200">{ITEM_META[item].name}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-gray-600">空き</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+                <div className="text-[10px] text-gray-500">
+                  <span className="text-cyan-300 font-bold">[Space]</span> 切替 ／ <span className="text-cyan-300 font-bold">[Enter]</span> 発動
+                </div>
+              </div>
             </div>
 
             {/* 発動中アイテムの残り時間カウントダウン（保持アイテムの下に表示） */}

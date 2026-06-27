@@ -7,7 +7,7 @@ import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, THEMES } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
-import { ITEM_CAT, CAT_META, type ItemCat, type UseMode } from '../lib/items';
+import { ITEM_CAT, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode } from '../lib/items';
 import type { Dummy, GameStatus, ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
@@ -164,7 +164,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const maxBacklogRef = useRef(initialCfg.hp);
 
   const [playerKOs, setPlayerKOs] = useState(0);
-  const [heldItem, setHeldItem] = useState<ItemType | null>(null);
+  // アイテムは攻撃/防御/妨害の3スロットで保持。Spaceで選択切替、Enterで発動。
+  const [slots, setSlots] = useState<Record<ItemCat, ItemType | null>>({ attack: null, defense: null, disrupt: null });
+  const [selectedSlot, setSelectedSlot] = useState<ItemCat>('attack');
 
   const [missFlash, setMissFlash] = useState(false);
   const [itemFlash, setItemFlash] = useState(false);
@@ -274,8 +276,14 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const dummiesRef = useRef(dummies);
   useEffect(() => { dummiesRef.current = dummies; }, [dummies]);
 
-  const heldItemRef = useRef(heldItem);
-  useEffect(() => { heldItemRef.current = heldItem; }, [heldItem]);
+  const slotsRef = useRef(slots);
+  useEffect(() => { slotsRef.current = slots; }, [slots]);
+  const selectedSlotRef = useRef(selectedSlot);
+  useEffect(() => { selectedSlotRef.current = selectedSlot; }, [selectedSlot]);
+  const setSlot = useCallback((cat: ItemCat, val: ItemType | null) => {
+    setSlots((s) => ({ ...s, [cat]: val }));
+    slotsRef.current = { ...slotsRef.current, [cat]: val };
+  }, []);
 
   const wordRngRef = useRef<RNG | null>(null);
   const itemRngRef = useRef<RNG | null>(null);
@@ -474,9 +482,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // 上限超過時の保護。トーテム発動中なら無効化、所持中なら自動発動、無ければ脱落。
   const overflowProtect = useCallback((): 'protected' | 'gameover' => {
     if (Date.now() < totemUntilRef.current) return 'protected';
-    if (heldItemRef.current === 'totem') {
+    // トーテムは防御スロットに入る。所持していれば自動発動して脱落を防ぐ。
+    if (slotsRef.current.defense === 'totem') {
       totemUntilRef.current = Date.now() + TOTEM_DURATION;
-      setHeldItem(null);
+      setSlot('defense', null);
       setUseFlash('totem');
       setTimeout(() => setUseFlash(null), 900);
       sfx.use();
@@ -484,10 +493,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       return 'protected';
     }
     return 'gameover';
-  }, [pushToast]);
+  }, [pushToast, setSlot]);
 
   const grantItem = useCallback(() => {
-    if (heldItemRef.current) applyItem(heldItemRef.current); // 既存を自動発動してスタック
     const rng = itemRngRef.current;
     const r = rng ? rng() : Math.random();
     // 不利度（バックログが多いほど高い）。短縮・ゲージ短縮は不利な人ほど出やすくする。
@@ -516,47 +524,63 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     sfx.item();
     setItemFlash(true);
     setTimeout(() => setItemFlash(false), 1000);
-    // 使い方設定: カテゴリが「即時」なら拾った瞬間に発動。完全オートは保持して自動ループに任せる。
-    if (!autoFullRef.current && useModeRef.current[ITEM_CAT[pick]] === 'instant') {
+    // 使い方設定に従ってスロットへ格納/発動する。
+    const cat = ITEM_CAT[pick];
+    const mode: UseMode = autoFullRef.current ? 'auto' : useModeRef.current[cat];
+    const existing = slotsRef.current[cat];
+    if (mode === 'instant') {
       sfx.use();
-      applyItem(pick);
-      setHeldItem(null);
+      applyItem(pick); // 拾った瞬間に発動（保持しない）
+    } else if (mode === 'usenew') {
+      if (existing) { sfx.use(); applyItem(pick); } // 既存を保持し、新着を発動
+      else setSlot(cat, pick);
     } else {
-      setHeldItem(pick);
+      // hold / auto: スロットが埋まっていたら古い方を自動発動し、新着を保持。
+      if (existing) applyItem(existing);
+      setSlot(cat, pick);
     }
-  }, [applyItem]);
+  }, [applyItem, setSlot]);
 
-  // 完全オート: 保持中のアイテムを、有利/不利に応じて良いタイミングで自動発動する。
+  // オート発動: スロット別に「オート」設定（または完全オート）のアイテムを良い時に自動発動。
   useEffect(() => {
     if (gameState !== 'playing') return;
     const id = setInterval(() => {
-      if (!autoFullRef.current) return;
-      const item = heldItemRef.current;
-      if (!item) return;
       const frac = stateRef.current.backlog.length / maxBacklogRef.current; // 不利度
       const incoming = pendingRef.current.reduce((s, e) => s + e.amount, 0);
-      const cat = ITEM_CAT[item];
-      let use = false;
-      if (cat === 'defense') use = frac >= 0.55 || incoming >= 3; // ピンチで防御
-      else if (cat === 'attack') use = frac <= 0.5 && stateRef.current.combo >= 2; // 余裕＋連鎖で攻撃
-      else use = frac >= 0.45 || incoming >= 2; // 妨害は不利寄りで
-      if (frac >= 0.8) use = true; // 死にそうなら何でも発動
-      if (use) {
-        sfx.use();
-        applyItem(item);
-        setHeldItem(null);
+      for (const cat of CAT_ORDER) {
+        const item = slotsRef.current[cat];
+        if (!item) continue;
+        const mode: UseMode = autoFullRef.current ? 'auto' : useModeRef.current[cat];
+        if (mode !== 'auto') continue;
+        let use = false;
+        if (cat === 'defense') use = frac >= 0.55 || incoming >= 3;
+        else if (cat === 'attack') use = frac <= 0.5 && stateRef.current.combo >= 2;
+        else use = frac >= 0.45 || incoming >= 2;
+        if (frac >= 0.8) use = true; // 死にそうなら何でも発動
+        if (use) {
+          sfx.use();
+          applyItem(item);
+          setSlot(cat, null);
+        }
       }
     }, 700);
     return () => clearInterval(id);
-  }, [gameState, applyItem]);
+  }, [gameState, applyItem, setSlot]);
 
-  const useItem = useCallback(() => {
-    const item = heldItemRef.current;
+  // 選択中スロットのアイテムを発動（Enter）。
+  const fireSelected = useCallback(() => {
+    const cat = selectedSlotRef.current;
+    const item = slotsRef.current[cat];
     if (!item) return;
     sfx.use();
     applyItem(item);
-    setHeldItem(null);
-  }, [applyItem]);
+    setSlot(cat, null);
+  }, [applyItem, setSlot]);
+
+  // 選択スロットを切り替え（Space）。
+  const cycleSlot = useCallback(() => {
+    setSelectedSlot((c) => CAT_ORDER[(CAT_ORDER.indexOf(c) + 1) % CAT_ORDER.length]);
+  }, []);
 
   const cycleTargetMode = useCallback(() => {
     setTargetMode((m) => {
@@ -586,7 +610,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setKeysTyped(0);
     setMissCount(0);
     setPlayerKOs(0);
-    setHeldItem(null);
+    setSlots({ attack: null, defense: null, disrupt: null });
+    setSelectedSlot('attack');
+    slotsRef.current = { attack: null, defense: null, disrupt: null };
     setStartTime(Date.now());
     setEndTime(null);
     // カスタム設定を反映（HP＝積載限界、敵数）。
@@ -636,8 +662,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         startGame();
         return;
       }
-      // プレイ中はスペース（またはEnter）でアイテム発動。スペースはお題に使わないので安全。
-      if (gameState === 'playing' && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); useItem(); return; }
+      // プレイ中: スペースで選択スロット切替、Enterで発動。スペースはお題に使わないので安全。
+      if (gameState === 'playing' && e.key === ' ') { e.preventDefault(); cycleSlot(); return; }
+      if (gameState === 'playing' && e.key === 'Enter') { e.preventDefault(); fireSelected(); return; }
       if (gameState === 'playing' && e.key === 'Tab') { e.preventDefault(); cycleTargetMode(); return; }
       if (gameState !== 'playing' || e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
@@ -682,7 +709,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [startGame, useItem, fireAttack, grantItem, cycleTargetMode, offsetIncoming]);
+  }, [startGame, fireSelected, cycleSlot, fireAttack, grantItem, cycleTargetMode, offsetIncoming]);
 
   // --- CPUの挙動: 自滅ランダムウォーク + プレイヤーへの攻撃 + アイテム使用 ---
   useEffect(() => {
@@ -1154,14 +1181,36 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   ))}
               </div>
               {renderCurrentWord()}
-              {/* 保持アイテム（次の単語を隠さないよう単語の下に表示） */}
-              {gameState === 'playing' && heldItem && (
-                <div className="flex justify-center">
-                  <div className="flex items-center gap-2 bg-neutral-900/90 border border-yellow-600/50 rounded-full px-3 py-1 shadow-lg shadow-yellow-900/30">
-                    <ItemIcon type={heldItem} />
-                    <span className="text-xs font-bold text-yellow-200">{ITEM_META[heldItem].name}</span>
-                    <span className="text-[10px] text-gray-400 hidden sm:inline">{ITEM_META[heldItem].desc}</span>
-                    <span className="text-[10px] text-cyan-300 font-bold">[Space]</span>
+              {/* アイテムスロット（攻撃/防御/妨害）。選択中を強調。[Space]切替 / [Enter]発動 */}
+              {gameState === 'playing' && (
+                <div className="flex flex-col items-center gap-1">
+                  <div className="flex justify-center gap-2">
+                    {CAT_META.map((c) => {
+                      const item = slots[c.key];
+                      const sel = selectedSlot === c.key;
+                      return (
+                        <button
+                          key={c.key}
+                          onClick={() => setSelectedSlot(c.key)}
+                          className={`min-w-[5.5rem] rounded-lg border px-2 py-1 flex flex-col items-center transition-colors ${
+                            sel ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'border-white/10 bg-neutral-900/80'
+                          }`}
+                        >
+                          <span className={`text-[9px] font-bold ${c.color}`}>{c.label}</span>
+                          {item ? (
+                            <span className="flex items-center gap-1">
+                              <ItemIcon type={item} />
+                              <span className="text-[10px] font-bold text-yellow-200">{ITEM_META[item].name}</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-gray-600">空き</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-[10px] text-gray-500">
+                    <span className="text-cyan-300 font-bold">[Space]</span> 切替 ／ <span className="text-cyan-300 font-bold">[Enter]</span> 発動
                   </div>
                 </div>
               )}
@@ -1326,24 +1375,27 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                     ) : (
                       <div className="flex flex-col gap-1.5">
                         {CAT_META.map((c) => (
-                          <div key={c.key} className="flex items-center justify-between">
-                            <span className={`text-[11px] font-bold ${c.color}`}>{c.label}</span>
-                            <div className="flex gap-1">
-                              {(['hold', 'instant'] as UseMode[]).map((m) => (
+                          <div key={c.key} className="flex items-center justify-between gap-2">
+                            <span className={`text-[11px] font-bold ${c.color} w-8 shrink-0`}>{c.label}</span>
+                            <div className="flex gap-1 flex-wrap justify-end">
+                              {USE_MODES.map((m) => (
                                 <button
-                                  key={m}
-                                  onClick={() => setCfgUse((u) => ({ ...u, [c.key]: m }))}
-                                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                                    cfgUse[c.key] === m ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                                  key={m.key}
+                                  onClick={() => setCfgUse((u) => ({ ...u, [c.key]: m.key }))}
+                                  title={m.desc}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                                    cfgUse[c.key] === m.key ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
                                   }`}
                                 >
-                                  {m === 'hold' ? '保持' : '即時'}
+                                  {m.label}
                                 </button>
                               ))}
                             </div>
                           </div>
                         ))}
-                        <p className="text-[10px] text-gray-600">即時＝拾った瞬間に自動発動 / 保持＝[Space]で手動発動</p>
+                        <p className="text-[9px] text-gray-600 leading-tight">
+                          保持=[Enter]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 新着=1つ保持し被ったら新しい方を発動
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1373,11 +1425,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <div>🟨 お宝単語</div>
               </div>
               <p className="text-xs text-gray-600 mt-4 max-w-sm text-center">
-                ノーミスで打ち切ると連鎖UP。5連鎖ごとに敵CPUへおじゃまを送って撃墜！ CPUも反撃してくるので [Tab] で狙いを切り替えよう。お宝(🟨)を打つとアイテム獲得 → [Space] で使用。
+                ノーミスで打ち切ると連鎖UP。5連鎖ごとに敵CPUへおじゃまを送って撃墜！ CPUも反撃してくるので [Tab] で狙いを切り替えよう。お宝(🟨)を打つと攻撃/防御/妨害のスロットにアイテム獲得 → [Space]でスロット切替・[Enter]で発動。
               </p>
               <div className="mt-4 text-xs bg-neutral-900/50 p-3 rounded-xl max-w-sm w-full">
                 <div className="text-gray-400 font-bold mb-1.5 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-yellow-400" /> アイテム効果（お宝🟨で入手 → [Space]で使用）
+                  <Sparkles className="w-3 h-3 text-yellow-400" /> アイテム効果（お宝🟨で入手 → スロットへ。[Space]切替/[Enter]発動）
                 </div>
                 <div className="flex flex-col gap-2 text-left text-gray-400">
                   {CAT_META.map((c) => (
