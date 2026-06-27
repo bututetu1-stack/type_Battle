@@ -17,6 +17,7 @@ import {
   setRoomBadgeRate,
   setRoomGaugeMode,
   setRoomGaugeChars,
+  setRoomComeback,
   addCpuPlayer,
   removeCpuPlayer,
   removeAllCpus,
@@ -121,6 +122,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         badgeRate={typeof meta.badgeRate === 'number' ? meta.badgeRate : 25}
         gaugeMode={meta.gaugeMode === 'char' ? 'char' : 'word'}
         gaugeChars={typeof meta.gaugeChars === 'number' ? meta.gaugeChars : 16}
+        comeback={typeof meta.comeback === 'number' ? meta.comeback : 2}
         itemPrefs={itemPrefs}
         players={players}
         onExit={handleLeave}
@@ -311,6 +313,18 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
               />
             </div>
           ))}
+        </div>
+
+        {/* 逆転補正（ホストが選択） */}
+        <div className="mb-5 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] text-gray-500">逆転補正</span>
+          {([[0, 'なし'], [1, '弱'], [2, '中'], [3, '強']] as const).map(([v, lbl]) => (
+            <button key={v} onClick={() => isHost && setRoomComeback(roomId, v)} disabled={!isHost}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors disabled:opacity-60 ${(typeof meta.comeback === 'number' ? meta.comeback : 2) === v ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+              {lbl}
+            </button>
+          ))}
+          <span className="text-[9px] text-gray-600">劣勢ほど防御・逆転／優勢ほど攻撃（順位＋ピンチ度）</span>
         </div>
 
         {/* CPU追加（ホストのみ。royaleモード向け） */}

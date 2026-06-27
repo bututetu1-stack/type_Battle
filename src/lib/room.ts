@@ -37,6 +37,7 @@ export interface RoomMeta {
   badgeRate?: number; // バッジ1枚あたりの攻撃上昇率%（既定25）
   gaugeMode?: 'word' | 'char'; // ゲージ加算方式（既定 word）
   gaugeChars?: number; // 文字数方式のときの発射しきい値（既定16）
+  comeback?: number; // 逆転補正の強さ 0〜3（既定2）
 }
 
 export interface RoomPlayer {
@@ -138,6 +139,7 @@ export async function createRoom(uid: string, name: string): Promise<string> {
     badgeRate: 25,
     gaugeMode: 'word',
     gaugeChars: 16,
+    comeback: 2,
   };
   await set(ref(db, `rooms/${roomId}/meta`), meta);
   await set(ref(db, `rooms/${roomId}/players/${uid}`), newPlayer(name, true));
@@ -232,6 +234,9 @@ export async function setRoomGaugeMode(roomId: string, v: 'word' | 'char'): Prom
 }
 export async function setRoomGaugeChars(roomId: string, v: number): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { gaugeChars: Math.min(40, Math.max(6, Math.round(v))) });
+}
+export async function setRoomComeback(roomId: string, v: number): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { comeback: Math.min(3, Math.max(0, Math.round(v))) });
 }
 
 // --- CPU（ホストがシミュレートする擬似プレイヤー）---

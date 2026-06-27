@@ -33,6 +33,18 @@ export const ITEM_CAT: Record<ItemType, ItemCat> = {
   reflect: 'timed', overcharge: 'timed', siphon: 'timed',
 };
 
+// アイテムの傾向。def=防御/逆転（不利なほど出やすくする）, atk=攻撃（有利なほど出やすくする）, util=その他。
+// 有利不利・順位によるドロップ補正に使う（ソロ/オンライン共通）。
+export const ITEM_KIND: Record<ItemType, 'def' | 'atk' | 'util'> = {
+  shield: 'def', clear: 'def', brake: 'def', keep: 'util', shrink: 'def', parry: 'def',
+  gaugedown: 'def', totem: 'def', barrier: 'def', freeze: 'def', purge: 'def', guard: 'def',
+  regen: 'def', mirror: 'def', goldify: 'def', luck: 'util', maxhp: 'util',
+  reflect: 'def', overcharge: 'util', siphon: 'def',
+  longbomb: 'atk', rapid: 'atk', meteor: 'atk', quake: 'atk', rally: 'atk', focus: 'atk',
+  snipe: 'atk', burst: 'atk', heavy: 'atk', flood: 'atk', drain: 'atk',
+  thunder: 'atk', jammer: 'atk',
+};
+
 // アイテムのレアリティ係数（ドロップ重みの乗数。1.0=標準、低いほど出にくい）。
 // 強力すぎて出すぎると感じるものを抑える。未指定は 1.0。
 export const ITEM_RARITY: Partial<Record<ItemType, number>> = {

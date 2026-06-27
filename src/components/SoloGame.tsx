@@ -7,7 +7,7 @@ import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, THEMES, toggleThemeSelection } from '../lib/words';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
-import { ITEM_CAT, ITEM_RARITY, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode } from '../lib/items';
+import { ITEM_CAT, ITEM_KIND, ITEM_RARITY, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode } from '../lib/items';
 import { loadKeyConfig, keyLabel, type KeyConfig } from '../lib/keyconfig';
 import PlayerSettings from './PlayerSettings';
 import type { Dummy, GameStatus, ItemType, TargetMode, Word } from '../lib/types';
@@ -121,6 +121,7 @@ interface CustomCfg {
   badgeRate: number; // バッジ1枚あたりの攻撃量上昇率(%)
   gaugeMode: 'word' | 'char'; // ゲージ加算方式（ワード数 or 文字数）
   gaugeChars: number; // 文字数方式のときの発射しきい値（何文字で発射）
+  comeback: number; // 逆転補正の強さ（0=なし〜3=強）。有利不利でアイテム傾向を変える
   autoFull: boolean; // 完全オート（有利不利を見て自動で使用）
   use: Record<ItemCat, UseMode>; // カテゴリ別の使い方（保持/即時）
 }
@@ -131,7 +132,7 @@ function loadCfg(): CustomCfg {
     theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT, cpuStr: 5, treasureRate: 20,
     attackGauge: ATTACK_THRESHOLD, attackCap: ATTACK_CAP, comboStep: 5,
     badgeCap: 4, badgeRate: 25,
-    gaugeMode: 'word', gaugeChars: 16,
+    gaugeMode: 'word', gaugeChars: 16, comeback: 2,
     autoFull: false, use: { attack: 'hold', defense: 'hold', timed: 'hold' },
   };
   try {
@@ -154,6 +155,7 @@ function loadCfg(): CustomCfg {
         badgeRate: typeof o.badgeRate === 'number' ? Math.min(100, Math.max(0, o.badgeRate)) : def.badgeRate,
         gaugeMode: o.gaugeMode === 'char' ? 'char' : 'word',
         gaugeChars: typeof o.gaugeChars === 'number' ? Math.min(40, Math.max(6, o.gaugeChars)) : def.gaugeChars,
+        comeback: typeof o.comeback === 'number' ? Math.min(3, Math.max(0, o.comeback)) : def.comeback,
         autoFull: typeof o.autoFull === 'boolean' ? o.autoFull : def.autoFull,
         use: o.use && typeof o.use === 'object'
           ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), timed: validMode(o.use.timed ?? o.use.disrupt) }
@@ -278,6 +280,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgBadgeRate, setCfgBadgeRate] = useState(initialCfg.badgeRate);
   const [cfgGaugeMode, setCfgGaugeMode] = useState<'word' | 'char'>(initialCfg.gaugeMode);
   const [cfgGaugeChars, setCfgGaugeChars] = useState(initialCfg.gaugeChars);
+  const [cfgComeback, setCfgComeback] = useState(initialCfg.comeback);
   const [cfgAutoFull, setCfgAutoFull] = useState(initialCfg.autoFull);
   const [cfgUse, setCfgUse] = useState<Record<ItemCat, UseMode>>(initialCfg.use);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
@@ -286,17 +289,19 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       localStorage.setItem(CFG_KEY, JSON.stringify({
         initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies, cpuStr: cfgCpuStr,
         treasureRate: cfgTreasureRate, attackGauge: cfgAttackGauge, attackCap: cfgAttackCap, comboStep: cfgComboStep,
-        badgeCap: cfgBadgeCap, badgeRate: cfgBadgeRate, gaugeMode: cfgGaugeMode, gaugeChars: cfgGaugeChars,
+        badgeCap: cfgBadgeCap, badgeRate: cfgBadgeRate, gaugeMode: cfgGaugeMode, gaugeChars: cfgGaugeChars, comeback: cfgComeback,
         autoFull: cfgAutoFull, use: cfgUse,
       }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgGaugeMode, cfgGaugeChars, cfgAutoFull, cfgUse]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgGaugeMode, cfgGaugeChars, cfgComeback, cfgAutoFull, cfgUse]);
   const attackCapRef = useRef(initialCfg.attackCap);
   const comboStepRef = useRef(initialCfg.comboStep);
   const badgeCapRef = useRef(initialCfg.badgeCap);
   const badgeRateRef = useRef(initialCfg.badgeRate);
   const gaugeModeRef = useRef(initialCfg.gaugeMode);
   const gaugeCharsRef = useRef(initialCfg.gaugeChars);
+  const comebackRef = useRef(initialCfg.comeback);
+  useEffect(() => { comebackRef.current = cfgComeback; }, [cfgComeback]);
   useEffect(() => { attackCapRef.current = cfgAttackCap; }, [cfgAttackCap]);
   useEffect(() => { comboStepRef.current = cfgComboStep; }, [cfgComboStep]);
   useEffect(() => { badgeCapRef.current = cfgBadgeCap; }, [cfgBadgeCap]);
@@ -618,19 +623,25 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const grantItem = useCallback(() => {
     const rng = itemRngRef.current;
     const r = rng ? rng() : Math.random();
-    // 不利度（バックログが多いほど高い）。短縮・ゲージ短縮は不利な人ほど出やすくする。
-    const ratio = Math.min(1, stateRef.current.backlog.length / maxBacklogRef.current);
+    // 有利不利の指標 = 自分のピンチ度（バックログ量）と、生存者中の順位を半々で合成。
+    const pinch = Math.min(1, stateRef.current.backlog.length / maxBacklogRef.current);
+    const alive = dummiesRef.current.filter((d) => !d.isKO);
+    const myH = stateRef.current.backlog.length;
+    const behind = alive.filter((d) => d.height < myH).length; // 自分より高さが低い（＝有利な）敵の数
+    const rankBehind = alive.length > 0 ? behind / (alive.length + 1 - 1) : 0; // 0=首位..1=最下位（自分含む生存者中）
+    const dis = Math.min(1, 0.5 * pinch + 0.5 * rankBehind);
+    const k = comebackRef.current; // 逆転補正の強さ（0=なし）
+    const bias = (dis - 0.5) * 2; // -1（優勢）..+1（劣勢）
+    const defBoost = 1 + Math.max(0, bias) * k;
+    const atkBoost = 1 + Math.max(0, -bias) * k;
     const weighted: { item: ItemType; w: number }[] = [];
     for (const it of ALL_ITEMS) {
       if (it === 'gaugedown' && gaugeDownObtainedRef.current) continue; // 一人一個まで
       if (it === 'maxhp' && hpUpCountRef.current >= MAX_HP_UP) continue; // 上限に達したら出さない
-      // 基本重み（逆転系は不利なほど出やすい）。
-      let w = 1;
-      if (it === 'gaugedown') w = 0.25 + ratio * 1.0;
-      else if (it === 'shrink') w = 0.5 + ratio * 1.8;
-      else if (it === 'goldify') w = 0.5 + ratio * 1.0;
-      // レアリティ係数を乗算（トーテム/大掃除などの強力アイテムを抑える）。
-      w *= ITEM_RARITY[it] ?? 1;
+      const kind = ITEM_KIND[it];
+      // 劣勢ほど防御/逆転、優勢ほど攻撃が出やすい。util はフラット。
+      let w = kind === 'def' ? defBoost : kind === 'atk' ? atkBoost : 1;
+      w *= ITEM_RARITY[it] ?? 1; // レアリティ係数（トーテム/大掃除などの強力アイテムを抑える）
       weighted.push({ item: it, w });
     }
     const total = weighted.reduce((s, x) => s + x.w, 0);
@@ -1687,6 +1698,18 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                       <input type="range" min={0} max={100} step={5} value={cfgBadgeRate}
                         onChange={(e) => setCfgBadgeRate(Number(e.target.value))} className="flex-1 accent-yellow-500" />
                       <StepBtn onClick={() => setCfgBadgeRate((v) => Math.min(100, v + 5))}>＋</StepBtn>
+                    </div>
+                  </div>
+                  <div className="block text-[11px] text-gray-400 mt-3">
+                    逆転補正（劣勢ほど防御・逆転／優勢ほど攻撃が出やすい）
+                    <div className="flex gap-1 mt-1">
+                      {([[0, 'なし'], [1, '弱'], [2, '中'], [3, '強']] as const).map(([v, lbl]) => (
+                        <button key={v} onClick={() => setCfgComeback(v)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgComeback === v ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                          {lbl}
+                        </button>
+                      ))}
+                      <span className="text-[9px] text-gray-600 self-center ml-1">順位＋ピンチ度で判定</span>
                     </div>
                   </div>
 

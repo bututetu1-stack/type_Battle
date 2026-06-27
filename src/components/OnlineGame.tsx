@@ -11,7 +11,7 @@ import {
   type RoomPlayer, type RoomStatus,
 } from '../lib/room';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
-import { ITEM_CAT, ITEM_RARITY, CAT_META, CAT_ORDER, type ItemPrefs, type ItemCat, type UseMode } from '../lib/items';
+import { ITEM_CAT, ITEM_KIND, ITEM_RARITY, CAT_META, CAT_ORDER, type ItemPrefs, type ItemCat, type UseMode } from '../lib/items';
 import { loadKeyConfig, keyLabel, type KeyConfig } from '../lib/keyconfig';
 import PlayerSettings from './PlayerSettings';
 import type { GameMode, ItemType, TargetMode, Word } from '../lib/types';
@@ -103,17 +103,6 @@ export const ITEM_EMOJI: Record<ItemType, string> = {
   jammer: '📡',
   siphon: '🧛',
 };
-// アイテムの大分類。def=防御/逆転（不利なほど出やすい）, atk=攻撃（有利なほど出やすい）, util=その他。
-const ITEM_KIND: Record<ItemType, 'def' | 'atk' | 'util'> = {
-  shield: 'def', clear: 'def', brake: 'def', keep: 'util', shrink: 'def', parry: 'def',
-  gaugedown: 'def', totem: 'def', barrier: 'def', freeze: 'def', purge: 'def', guard: 'def',
-  regen: 'def', mirror: 'def', goldify: 'def', luck: 'util', maxhp: 'util',
-  reflect: 'def', overcharge: 'util', siphon: 'def',
-  longbomb: 'atk', rapid: 'atk', meteor: 'atk', quake: 'atk', rally: 'atk', focus: 'atk',
-  snipe: 'atk', burst: 'atk', heavy: 'atk', flood: 'atk', drain: 'atk',
-  thunder: 'atk', jammer: 'atk',
-};
-
 const RAPID_DURATION = 8000;
 const KEEP_DURATION = 10000;
 const PARRY_DURATION = 8000; // 受け流し（被攻撃を他プレイヤーへ逸らす）の効果時間
@@ -171,12 +160,13 @@ interface OnlineGameProps {
   badgeRate?: number;
   gaugeMode?: 'word' | 'char';
   gaugeChars?: number;
+  comeback?: number; // 逆転補正の強さ（0=なし〜3=強）
   itemPrefs: ItemPrefs;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, badgeCap, badgeRate, gaugeMode, gaugeChars, itemPrefs, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, badgeCap, badgeRate, gaugeMode, gaugeChars, comeback, itemPrefs, players, onExit }: OnlineGameProps) {
   // ボスモード関連の派生フラグ。
   const bossMode = mode === 'boss';
   const isBoss = bossMode && uid === bossUid;
@@ -190,6 +180,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const bRate = typeof badgeRate === 'number' ? badgeRate : 25; // バッジ1枚あたり%
   const gMode = gaugeMode === 'char' ? 'char' : 'word'; // ゲージ加算方式
   const gChars = typeof gaugeChars === 'number' ? gaugeChars : 16; // 文字数方式のしきい値
+  const comebackK = typeof comeback === 'number' ? comeback : 2; // 逆転補正の強さ（既定=中）
   const [hpBonus, setHpBonus] = useState(0); // HPアップ(maxhp)による積載上限の増分（永続）
   const selfMax = baseSelfMax + hpBonus; // 自分の上限
   const [started, setStarted] = useState(false);
@@ -805,14 +796,20 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     }
     // HPアップは上限に達したら抽選から除外する。
     if (hpUpCountRef.current >= MAX_HP_UP) items = items.filter((it) => it !== 'maxhp');
-    // 有利/不利でドロップ内容を変える: 不利（バックログが多い）なら防御/逆転、
-    // 有利（少ない）なら攻撃が出やすくなるよう重み付け抽選する。
-    const disadv = Math.min(1, stateRef.current.backlog.length / selfMax); // 0..1
+    // 有利/不利でドロップ内容を変える。基準は「自分のピンチ度（バックログ量）」と
+    // 「生存者中の順位（相対的な劣勢）」を半々で合成。劣勢ほど防御/逆転、優勢ほど攻撃。
+    const pinch = Math.min(1, stateRef.current.backlog.length / selfMax);
+    const live = Object.values(playersRef.current).filter(isLive);
+    const myBak = stateRef.current.backlog.length;
+    const behind = Object.entries(playersRef.current).filter(([id, p]) => id !== uid && isLive(p) && (p.backlog || 0) < myBak).length;
+    const rankBehind = live.length > 1 ? behind / (live.length - 1) : 0; // 0=首位 .. 1=最下位
+    const dis = Math.min(1, 0.5 * pinch + 0.5 * rankBehind);
+    const bias = (dis - 0.5) * 2; // -1（優勢）..+1（劣勢）
+    const defBoost = 1 + Math.max(0, bias) * comebackK;
+    const atkBoost = 1 + Math.max(0, -bias) * comebackK;
     const weighted = items.map((it) => {
       const kind = ITEM_KIND[it];
-      let w = 1;
-      if (kind === 'def') w = 1 + disadv * 2.5;
-      else if (kind === 'atk') w = 1 + (1 - disadv) * 2.5;
+      let w = kind === 'def' ? defBoost : kind === 'atk' ? atkBoost : 1;
       w *= ITEM_RARITY[it] ?? 1; // レアリティ係数（大掃除など強力アイテムを抑える）
       return { it, w };
     });
