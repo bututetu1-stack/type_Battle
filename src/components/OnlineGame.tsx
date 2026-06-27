@@ -1573,7 +1573,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               </div>
             );
           })()}
-          <div className="flex-1 min-h-0 flex flex-col items-center pt-6 pb-6 relative z-10">
+          <div className="flex-1 min-h-0 flex flex-col items-center pt-4 relative z-10">
             {/* ボスモードの状況表示（挑戦者にはボスHP、ボスには自分のHP）。 */}
             {bossMode && started && (
               isBoss ? (
@@ -1665,7 +1665,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             </div>
 
 
-            <div className="shrink-0 mb-8 text-center h-16 flex items-end justify-center">
+            <div className="shrink-0 mb-3 text-center h-16 flex items-end justify-center">
               {combo > 2 && (
                 <div className="text-3xl font-black italic text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.6)] flex items-center gap-2">
                   <Zap className="w-8 h-8 fill-cyan-400" /> {combo} COMBO!
@@ -1673,7 +1673,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               )}
             </div>
 
-            <div className="flex-1 min-h-0 w-full max-w-lg flex flex-col justify-end overflow-hidden relative">
+            <div className="shrink-0 w-full max-w-lg h-56 flex flex-col justify-end overflow-hidden relative">
               <div className="flex flex-col-reverse gap-2 mb-4 overflow-hidden">
                 {backlog
                   .slice(1)
@@ -1763,9 +1763,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               </div>
 
             {/* 発動中アイテムの残り時間カウントダウン（保持アイテムの下）。
-                高さを固定（h-[5.4rem]）し、効果の個数が変わってもレイアウトが動かないようにする。 */}
-            {status === 'playing' && (
-              <div className="w-full max-w-lg mt-3 flex flex-col gap-1 h-[5.4rem] overflow-hidden">
+                効果が無いときは描画せず、バックログ/アタックゲージはスロット直下に置く。
+                効果が出たら自然高さでそのぶん下のゲージ群を押し下げる（お題・スロットは上にあるので動かない）。 */}
+            {status === 'playing' && activeEffects.length > 0 && (
+              <div className="w-full max-w-lg mt-3 flex flex-col gap-1">
                 {activeEffects.map((e) => {
                   const dur = ITEM_DURATION[e.type] ?? 1;
                   const remain = Math.max(0, e.until - nowTick);
