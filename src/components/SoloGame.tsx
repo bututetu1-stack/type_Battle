@@ -1296,6 +1296,20 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}
 
+          {/* 着弾予告ゲージ（CPUからの攻撃）。列全体に固定配置し、効果ゲージ出現でも上下しない。 */}
+          {totalIncoming > 0 && gameState === 'playing' && (
+            <div className="absolute left-0 top-[18%] bottom-24 z-20 flex flex-col items-center justify-end gap-1 pointer-events-none">
+              <div className="text-sm font-bold text-red-400 mb-1 animate-pulse">⚠ {totalIncoming}</div>
+              {/* 段階式ゲージ：1おじゃま=固定長ブロックを下から量ぶん積み上げる（大きめ＝視認性UP）。 */}
+              <div className="w-6 flex-1 flex flex-col-reverse justify-start gap-[4px] overflow-hidden">
+                {Array.from({ length: Math.min(totalIncoming, maxBacklog) }).map((_, i) => (
+                  <div key={i} className="w-full h-[18px] shrink-0 rounded bg-red-500 border border-red-300/50 shadow-[0_0_7px_rgba(239,68,68,0.65)]" />
+                ))}
+              </div>
+              <div className="text-[10px] text-gray-400 text-center leading-tight">おじゃま<br />着弾予告</div>
+            </div>
+          )}
+
           <div className="flex-1 flex flex-col items-center justify-end pb-8 relative z-10">
             {gameState === 'playing' && (
               <div className="absolute top-2 right-0 text-right">
@@ -1366,19 +1380,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               </div>
             )}
 
-            {/* 着弾予告ゲージ（CPUからの攻撃） */}
-            {totalIncoming > 0 && gameState === 'playing' && (
-              <div className="absolute left-0 bottom-8 top-1/3 flex flex-col items-center justify-end gap-1">
-                <div className="text-xs font-bold text-red-400 mb-1 animate-pulse">⚠ {totalIncoming}</div>
-                {/* 段階式ゲージ：1おじゃま=固定長ブロックを下から量ぶん積み上げる。 */}
-                <div className="w-4 flex-1 flex flex-col-reverse justify-start gap-[3px] overflow-hidden">
-                  {Array.from({ length: Math.min(totalIncoming, maxBacklog) }).map((_, i) => (
-                    <div key={i} className="w-full h-3 shrink-0 rounded-[3px] bg-red-500 border border-red-300/40 shadow-[0_0_5px_rgba(239,68,68,0.55)]" />
-                  ))}
-                </div>
-                <div className="text-[9px] text-gray-500 text-center leading-tight">おじゃま<br />着弾予告</div>
-              </div>
-            )}
 
             <div className="mb-8 text-center h-16 flex items-end justify-center">
               {combo > 2 && (
@@ -1400,7 +1401,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                           ? 'bg-red-950/50 text-red-300 border border-red-900/50'
                           : word.type === 'treasure'
                             ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50'
-                            : 'bg-neutral-800 text-gray-400'
+                            : 'bg-blue-950/40 text-blue-200 border border-blue-900/50'
                       }`}
                     >
                       <span>{word.display}</span>
