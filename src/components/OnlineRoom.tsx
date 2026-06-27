@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Swords, Copy, Check, LogOut, Play, Loader2, Crown, Users } from 'lucide-react';
+import { Swords, Copy, Check, LogOut, Play, Loader2, Crown, Users, Bot, Plus, X } from 'lucide-react';
 import {
   subscribeRoom,
   setupPresence,
@@ -8,6 +8,11 @@ import {
   setRoomCategory,
   setRoomMode,
   setRoomItemRate,
+  setRoomHp,
+  setRoomSpawnMs,
+  addCpuPlayer,
+  removeCpuPlayer,
+  removeAllCpus,
   type RoomSnapshot,
 } from '../lib/room';
 import { THEMES } from '../lib/words';
@@ -28,6 +33,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
   const [itemPrefs, setItemPrefs] = useState<ItemPrefs>(() => loadItemPrefs());
   const updatePrefs = (p: ItemPrefs) => { setItemPrefs(p); saveItemPrefs(p); };
   const [starting, setStarting] = useState(false);
+  const [cpuStr, setCpuStr] = useState(5); // 追加するCPUの強さ(0〜10)
 
   useEffect(() => {
     setupPresence(roomId, uid).catch(() => {});
@@ -42,6 +48,8 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
   }, [snap?.meta?.status]);
 
   const handleLeave = async () => {
+    // ホストが抜けるときはCPUも片付けて、部屋が残らないようにする。
+    if (snap?.meta?.hostUid === uid) await removeAllCpus(roomId).catch(() => {});
     await leaveRoom(roomId, uid).catch(() => {});
     onLeave();
   };
@@ -88,6 +96,8 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         mode={meta.mode === 'boss' ? 'boss' : 'royale'}
         bossUid={meta.bossUid || meta.hostUid}
         itemRate={typeof meta.itemRate === 'number' ? meta.itemRate : 30}
+        hp={typeof meta.hp === 'number' ? meta.hp : 12}
+        spawnMs={typeof meta.spawnMs === 'number' ? meta.spawnMs : 4000}
         itemPrefs={itemPrefs}
         players={players}
         onExit={handleLeave}
@@ -97,6 +107,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
 
   // 待機画面
   const playerList = Object.entries(players);
+  const cpuPlayers = playerList.filter(([, p]) => p.isCpu);
   const isHost = meta.hostUid === uid;
 
   const handleStart = async () => {
@@ -199,6 +210,87 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
           </p>
         </div>
 
+        {/* HP（積載上限）（ホストが選択） */}
+        <div className="mb-5">
+          <div className="text-xs text-gray-500 mb-1.5 flex items-center justify-between">
+            <span>HP（積載上限） {isHost ? '（ホストが選択）' : ''}</span>
+            <span className="text-cyan-300 font-mono font-bold">{typeof meta.hp === 'number' ? meta.hp : 12}</span>
+          </div>
+          <input
+            type="range"
+            min={6}
+            max={24}
+            step={1}
+            value={typeof meta.hp === 'number' ? meta.hp : 12}
+            onChange={(e) => isHost && setRoomHp(roomId, Number(e.target.value))}
+            disabled={!isHost}
+            className="w-full accent-cyan-500 disabled:opacity-60"
+          />
+        </div>
+
+        {/* おじゃま供給の速さ（ホストが選択。小さいほど速い） */}
+        <div className="mb-5">
+          <div className="text-xs text-gray-500 mb-1.5 flex items-center justify-between">
+            <span>自動供給の速さ {isHost ? '（ホストが選択）' : ''}</span>
+            <span className="text-cyan-300 font-mono font-bold">{((typeof meta.spawnMs === 'number' ? meta.spawnMs : 4000) / 1000).toFixed(1)}秒</span>
+          </div>
+          <input
+            type="range"
+            min={1500}
+            max={8000}
+            step={250}
+            // つまみ右ほど速く感じるよう、値を反転して表示する。
+            value={9500 - (typeof meta.spawnMs === 'number' ? meta.spawnMs : 4000)}
+            onChange={(e) => isHost && setRoomSpawnMs(roomId, 9500 - Number(e.target.value))}
+            disabled={!isHost}
+            className="w-full accent-cyan-500 disabled:opacity-60"
+          />
+          <p className="text-[10px] text-gray-600 mt-0.5">右ほど速い（おじゃま単語が早く積もります）。</p>
+        </div>
+
+        {/* CPU追加（ホストのみ。royaleモード向け） */}
+        {isHost && (
+          <div className="mb-5 bg-neutral-900/60 border border-white/10 rounded-xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-fuchsia-200 font-bold flex items-center gap-1"><Bot className="w-4 h-4" /> CPU を追加</span>
+              <button
+                onClick={() => addCpuPlayer(roomId, cpuStr / 10).catch(() => {})}
+                disabled={playerList.length >= meta.maxPlayers}
+                className="px-2 py-1 rounded bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-40 text-white text-[11px] font-bold flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> 追加
+              </button>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-[11px] text-gray-400 shrink-0">強さ {cpuStr}</span>
+              <input
+                type="range"
+                min={0}
+                max={10}
+                step={1}
+                value={cpuStr}
+                onChange={(e) => setCpuStr(Number(e.target.value))}
+                className="flex-1 accent-fuchsia-500"
+              />
+            </div>
+            {cpuPlayers.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {cpuPlayers.map(([id, p]) => (
+                  <span key={id} className="inline-flex items-center gap-1 bg-neutral-800 rounded-full pl-2 pr-1 py-0.5 text-[11px] text-gray-300">
+                    {p.name}
+                    <span className="text-fuchsia-300 font-mono">{Math.round((p.str ?? 0.5) * 10)}</span>
+                    <button onClick={() => removeCpuPlayer(roomId, id).catch(() => {})} className="text-gray-500 hover:text-red-400">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-gray-600">CPUはホストの端末でシミュレートされます（バトルロワイヤル向け）。</p>
+            )}
+          </div>
+        )}
+
         {/* 出題テーマ（ホストが選択） */}
         <div className="mb-6">
           <div className="text-xs text-gray-500 mb-1.5">出題テーマ {isHost ? '（ホストが選択）' : ''}</div>
@@ -259,7 +351,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                 </div>
               ))}
               <p className="text-[9px] text-gray-600 leading-tight">
-                保持=[Enter]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 新着=1つ保持し被ったら新しい方を発動
+                新着=[Enter]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 保持=1つ保持し被ったら新しい方を発動
               </p>
             </div>
           )}

@@ -28,6 +28,8 @@ export interface RoomMeta {
   mode?: 'royale' | 'boss'; // ゲームモード（未設定は royale）
   bossUid?: string; // boss モードでのボス（既定はホスト）
   itemRate?: number; // お宝(アイテム)出現率 0〜100（未設定は既定値）
+  hp?: number; // 各プレイヤーの積載上限（HP）。未設定は既定値
+  spawnMs?: number; // 自動供給の初期間隔(ms)。小さいほど速い。未設定は既定値
 }
 
 export interface RoomPlayer {
@@ -44,6 +46,8 @@ export interface RoomPlayer {
   connected: boolean;
   lastSeen: number;
   joinedAt: number;
+  isCpu?: boolean; // CPU（ホストがシミュレートする擬似プレイヤー）
+  str?: number; // CPUの強さ（0..1）。isCpu のときのみ意味を持つ
   // 観戦用（プレイ中の現在ワードと入力進捗。脱落者が他プレイヤーの入力画面を覗ける）。
   curDisplay?: string; // 現在打っているワード（表示テキスト）
   curReading?: string; // 現在打っているワードの読み（かな）
@@ -116,6 +120,8 @@ export async function createRoom(uid: string, name: string): Promise<string> {
     mode: 'royale',
     bossUid: '',
     itemRate: 30,
+    hp: 12,
+    spawnMs: 4000,
   };
   await set(ref(db, `rooms/${roomId}/meta`), meta);
   await set(ref(db, `rooms/${roomId}/players/${uid}`), newPlayer(name, true));
@@ -177,6 +183,51 @@ export async function setRoomMode(roomId: string, mode: 'royale' | 'boss', hostU
 // ホスト操作: お宝(アイテム)出現率を変更（待機中、0〜100）。
 export async function setRoomItemRate(roomId: string, itemRate: number): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { itemRate: Math.min(100, Math.max(0, Math.round(itemRate))) });
+}
+
+// ホスト操作: 各プレイヤーのHP（積載上限）を変更（待機中、6〜24）。
+export async function setRoomHp(roomId: string, hp: number): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { hp: Math.min(24, Math.max(6, Math.round(hp))) });
+}
+
+// ホスト操作: 自動供給の初期間隔(ms)を変更（待機中、1500〜8000。小さいほど速い）。
+export async function setRoomSpawnMs(roomId: string, spawnMs: number): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { spawnMs: Math.min(8000, Math.max(1500, Math.round(spawnMs))) });
+}
+
+// --- CPU（ホストがシミュレートする擬似プレイヤー）---
+
+const CPU_NAMES = ['タイピー', 'カナ丸', 'ロボ太', 'ことだま', 'はやて', 'ナイト', 'クローバー', 'ボルト', 'しぐれ', 'コメット'];
+
+// ホスト操作: CPUプレイヤーを1体追加（待機中）。str は強さ 0..1。
+export async function addCpuPlayer(roomId: string, str: number): Promise<void> {
+  const metaSnap = await get(ref(db, `rooms/${roomId}/meta`));
+  if (!metaSnap.exists()) throw new Error('ルームが見つかりません');
+  const meta = metaSnap.val() as RoomMeta;
+  const playersSnap = await get(ref(db, `rooms/${roomId}/players`));
+  const count = playersSnap.exists() ? Object.keys(playersSnap.val()).length : 0;
+  if (count >= meta.maxPlayers) throw new Error('ルームが満員です');
+  const id = `cpu_${Math.random().toString(36).slice(2, 8)}`;
+  const name = `🤖 ${CPU_NAMES[Math.floor(Math.random() * CPU_NAMES.length)]}`;
+  const p: RoomPlayer = { ...newPlayer(name, false), isCpu: true, str: Math.min(1, Math.max(0, str)) };
+  await set(ref(db, `rooms/${roomId}/players/${id}`), p);
+}
+
+// ホスト操作: 指定CPUを削除。
+export async function removeCpuPlayer(roomId: string, cpuId: string): Promise<void> {
+  await remove(ref(db, `rooms/${roomId}/players/${cpuId}`)).catch(() => {});
+}
+
+// ホスト操作: すべてのCPUを削除（退室時などに部屋を残さないため）。
+export async function removeAllCpus(roomId: string): Promise<void> {
+  const playersSnap = await get(ref(db, `rooms/${roomId}/players`));
+  if (!playersSnap.exists()) return;
+  const players = playersSnap.val() as Record<string, RoomPlayer>;
+  await Promise.all(
+    Object.entries(players)
+      .filter(([, p]) => p.isCpu)
+      .map(([id]) => remove(ref(db, `rooms/${roomId}/players/${id}`)).catch(() => {})),
+  );
 }
 
 // ホスト操作: カウントダウン付きで開始。startAt をサーバ基準の未来時刻に設定。

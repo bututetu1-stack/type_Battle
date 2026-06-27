@@ -93,6 +93,8 @@ const ALL_ITEMS: ItemType[] = [
   'goldify', 'luck', 'maxhp',
 ];
 const MAX_HP_UP = 3; // HPアップの取得上限（永続）
+// ストックされている単語を変化させる系アイテム（発動を分かりやすく強調する）。
+const BOARD_CHANGE_ITEMS = new Set<ItemType>(['purge', 'shrink', 'goldify', 'clear', 'drain']);
 
 
 const MAX_DUMMIES = 30; // 敵数の上限（名前プールの都合）
@@ -205,6 +207,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
   const [shake, setShake] = useState(false);
   const [useFlash, setUseFlash] = useState<ItemType | null>(null);
+  const [boardFx, setBoardFx] = useState<ItemType | null>(null); // 盤面変化系の強調演出
   const [parryFx, setParryFx] = useState(false); // 受け流し成功エフェクト
   const [showSettings, setShowSettings] = useState(false); // プレイヤー設定モーダル
   const [keyCfg, setKeyCfg] = useState<KeyConfig>(() => loadKeyConfig());
@@ -413,6 +416,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     (item: ItemType) => {
       setUseFlash(item);
       setTimeout(() => setUseFlash(null), 900);
+      // ストックされた単語が変化する系は、気づかず古い単語を打ってしまわないよう強調表示。
+      if (BOARD_CHANGE_ITEMS.has(item)) {
+        setBoardFx(item);
+        setTimeout(() => setBoardFx((cur) => (cur === item ? null : cur)), 1300);
+      }
       if (item === 'shield') shieldRef.current = true;
       else if (item === 'brake') brakeUntilRef.current = Date.now() + BRAKE_DURATION;
       else if (item === 'clear')
@@ -1070,7 +1078,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               ✦
             </span>
           ))}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-7xl opacity-80 totem-emblem">🗿</div>
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 text-5xl opacity-40 totem-emblem">🗿</div>
         </div>
       )}
 
@@ -1113,6 +1121,19 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <span className="text-lg">{ITEM_META[useFlash].icon}</span> {ITEM_META[useFlash].name} 発動！
           </div>
         </div>
+      )}
+
+      {/* 盤面変化系アイテムの強調演出（画面フラッシュ＋中央バナー）。古い単語を打ち続けないように。 */}
+      {boardFx && (
+        <>
+          <div className="fixed inset-0 pointer-events-none z-40 board-fx-flash" style={{ boxShadow: 'inset 0 0 160px 50px rgba(217,70,239,0.45)' }} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+            <div className="board-fx-banner bg-fuchsia-600/95 text-white font-black text-2xl px-7 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border-2 border-white/50">
+              <span className="text-3xl">{ITEM_META[boardFx].icon}</span>
+              盤面が変化！ <span className="text-fuchsia-100">{ITEM_META[boardFx].name}</span>
+            </div>
+          </div>
+        </>
       )}
 
       {/* 演出は上部に出して、打つべき単語に被らないようにする */}
@@ -1695,6 +1716,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         .parry-ring { width: 40px; height: 40px; animation: parryRing 0.5s ease-out forwards; box-shadow: 0 0 24px rgba(34,211,238,0.8); }
         @keyframes parryLabel { 0% { transform: scale(0.6); opacity: 0; } 30% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
         .parry-label { animation: parryLabel 0.5s ease-out forwards; }
+        @keyframes boardFxBanner { 0% { transform: scale(0.6); opacity: 0; } 18% { transform: scale(1.12); opacity: 1; } 80% { transform: scale(1); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+        .board-fx-banner { animation: boardFxBanner 1.3s ease-out forwards; }
+        @keyframes boardFxFlash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+        .board-fx-flash { animation: boardFxFlash 1.3s ease-out forwards; }
       `,
         }}
       />

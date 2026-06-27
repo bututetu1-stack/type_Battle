@@ -30,6 +30,8 @@ const BRAKE_DURATION = 5000;
 const ATTACK_CAP = 5; // 1回の攻撃で送れるおじゃまの上限（即死コンボ防止）
 const BOSS_MAX_BACKLOG = 26; // ボスのバックログ上限（＝ボスのHP。多対一なので高め）
 const MAX_HP_UP = 3; // HPアップ(maxhp)の取得上限（永続）
+// ストックされている単語を変化させる系アイテム（発動を分かりやすく強調する）。
+const BOARD_CHANGE_ITEMS = new Set<ItemType>(['purge', 'shrink', 'goldify', 'clear', 'drain']);
 
 const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   shield: { name: 'シールド', desc: '次の自動供給を1回無効化' },
@@ -142,16 +144,19 @@ interface OnlineGameProps {
   mode: GameMode;
   bossUid: string;
   itemRate: number;
+  hp?: number;
+  spawnMs?: number;
   itemPrefs: ItemPrefs;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, itemPrefs, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, itemPrefs, players, onExit }: OnlineGameProps) {
   // ボスモード関連の派生フラグ。
   const bossMode = mode === 'boss';
   const isBoss = bossMode && uid === bossUid;
-  const baseSelfMax = isBoss ? BOSS_MAX_BACKLOG : MAX_BACKLOG; // 自分の基礎上限（ボスはHPが多い）
+  const playerHp = typeof hp === 'number' ? hp : MAX_BACKLOG; // ホスト設定のHP（積載上限）
+  const baseSelfMax = isBoss ? BOSS_MAX_BACKLOG : playerHp; // 自分の基礎上限（ボスはHPが多い）
   const [hpBonus, setHpBonus] = useState(0); // HPアップ(maxhp)による積載上限の増分（永続）
   const selfMax = baseSelfMax + hpBonus; // 自分の上限
   const [started, setStarted] = useState(false);
@@ -166,7 +171,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [maxCombo, setMaxCombo] = useState(0);
   const [keysTyped, setKeysTyped] = useState(0);
   const [missCount, setMissCount] = useState(0); // ミスタイプ数（リザルト用）
-  const [spawnInterval, setSpawnInterval] = useState(INITIAL_SPAWN_INTERVAL);
+  const [spawnInterval, setSpawnInterval] = useState(typeof spawnMs === 'number' ? spawnMs : INITIAL_SPAWN_INTERVAL);
   const [missFlash, setMissFlash] = useState(false);
   const [pending, setPending] = useState<Telegraph[]>([]);
   const [attackFlash, setAttackFlash] = useState<{ amount: number; name: string } | null>(null);
@@ -186,6 +191,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [shake, setShake] = useState(false);
   const [damageFlash, setDamageFlash] = useState(false); // 被弾時の赤フラッシュ
   const [useFlash, setUseFlash] = useState<ItemType | null>(null); // 自分のアイテム発動演出
+  const [boardFx, setBoardFx] = useState<ItemType | null>(null); // 盤面変化系の強調演出
   const [parryFx, setParryFx] = useState(false); // 受け流し成功エフェクト
   const [watchId, setWatchId] = useState<string | null>(null); // 観戦中に覗いているプレイヤー
   const [showSettings, setShowSettings] = useState(false); // プレイヤー設定モーダル
@@ -208,6 +214,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const stateRef = useRef<PlayerState>({ backlog, tokenIndex, currentTyping, combo, gameState: 'playing' });
   const selfAliveRef = useRef(true);
   const playersRef = useRef(players);
+  // CPU（擬似プレイヤー）のシミュレーション状態（ホストのみ使用）。
+  const cpuSimRef = useRef<Record<string, { backlog: number; combo: number; alive: boolean; rank: number; progress: number; koBy: string }>>({});
   const slotsRef = useRef(slots);
   const selectedSlotRef = useRef(selectedSlot);
   const targetModeRef = useRef(targetMode);
@@ -333,6 +341,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     setHpBonus(0);
     setWatchId(null);
     setBacklog([genWord(), genWord(), genWord()]);
+    setSpawnInterval(typeof spawnMs === 'number' ? spawnMs : INITIAL_SPAWN_INTERVAL);
     attackProgressRef.current = 0;
     setAttackProgress(0);
     keepUntilRef.current = 0;
@@ -349,7 +358,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     slotsRef.current = { attack: null, defense: null, timed: null };
     // 新しいゲーム開始時に自分の状態をリセット（再戦対応）。
     writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '' });
-  }, [seed, roomId, uid, genWord]);
+    // ホストは CPU の生存も復活させておく（カウントダウン中に反映させ、開始直後の誤決着を防ぐ）。
+    if (uid === hostUid) {
+      cpuSimRef.current = {};
+      for (const [id, p] of Object.entries(playersRef.current)) {
+        if (p.isCpu) writePlayerSummary(roomId, id, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '', kpm: 0 });
+      }
+    }
+  }, [seed, roomId, uid, genWord, hostUid]);
 
   // startAt に達したらゲーム開始。それまではカウントダウン（秒ごとにビープ）。
   const lastBeepRef = useRef(99);
@@ -530,6 +546,11 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       // 自分の発動演出＋他プレイヤーへ「誰が何を使ったか」を共有
       setUseFlash(item);
       setTimeout(() => setUseFlash(null), 900);
+      // ストックされた単語が変化する系は、気づかず古い単語を打ってしまわないよう強調表示。
+      if (BOARD_CHANGE_ITEMS.has(item)) {
+        setBoardFx(item);
+        setTimeout(() => setBoardFx((cur) => (cur === item ? null : cur)), 1300);
+      }
       writePlayerSummary(roomId, uid, { lastItem: item, itemAt: Date.now() });
       if (item === 'shield') shieldRef.current = true;
       else if (item === 'brake') brakeUntilRef.current = Date.now() + BRAKE_DURATION;
@@ -978,6 +999,78 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     if (aliveCount === 0 || (total >= 2 && aliveCount <= 1)) finishGame(roomId);
   }, [players, status, uid, hostUid, roomId, started, bossMode, bossUid]);
 
+  // ホスト: CPU（擬似プレイヤー）をシミュレートする。
+  // CPUごとに backlog/combo を管理し、攻撃の送受信・撃破・サマリ書込みを host が代行する。
+  useEffect(() => {
+    if (uid !== hostUid || !started || status !== 'playing') return;
+    const cpuIds = Object.entries(playersRef.current).filter(([, p]) => p.isCpu).map(([id]) => id);
+    if (cpuIds.length === 0) return;
+    const cpuMax = playerHp;
+    const baseSpawn = typeof spawnMs === 'number' ? spawnMs : INITIAL_SPAWN_INTERVAL;
+    const DT = 250;
+    // 初期化（新規ゲームのたびに alive を立て直す）。
+    for (const id of cpuIds) {
+      cpuSimRef.current[id] = { backlog: 3, combo: 0, alive: true, rank: 0, progress: 0, koBy: '' };
+      writePlayerSummary(roomId, id, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '', kpm: 0 });
+    }
+    // 被弾の購読（CPUごと）。
+    const unsubs = cpuIds.map((id) =>
+      subscribeAttacks(roomId, id, (ev) => {
+        const s = cpuSimRef.current[id];
+        if (!s || !s.alive) return;
+        s.backlog += ev.word ? 2 : ev.amount;
+        if (ev.from) s.koBy = ev.from;
+      }),
+    );
+    const tick = () => {
+      const elapsedSec = Math.max(0, (Date.now() - startTimeRef.current) / 1000);
+      // 供給は時間とともに少しずつ速くなる（人間側の加速に合わせる）。
+      const spawnMsNow = Math.max(MIN_SPAWN_INTERVAL, baseSpawn * Math.pow(0.985, elapsedSec));
+      for (const id of cpuIds) {
+        const s = cpuSimRef.current[id];
+        if (!s || !s.alive) continue;
+        const str = playersRef.current[id]?.str ?? 0.5;
+        // 供給。
+        if (Math.random() < Math.min(0.9, DT / spawnMsNow)) s.backlog += 1;
+        // クリア（強いほど速い）。期待クリア数ぶん試行。
+        let chances = (0.7 + str * 2.4) * (DT / 1000);
+        while (chances > 0 && s.backlog > 0) {
+          if (Math.random() < Math.min(1, chances)) {
+            s.backlog -= 1;
+            s.combo += 1;
+            s.progress += 1;
+            if (s.progress >= 5) {
+              s.progress -= 5;
+              const targets = Object.entries(playersRef.current).filter(([tid, tp]) => tid !== id && isLive(tp));
+              if (targets.length > 0) {
+                const t = targets[Math.floor(Math.random() * targets.length)];
+                sendAttack(roomId, t[0], id, Math.min(5, 1 + Math.floor(s.combo / 5)));
+              }
+            }
+          }
+          chances -= 1;
+        }
+        // 撃破判定。
+        if (s.backlog >= cpuMax) {
+          s.alive = false;
+          const aliveCount = Object.values(playersRef.current).filter(isLive).length;
+          s.rank = Math.max(1, aliveCount);
+          writePlayerSummary(roomId, id, { alive: false, rank: s.rank, backlog: cpuMax, combo: 0, koBy: s.koBy });
+          continue;
+        }
+        writePlayerSummary(roomId, id, {
+          alive: true, backlog: s.backlog, combo: s.combo,
+          kpm: Math.round((0.7 + str * 2.4) * 60), curDisplay: '🤖', curReading: '', curIdx: 0, curTyping: '',
+        });
+      }
+    };
+    const interval = setInterval(tick, DT);
+    return () => {
+      clearInterval(interval);
+      unsubs.forEach((u) => u());
+    };
+  }, [uid, hostUid, started, status, roomId, playerHp, spawnMs]);
+
   // テトリス99のように、自分以外の攻防もアンビエントなビームで可視化する。
   // 実データの全攻撃は購読していないため、それっぽいビームを散らす表現。
   // ボス戦では挑戦者同士は撃ち合わない（全員ボスを攻撃する）ので、
@@ -1177,6 +1270,19 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             <span className="text-lg">{ITEM_EMOJI[useFlash]}</span> {ITEM_META[useFlash].name} 発動！
           </div>
         </div>
+      )}
+
+      {/* 盤面変化系アイテムの強調演出（画面フラッシュ＋中央バナー）。古い単語を打ち続けないように。 */}
+      {boardFx && (
+        <>
+          <div className="fixed inset-0 pointer-events-none z-40 board-fx-flash" style={{ boxShadow: 'inset 0 0 160px 50px rgba(217,70,239,0.45)' }} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+            <div className="board-fx-banner bg-fuchsia-600/95 text-white font-black text-2xl px-7 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border-2 border-white/50">
+              <span className="text-3xl">{ITEM_EMOJI[boardFx]}</span>
+              盤面が変化！ <span className="text-fuchsia-100">{ITEM_META[boardFx].name}</span>
+            </div>
+          </div>
+        </>
       )}
 
       {/* 演出は上部に出して、打つべき単語に被らないようにする */}
@@ -1566,6 +1672,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         .parry-ring { width: 40px; height: 40px; animation: parryRing 0.5s ease-out forwards; box-shadow: 0 0 24px rgba(34,211,238,0.8); }
         @keyframes parryLabel { 0% { transform: scale(0.6); opacity: 0; } 30% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
         .parry-label { animation: parryLabel 0.5s ease-out forwards; }
+        @keyframes boardFxBanner { 0% { transform: scale(0.6); opacity: 0; } 18% { transform: scale(1.12); opacity: 1; } 80% { transform: scale(1); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+        .board-fx-banner { animation: boardFxBanner 1.3s ease-out forwards; }
+        @keyframes boardFxFlash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
+        .board-fx-flash { animation: boardFxFlash 1.3s ease-out forwards; }
       `,
         }}
       />
