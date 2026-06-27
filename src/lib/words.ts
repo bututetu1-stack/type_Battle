@@ -489,6 +489,7 @@ export const generateWord = (
   recent: string[] = [],
   localType = false,
   treasureProb = 0.2,
+  treasureBonus = 0, // 「お宝出現率アップ」アイテムなどの恒久ボーナス（加算）
 ): Word => {
   const pool = THEME_POOLS[theme] ?? WORD_POOL;
   let entry = pool[Math.floor(rng() * pool.length)];
@@ -507,13 +508,14 @@ export const generateWord = (
   if (localType) {
     // オンライン: お宝の出現率はホストが 0〜100% で設定可能（treasureProb）。
     // 相手から飛んでくるおじゃまで割合が薄まるため、自動供給のおじゃまは少なめ（約8%）。
-    const tp = Math.min(1, Math.max(0, treasureProb));
+    const tp = Math.min(0.95, Math.max(0, treasureProb + treasureBonus));
     if (rand < tp) type = 'treasure';
     else if (rand < tp + 0.08) type = 'ojama';
   } else {
-    // ソロ: お宝 約12% / おじゃま 約20%。
-    if (rand < 0.12) type = 'treasure';
-    else if (rand < 0.32) type = 'ojama';
+    // ソロ: お宝 約12%（＋ボーナス） / おじゃま 約20%。
+    const tp = Math.min(0.95, 0.12 + treasureBonus);
+    if (rand < tp) type = 'treasure';
+    else if (rand < tp + 0.2) type = 'ojama';
   }
   return buildWord(entry, type, 'w');
 };

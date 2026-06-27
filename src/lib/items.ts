@@ -20,13 +20,15 @@ export const USE_MODES: { key: UseMode; label: string; desc: string }[] = [
 ];
 
 export const ITEM_CAT: Record<ItemType, ItemCat> = {
-  // 攻撃（相手におじゃまを送る系・自己強化）
+  // 攻撃（相手におじゃまを送る系）
   longbomb: 'attack', snipe: 'attack', burst: 'attack', heavy: 'attack', flood: 'attack', drain: 'attack',
-  mirror: 'attack', gaugedown: 'attack', meteor: 'attack', quake: 'attack', rally: 'attack', focus: 'attack',
-  // 防御（即時に自分を守る系）
-  shield: 'defense', clear: 'defense', purge: 'defense', guard: 'defense', barrier: 'defense', shrink: 'defense', regen: 'defense',
-  // 持続効果（一定時間続く系）
+  mirror: 'attack', meteor: 'attack', quake: 'attack', rally: 'attack', focus: 'attack',
+  // 防御（即時に自分を守る/利する系）
+  shield: 'defense', clear: 'defense', purge: 'defense', guard: 'defense', barrier: 'defense', shrink: 'defense',
+  regen: 'defense', goldify: 'defense',
+  // 持続効果（一定時間続く系＋永続で効果が続く系）
   brake: 'timed', rapid: 'timed', keep: 'timed', parry: 'timed', totem: 'timed', freeze: 'timed',
+  gaugedown: 'timed', luck: 'timed', maxhp: 'timed',
 };
 
 export const CAT_META: { key: ItemCat; label: string; color: string }[] = [

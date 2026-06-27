@@ -72,6 +72,10 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   flood: { name: 'フラッド', icon: '🌊', desc: '相手へおじゃま+4' },
   drain: { name: 'ドレイン', icon: '🩸', desc: '自分を2減らし相手へおじゃま+2' },
   mirror: { name: 'ミラー', icon: '🪞', desc: '不利なほど強いおじゃまを送る' },
+  // お宝/HP
+  goldify: { name: 'ゴールド化', icon: '✨', desc: '溜まっているワードを全てお宝に変える' },
+  luck: { name: '幸運', icon: '🍀', desc: 'お宝の出現率が上がる（永続）' },
+  maxhp: { name: 'HPアップ', icon: '❤️', desc: 'HP(積載上限)+1（永続・最大+3）' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡', clear: '🌀', brake: '⏸', longbomb: '📨', rapid: '⚡', keep: '🔒',
@@ -79,12 +83,16 @@ const ITEM_EMOJI: Record<ItemType, string> = {
   meteor: '🌠', quake: '🌋', regen: '💚', rally: '⚔', focus: '🎯',
   barrier: '🛡️', freeze: '🧊', purge: '🧹', guard: '🧱',
   snipe: '🎯', burst: '💥', heavy: '🔨', flood: '🌊', drain: '🩸', mirror: '🪞',
+  goldify: '✨', luck: '🍀', maxhp: '❤️',
 };
 const ALL_ITEMS: ItemType[] = [
   'shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'shrink', 'parry', 'gaugedown', 'totem',
   // 追加アイテム（防御/攻撃/妨害）
   'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror',
+  // 追加アイテム（お宝/HP）
+  'goldify', 'luck', 'maxhp',
 ];
+const MAX_HP_UP = 3; // HPアップの取得上限（永続）
 
 
 const MAX_DUMMIES = 30; // 敵数の上限（名前プールの都合）
@@ -168,6 +176,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [maxBacklog, setMaxBacklog] = useState(initialCfg.hp);
   const [dummyCount, setDummyCount] = useState(initialCfg.enemies);
   const maxBacklogRef = useRef(initialCfg.hp);
+  const treasureBoostRef = useRef(0); // 幸運(luck)によるお宝出現率の永続上昇分
+  const hpUpCountRef = useRef(0); // HPアップ(maxhp)の取得回数（上限 MAX_HP_UP）
 
   const [playerKOs, setPlayerKOs] = useState(0);
   // アイテムは攻撃/防御/妨害の3スロットで保持。Spaceで選択切替、Enterで発動。
@@ -268,7 +278,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // 重複を避けつつ次の単語を生成して履歴に積む。
   const nextWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    const w = generateWord(rng, themeRef.current, recentRef.current);
+    const w = generateWord(rng, themeRef.current, recentRef.current, false, 0.2, treasureBoostRef.current);
     pushRecent(w.display);
     return w;
   }, [pushRecent]);
@@ -460,6 +470,24 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1, Math.max(1, prev.length - 2))]));
         fireAttack(2);
       }
+      // --- お宝/HP ---
+      else if (item === 'goldify') {
+        // 溜まっているワードを全てお宝に変える（先頭も含む）。
+        setBacklog((prev) => prev.map((w) => (w.type === 'ojama' ? w : { ...w, type: 'treasure' as const })));
+        pushToast('ゴールド化！ 全ワードがお宝に', 'item');
+      } else if (item === 'luck') {
+        // お宝出現率を永続的に上昇（上限 +0.5）。
+        treasureBoostRef.current = Math.min(0.5, treasureBoostRef.current + 0.08);
+        pushToast('幸運！ お宝の出現率アップ', 'item');
+      } else if (item === 'maxhp') {
+        // HP(積載上限)を永続的に+1（上限 MAX_HP_UP）。
+        if (hpUpCountRef.current < MAX_HP_UP) {
+          hpUpCountRef.current += 1;
+          maxBacklogRef.current += 1;
+          setMaxBacklog(maxBacklogRef.current);
+          pushToast('HPアップ！ 積載上限+1', 'item');
+        }
+      }
     },
     [fireAttack, addBeam, pushToast],
   );
@@ -519,6 +547,13 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       if (it === 'gaugedown') {
         if (gaugeDownObtainedRef.current) continue; // 一人一個まで
         weighted.push({ item: it, w: 0.25 + ratio * 1.0 }); // 低確率・不利ほど出やすい
+      } else if (it === 'maxhp') {
+        if (hpUpCountRef.current >= MAX_HP_UP) continue; // 上限に達したら出さない
+        weighted.push({ item: it, w: 0.5 }); // レア寄り
+      } else if (it === 'luck') {
+        weighted.push({ item: it, w: 0.6 }); // やや低確率
+      } else if (it === 'goldify') {
+        weighted.push({ item: it, w: 0.5 + ratio * 1.0 }); // 不利ほど出やすい
       } else if (it === 'shrink') {
         weighted.push({ item: it, w: 0.5 + ratio * 1.8 }); // 不利ほど出やすい
       } else if (it === 'totem') {
@@ -615,6 +650,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     updatePending([]);
     setSeed(newSeed);
     recentRef.current = [];
+    treasureBoostRef.current = 0;
+    hpUpCountRef.current = 0;
     setBacklog([nextWord(), nextWord(), nextWord()]);
     setTokenIndex(0);
     setCurrentTyping('');

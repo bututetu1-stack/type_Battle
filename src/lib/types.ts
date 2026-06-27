@@ -61,7 +61,11 @@ export type ItemType =
   // --- 追加アイテム（妨害） ---
   | 'flood' // 相手へ大量のおじゃまを送る
   | 'drain' // 自分のバックログを減らしつつ相手へ送る
-  | 'mirror'; // 自分が不利なほど強い反撃を送る
+  | 'mirror' // 自分が不利なほど強い反撃を送る
+  // --- 追加アイテム（お宝/HP） ---
+  | 'goldify' // 溜まっているワードを全てお宝に変える
+  | 'luck' // お宝の出現率が上がる（永続）
+  | 'maxhp'; // HP(積載上限)が増える（永続・上限+3）
 
 // アイテムの大分類（演出/説明用）。
 export type ItemCategory = 'defense' | 'attack' | 'timed' | 'boss';

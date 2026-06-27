@@ -29,6 +29,7 @@ const PINCH_MULT = 1.5;
 const BRAKE_DURATION = 5000;
 const ATTACK_CAP = 5; // 1回の攻撃で送れるおじゃまの上限（即死コンボ防止）
 const BOSS_MAX_BACKLOG = 26; // ボスのバックログ上限（＝ボスのHP。多対一なので高め）
+const MAX_HP_UP = 3; // HPアップ(maxhp)の取得上限（永続）
 
 const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   shield: { name: 'シールド', desc: '次の自動供給を1回無効化' },
@@ -56,6 +57,9 @@ const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   flood: { name: 'フラッド', desc: '相手へおじゃま+4' },
   drain: { name: 'ドレイン', desc: '自分を2減らし相手へおじゃま+2' },
   mirror: { name: 'ミラー', desc: '不利なほど強いおじゃまを送る' },
+  goldify: { name: 'ゴールド化', desc: '溜まっているワードを全てお宝に変える' },
+  luck: { name: '幸運', desc: 'お宝の出現率が上がる（永続）' },
+  maxhp: { name: 'HPアップ', desc: 'HP(積載上限)+1（永続・最大+3）' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡',
@@ -83,12 +87,15 @@ const ITEM_EMOJI: Record<ItemType, string> = {
   flood: '🌊',
   drain: '🩸',
   mirror: '🪞',
+  goldify: '✨',
+  luck: '🍀',
+  maxhp: '❤️',
 };
 // アイテムの大分類。def=防御/逆転（不利なほど出やすい）, atk=攻撃（有利なほど出やすい）, util=その他。
 const ITEM_KIND: Record<ItemType, 'def' | 'atk' | 'util'> = {
   shield: 'def', clear: 'def', brake: 'def', keep: 'util', shrink: 'def', parry: 'def',
   gaugedown: 'def', totem: 'def', barrier: 'def', freeze: 'def', purge: 'def', guard: 'def',
-  regen: 'def', mirror: 'def',
+  regen: 'def', mirror: 'def', goldify: 'def', luck: 'util', maxhp: 'util',
   longbomb: 'atk', rapid: 'atk', meteor: 'atk', quake: 'atk', rally: 'atk', focus: 'atk',
   snipe: 'atk', burst: 'atk', heavy: 'atk', flood: 'atk', drain: 'atk',
 };
@@ -144,7 +151,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // ボスモード関連の派生フラグ。
   const bossMode = mode === 'boss';
   const isBoss = bossMode && uid === bossUid;
-  const selfMax = isBoss ? BOSS_MAX_BACKLOG : MAX_BACKLOG; // 自分の上限（ボスはHPが多い）
+  const baseSelfMax = isBoss ? BOSS_MAX_BACKLOG : MAX_BACKLOG; // 自分の基礎上限（ボスはHPが多い）
+  const [hpBonus, setHpBonus] = useState(0); // HPアップ(maxhp)による積載上限の増分（永続）
+  const selfMax = baseSelfMax + hpBonus; // 自分の上限
   const [started, setStarted] = useState(false);
   const [countdown, setCountdown] = useState(99);
   const [selfAlive, setSelfAlive] = useState(true);
@@ -212,6 +221,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const guardCountRef = useRef(0); // ガード（自動供給を複数回防ぐ）
   const focusNextRef = useRef(false); // 会心: 次のボスへの攻撃を倍化
   const recentRef = useRef<string[]>([]); // 直近に出した単語（近接重複の回避・全員同一）
+  const treasureBoostRef = useRef(0); // 幸運(luck)によるお宝出現率の永続上昇分
+  const hpUpCountRef = useRef(0); // HPアップ(maxhp)の取得回数（上限 MAX_HP_UP）
   const attackProgressRef = useRef(0);
   const categoryRef = useRef(category);
   useEffect(() => {
@@ -238,7 +249,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // 引き直しの rng 消費数も一致＝同期は崩れない。種別はローカル乱数（localType）。
   const genWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    const w = generateWord(rng, categoryRef.current, recentRef.current, true, itemRateRef.current / 100);
+    const w = generateWord(rng, categoryRef.current, recentRef.current, true, itemRateRef.current / 100, treasureBoostRef.current);
     recentRef.current = [...recentRef.current, w.display].slice(-20);
     return w;
   }, []);
@@ -316,6 +327,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     itemRngRef.current = mulberry32((seed ^ 0x9e3779b9) >>> 0);
     // 種別はローカル乱数で（お宝＝アイテムが各プレイヤーに確実に出るように）。出現率はホスト設定。
     recentRef.current = [];
+    treasureBoostRef.current = 0;
+    hpUpCountRef.current = 0;
+    setHpBonus(0);
     setBacklog([genWord(), genWord(), genWord()]);
     attackProgressRef.current = 0;
     setAttackProgress(0);
@@ -637,6 +651,23 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       } else if (item === 'mirror') {
         sendAmount(Math.min(Math.max(1, Math.floor(stateRef.current.backlog.length / 3)), 6));
       }
+      // --- お宝/HP ---
+      else if (item === 'goldify') {
+        // 溜まっているワードを全てお宝に変える（おじゃまは除く）。
+        setBacklog((prev) => prev.map((w) => (w.type === 'ojama' ? w : { ...w, type: 'treasure' as const })));
+        sfx.item();
+      } else if (item === 'luck') {
+        // お宝出現率を永続的に上昇（上限 +0.5）。
+        treasureBoostRef.current = Math.min(0.5, treasureBoostRef.current + 0.08);
+        sfx.item();
+      } else if (item === 'maxhp') {
+        // HP(積載上限)を永続的に+1（上限 MAX_HP_UP）。
+        if (hpUpCountRef.current < MAX_HP_UP) {
+          hpUpCountRef.current += 1;
+          setHpBonus((b) => b + 1);
+          sfx.item();
+        }
+      }
     },
     [pickTarget, fireBeam, roomId, uid, bossUid, bossMode, isBoss, sendAmount],
   );
@@ -646,13 +677,15 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     let items: ItemType[];
     if (bossMode && isBoss) {
       // ボス専用＋自衛系＋全体攻撃。
-      items = ['meteor', 'quake', 'regen', 'brake', 'keep', 'clear', 'barrier', 'freeze', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'mirror'];
+      items = ['meteor', 'quake', 'regen', 'brake', 'keep', 'clear', 'barrier', 'freeze', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'mirror', 'goldify', 'luck', 'maxhp'];
     } else if (bossMode) {
       // 挑戦者: 攻撃協力系を多めに＋追加アイテム。
-      items = ['shield', 'clear', 'brake', 'rapid', 'keep', 'parry', 'rally', 'focus', 'longbomb', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror'];
+      items = ['shield', 'clear', 'brake', 'rapid', 'keep', 'parry', 'rally', 'focus', 'longbomb', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror', 'goldify', 'luck', 'maxhp'];
     } else {
-      items = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'parry', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror'];
+      items = ['shield', 'clear', 'brake', 'longbomb', 'rapid', 'keep', 'parry', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'heavy', 'flood', 'drain', 'mirror', 'goldify', 'luck', 'maxhp'];
     }
+    // HPアップは上限に達したら抽選から除外する。
+    if (hpUpCountRef.current >= MAX_HP_UP) items = items.filter((it) => it !== 'maxhp');
     // 有利/不利でドロップ内容を変える: 不利（バックログが多い）なら防御/逆転、
     // 有利（少ない）なら攻撃が出やすくなるよう重み付け抽選する。
     const disadv = Math.min(1, stateRef.current.backlog.length / selfMax); // 0..1
