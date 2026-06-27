@@ -1069,10 +1069,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const summaryRef = useRef<Parameters<typeof writePlayerSummary>[2]>({ backlog: 0, combo: 0, kpm: 0, badges: 0 });
   {
     // 観戦表示用に、現在ワードの全ローマ字と確定済み文字数を計算する。
+    // 入力中トークンは「打鍵中の文字列に合う綴り」を選ぶ（CurrentWord と同じ挙動）。
     const cur = backlog[0];
     const tokens = cur?.tokens ?? [];
-    const curRomaji = tokens.map((t) => t.romaji[0]).join('');
-    const curRomajiDone = tokens.slice(0, tokenIndex).reduce((s, t) => s + t.romaji[0].length, 0) + currentTyping.length;
+    const parts = tokens.map((t, i) =>
+      i === tokenIndex ? (t.romaji.find((r) => r.startsWith(currentTyping)) || t.romaji[0]) : t.romaji[0],
+    );
+    const curRomaji = parts.join('');
+    const curRomajiDone = parts.slice(0, tokenIndex).reduce((s, r) => s + r.length, 0) + currentTyping.length;
     summaryRef.current = {
       backlog: backlog.length, combo, kpm: calculateKPM(), badges: myBadges,
       curDisplay: cur?.display ?? '', curReading: cur?.reading ?? '',
@@ -1507,11 +1511,23 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                     <span className="text-gray-600">{reading.slice(0, idx)}</span>
                     <span className="text-cyan-200">{reading.slice(idx)}</span>
                   </div>
-                  {/* ローマ字の入力進捗（打った部分=緑／カーソル／未入力=灰） */}
-                  <div className="text-2xl font-mono tracking-wide break-all">
-                    <span className="text-emerald-300">{romaji.slice(0, rdone)}</span>
-                    <span className="text-white animate-pulse">▍</span>
-                    <span className="text-gray-500">{romaji.slice(rdone)}</span>
+                  {/* ローマ字の入力進捗（打った部分=緑／次の文字=ハイライト／未入力=灰）。
+                      文字の横位置がズレないよう、カーソルは幅を持たせず背景ハイライトで表す。 */}
+                  <div className="text-2xl font-mono tracking-wide break-all whitespace-pre-wrap">
+                    {romaji.split('').map((ch, i) => (
+                      <span
+                        key={i}
+                        className={
+                          i < rdone
+                            ? 'text-emerald-300'
+                            : i === rdone
+                              ? 'text-white bg-cyan-500/40 rounded-sm'
+                              : 'text-gray-500'
+                        }
+                      >
+                        {ch}
+                      </span>
+                    ))}
                   </div>
                 </div>
                 <div className="text-[11px] text-gray-600">他の盤面をクリックすると観戦相手を切り替えられます</div>
