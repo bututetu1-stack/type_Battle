@@ -169,12 +169,14 @@ interface OnlineGameProps {
   comboStep?: number;
   badgeCap?: number;
   badgeRate?: number;
+  gaugeMode?: 'word' | 'char';
+  gaugeChars?: number;
   itemPrefs: ItemPrefs;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, badgeCap, badgeRate, itemPrefs, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, badgeCap, badgeRate, gaugeMode, gaugeChars, itemPrefs, players, onExit }: OnlineGameProps) {
   // ボスモード関連の派生フラグ。
   const bossMode = mode === 'boss';
   const isBoss = bossMode && uid === bossUid;
@@ -186,6 +188,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const cStep = typeof comboStep === 'number' ? comboStep : 5; // 何連鎖ごとに+1
   const bCap = typeof badgeCap === 'number' ? badgeCap : 4; // バッジ補正の上限枚数
   const bRate = typeof badgeRate === 'number' ? badgeRate : 25; // バッジ1枚あたり%
+  const gMode = gaugeMode === 'char' ? 'char' : 'word'; // ゲージ加算方式
+  const gChars = typeof gaugeChars === 'number' ? gaugeChars : 16; // 文字数方式のしきい値
   const [hpBonus, setHpBonus] = useState(0); // HPアップ(maxhp)による積載上限の増分（永続）
   const selfMax = baseSelfMax + hpBonus; // 自分の上限
   const [started, setStarted] = useState(false);
@@ -1021,10 +1025,15 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         sfx.clear();
         // 1単語クリアごとに、来ている着弾予告を1つ相殺（タイピング＝防御）。
         offsetIncoming(1);
-        // ゲージはクリア数で進む（ミスでは減らない）。5クリアごとに発射。
-        attackProgressRef.current += Date.now() < overchargeUntilRef.current ? 2 : 1; // オーバーチャージ中は倍速
-        while (attackProgressRef.current >= atkGauge) {
-          attackProgressRef.current -= atkGauge;
+        // ゲージはミスでは減らない。加算方式は「ワード数」=1 /「文字数」=クリア語の読み文字数。
+        const clearedWord = stateRef.current.backlog[0];
+        const charMode = gMode === 'char';
+        const baseInc = charMode ? (clearedWord?.reading.length || 1) : 1;
+        const inc = baseInc * (Date.now() < overchargeUntilRef.current ? 2 : 1); // オーバーチャージ中は倍速
+        const gaugeThr = charMode ? gChars : atkGauge;
+        attackProgressRef.current += inc;
+        while (attackProgressRef.current >= gaugeThr) {
+          attackProgressRef.current -= gaugeThr;
           launchAttack(newCombo);
         }
         setAttackProgress(attackProgressRef.current);
@@ -1797,7 +1806,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             </div>
 
             <div className="mt-3">
-              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={myBadges} threshold={atkGauge} />
+              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={myBadges} threshold={gMode === 'char' ? gChars : atkGauge} unit={gMode === 'char' ? '文字' : 'クリア'} />
             </div>
           </div>
         </div>

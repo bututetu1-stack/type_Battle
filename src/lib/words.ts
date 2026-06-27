@@ -1205,6 +1205,7 @@ export const THEMES: Theme[] = [
   { id: 'school', label: '学校・生活' },
   { id: 'yoji', label: '四字熟語' },
   { id: 'kancolle', label: '艦これ⚓' },
+  { id: 'ateji', label: '二つ名・当て字' },
 ];
 
 // テーマごとの語彙プール。'all' は全語彙（WORD_POOL）を使う。
@@ -2055,6 +2056,24 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: '戦艦棲姫', reading: 'せんかんせいき' },
     { display: '空母棲姫', reading: 'くうぼせいき' },
     { display: '港湾棲姫', reading: 'こうわんせいき' },
+  ],
+  // 二つ名・当て字（表示と読みがあえて一致しない“ロマン”枠）
+  ateji: [
+    { display: '超電磁砲', reading: 'れーるがん' },
+    { display: '本気', reading: 'まじ' },
+    { display: '強敵', reading: 'とも' },
+    { display: '永遠', reading: 'とわ' },
+    { display: '運命', reading: 'さだめ' },
+    { display: '宿命', reading: 'さだめ' },
+    { display: '地球', reading: 'ほし' },
+    { display: '宇宙', reading: 'そら' },
+    { display: '心', reading: 'はーと' },
+    { display: '刃', reading: 'やいば' },
+    { display: '時間', reading: 'とき' },
+    { display: '故郷', reading: 'くに' },
+    { display: '世界', reading: 'せかい' },
+    { display: '太陽', reading: 'ひかり' },
+    { display: '深淵', reading: 'やみ' },
   ],
 };
 

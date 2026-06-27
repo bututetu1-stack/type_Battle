@@ -35,6 +35,8 @@ export interface RoomMeta {
   comboStep?: number; // 何連鎖ごとに攻撃量+1（既定5）
   badgeCap?: number; // バッジ補正の上限枚数（既定4）
   badgeRate?: number; // バッジ1枚あたりの攻撃上昇率%（既定25）
+  gaugeMode?: 'word' | 'char'; // ゲージ加算方式（既定 word）
+  gaugeChars?: number; // 文字数方式のときの発射しきい値（既定16）
 }
 
 export interface RoomPlayer {
@@ -134,6 +136,8 @@ export async function createRoom(uid: string, name: string): Promise<string> {
     comboStep: 5,
     badgeCap: 4,
     badgeRate: 25,
+    gaugeMode: 'word',
+    gaugeChars: 16,
   };
   await set(ref(db, `rooms/${roomId}/meta`), meta);
   await set(ref(db, `rooms/${roomId}/players/${uid}`), newPlayer(name, true));
@@ -222,6 +226,12 @@ export async function setRoomBadgeCap(roomId: string, v: number): Promise<void> 
 }
 export async function setRoomBadgeRate(roomId: string, v: number): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { badgeRate: Math.min(100, Math.max(0, Math.round(v))) });
+}
+export async function setRoomGaugeMode(roomId: string, v: 'word' | 'char'): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { gaugeMode: v === 'char' ? 'char' : 'word' });
+}
+export async function setRoomGaugeChars(roomId: string, v: number): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { gaugeChars: Math.min(40, Math.max(6, Math.round(v))) });
 }
 
 // --- CPU（ホストがシミュレートする擬似プレイヤー）---

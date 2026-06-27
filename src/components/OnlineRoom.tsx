@@ -15,6 +15,8 @@ import {
   setRoomComboStep,
   setRoomBadgeCap,
   setRoomBadgeRate,
+  setRoomGaugeMode,
+  setRoomGaugeChars,
   addCpuPlayer,
   removeCpuPlayer,
   removeAllCpus,
@@ -117,6 +119,8 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         comboStep={typeof meta.comboStep === 'number' ? meta.comboStep : 5}
         badgeCap={typeof meta.badgeCap === 'number' ? meta.badgeCap : 4}
         badgeRate={typeof meta.badgeRate === 'number' ? meta.badgeRate : 25}
+        gaugeMode={meta.gaugeMode === 'char' ? 'char' : 'word'}
+        gaugeChars={typeof meta.gaugeChars === 'number' ? meta.gaugeChars : 16}
         itemPrefs={itemPrefs}
         players={players}
         onExit={handleLeave}
@@ -267,10 +271,24 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
           <p className="text-[10px] text-gray-600 mt-0.5">右ほど速い（おじゃま単語が早く積もります）。</p>
         </div>
 
+        {/* ゲージ加算方式（ホストが選択） */}
+        <div className="mb-2 flex items-center gap-2">
+          <span className="text-[11px] text-gray-500">ゲージ加算方式</span>
+          {([['word', 'ワード数'], ['char', '文字数']] as const).map(([m, lbl]) => (
+            <button key={m} onClick={() => isHost && setRoomGaugeMode(roomId, m)} disabled={!isHost}
+              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors disabled:opacity-60 ${(meta.gaugeMode === 'char' ? 'char' : 'word') === m ? 'bg-orange-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+              {lbl}
+            </button>
+          ))}
+          <span className="text-[9px] text-gray-600">{meta.gaugeMode === 'char' ? '長い単語ほど溜まる' : '1ワード=1'}</span>
+        </div>
+
         {/* 攻撃の設定（ホストが選択） */}
         <div className="mb-5 grid grid-cols-3 gap-2">
           {([
-            { key: 'gauge', label: 'アタックゲージ', val: typeof meta.attackGauge === 'number' ? meta.attackGauge : 5, min: 2, max: 10, set: setRoomAttackGauge },
+            (meta.gaugeMode === 'char'
+              ? { key: 'gauge', label: 'ゲージ(文字)', val: typeof meta.gaugeChars === 'number' ? meta.gaugeChars : 16, min: 6, max: 40, set: setRoomGaugeChars }
+              : { key: 'gauge', label: 'ゲージ(クリア)', val: typeof meta.attackGauge === 'number' ? meta.attackGauge : 5, min: 2, max: 10, set: setRoomAttackGauge }),
             { key: 'cap', label: 'アタック上限', val: typeof meta.attackCap === 'number' ? meta.attackCap : 5, min: 2, max: 12, set: setRoomAttackCap },
             { key: 'step', label: '増加の連鎖数', val: typeof meta.comboStep === 'number' ? meta.comboStep : 5, min: 2, max: 15, set: setRoomComboStep },
             { key: 'badgeCap', label: 'バッジ上限', val: typeof meta.badgeCap === 'number' ? meta.badgeCap : 4, min: 0, max: 10, set: setRoomBadgeCap },

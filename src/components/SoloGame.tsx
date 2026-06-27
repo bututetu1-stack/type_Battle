@@ -119,6 +119,8 @@ interface CustomCfg {
   comboStep: number; // 何連鎖ごとに攻撃量が+1されるか
   badgeCap: number; // バッジ補正の上限枚数
   badgeRate: number; // バッジ1枚あたりの攻撃量上昇率(%)
+  gaugeMode: 'word' | 'char'; // ゲージ加算方式（ワード数 or 文字数）
+  gaugeChars: number; // 文字数方式のときの発射しきい値（何文字で発射）
   autoFull: boolean; // 完全オート（有利不利を見て自動で使用）
   use: Record<ItemCat, UseMode>; // カテゴリ別の使い方（保持/即時）
 }
@@ -129,6 +131,7 @@ function loadCfg(): CustomCfg {
     theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT, cpuStr: 5, treasureRate: 20,
     attackGauge: ATTACK_THRESHOLD, attackCap: ATTACK_CAP, comboStep: 5,
     badgeCap: 4, badgeRate: 25,
+    gaugeMode: 'word', gaugeChars: 16,
     autoFull: false, use: { attack: 'hold', defense: 'hold', timed: 'hold' },
   };
   try {
@@ -149,6 +152,8 @@ function loadCfg(): CustomCfg {
         comboStep: typeof o.comboStep === 'number' ? Math.min(15, Math.max(2, o.comboStep)) : def.comboStep,
         badgeCap: typeof o.badgeCap === 'number' ? Math.min(10, Math.max(0, o.badgeCap)) : def.badgeCap,
         badgeRate: typeof o.badgeRate === 'number' ? Math.min(100, Math.max(0, o.badgeRate)) : def.badgeRate,
+        gaugeMode: o.gaugeMode === 'char' ? 'char' : 'word',
+        gaugeChars: typeof o.gaugeChars === 'number' ? Math.min(40, Math.max(6, o.gaugeChars)) : def.gaugeChars,
         autoFull: typeof o.autoFull === 'boolean' ? o.autoFull : def.autoFull,
         use: o.use && typeof o.use === 'object'
           ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), timed: validMode(o.use.timed ?? o.use.disrupt) }
@@ -271,6 +276,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgComboStep, setCfgComboStep] = useState(initialCfg.comboStep);
   const [cfgBadgeCap, setCfgBadgeCap] = useState(initialCfg.badgeCap);
   const [cfgBadgeRate, setCfgBadgeRate] = useState(initialCfg.badgeRate);
+  const [cfgGaugeMode, setCfgGaugeMode] = useState<'word' | 'char'>(initialCfg.gaugeMode);
+  const [cfgGaugeChars, setCfgGaugeChars] = useState(initialCfg.gaugeChars);
   const [cfgAutoFull, setCfgAutoFull] = useState(initialCfg.autoFull);
   const [cfgUse, setCfgUse] = useState<Record<ItemCat, UseMode>>(initialCfg.use);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
@@ -279,18 +286,23 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       localStorage.setItem(CFG_KEY, JSON.stringify({
         initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies, cpuStr: cfgCpuStr,
         treasureRate: cfgTreasureRate, attackGauge: cfgAttackGauge, attackCap: cfgAttackCap, comboStep: cfgComboStep,
-        badgeCap: cfgBadgeCap, badgeRate: cfgBadgeRate, autoFull: cfgAutoFull, use: cfgUse,
+        badgeCap: cfgBadgeCap, badgeRate: cfgBadgeRate, gaugeMode: cfgGaugeMode, gaugeChars: cfgGaugeChars,
+        autoFull: cfgAutoFull, use: cfgUse,
       }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgAutoFull, cfgUse]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgGaugeMode, cfgGaugeChars, cfgAutoFull, cfgUse]);
   const attackCapRef = useRef(initialCfg.attackCap);
   const comboStepRef = useRef(initialCfg.comboStep);
   const badgeCapRef = useRef(initialCfg.badgeCap);
   const badgeRateRef = useRef(initialCfg.badgeRate);
+  const gaugeModeRef = useRef(initialCfg.gaugeMode);
+  const gaugeCharsRef = useRef(initialCfg.gaugeChars);
   useEffect(() => { attackCapRef.current = cfgAttackCap; }, [cfgAttackCap]);
   useEffect(() => { comboStepRef.current = cfgComboStep; }, [cfgComboStep]);
   useEffect(() => { badgeCapRef.current = cfgBadgeCap; }, [cfgBadgeCap]);
   useEffect(() => { badgeRateRef.current = cfgBadgeRate; }, [cfgBadgeRate]);
+  useEffect(() => { gaugeModeRef.current = cfgGaugeMode; }, [cfgGaugeMode]);
+  useEffect(() => { gaugeCharsRef.current = cfgGaugeChars; }, [cfgGaugeChars]);
   const cpuStrengthRef = useRef(initialCfg.cpuStr / 10); // 0..1 の目標強さ
   const treasureRateRef = useRef(initialCfg.treasureRate / 100); // お宝の基本出現率（0..1）
   useEffect(() => { treasureRateRef.current = cfgTreasureRate / 100; }, [cfgTreasureRate]);
@@ -830,18 +842,20 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         sfx.clear();
         // 1単語クリアごとに、来ている着弾予告を1つ相殺（タイピング＝防御）。
         offsetIncoming(1);
-        // ゲージはクリア数で進む（ミスでは減らない）。threshold クリアごとに発射し、
-        // 攻撃量は現在の連鎖に応じて決まる（連鎖が低くても最低1は撃てる）。
-        attackProgressRef.current += 1;
-        if (attackProgressRef.current >= attackThresholdRef.current) {
-          attackProgressRef.current -= attackThresholdRef.current;
-          {
-            // 連鎖で攻撃量UP → バッジ（撃破数）でさらに上昇（上限/上昇率はカスタム設定）。
-            let amt = 1 + Math.floor(newCombo / comboStepRef.current);
-            const badges = Math.min(playerKOsRef.current, badgeCapRef.current);
-            amt = Math.round(amt * (1 + (badgeRateRef.current / 100) * badges));
-            fireAttack(Math.min(amt, attackCapRef.current));
-          }
+        // ゲージはミスでは減らない。加算方式は「ワード数」=1 /「文字数」=クリアした語の読み文字数。
+        // しきい値に達するごとに発射。攻撃量は連鎖（とバッジ）に応じる（相殺は1ワード=1のまま）。
+        const clearedWord = stateRef.current.backlog[0];
+        const charMode = gaugeModeRef.current === 'char';
+        const inc = charMode ? (clearedWord?.reading.length || 1) : 1;
+        const gaugeThr = charMode ? gaugeCharsRef.current : attackThresholdRef.current;
+        attackProgressRef.current += inc;
+        while (attackProgressRef.current >= gaugeThr) {
+          attackProgressRef.current -= gaugeThr;
+          // 連鎖で攻撃量UP → バッジ（撃破数）でさらに上昇（上限/上昇率はカスタム設定）。
+          let amt = 1 + Math.floor(newCombo / comboStepRef.current);
+          const badges = Math.min(playerKOsRef.current, badgeCapRef.current);
+          amt = Math.round(amt * (1 + (badgeRateRef.current / 100) * badges));
+          fireAttack(Math.min(amt, attackCapRef.current));
         }
         setAttackProgress(attackProgressRef.current);
         if (Date.now() < rapidUntilRef.current) fireAttack(1); // 連射: 1クリアごとに1攻撃
@@ -1477,7 +1491,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             </div>
 
             <div className="mt-3">
-              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={Math.min(playerKOs, cfgBadgeCap)} threshold={attackThreshold} />
+              <AttackGauge progress={attackProgress} combo={combo} pinch={isDanger} badges={Math.min(playerKOs, cfgBadgeCap)} threshold={cfgGaugeMode === 'char' ? cfgGaugeChars : attackThreshold} unit={cfgGaugeMode === 'char' ? '文字' : 'クリア'} />
             </div>
           </div>
 
@@ -1611,14 +1625,40 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                     </div>
                   </div>
                   <div className="block text-[11px] text-gray-400 mt-3">
-                    アタックゲージ（何クリアで発射）: <span className="text-orange-300 font-mono">{cfgAttackGauge}</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <StepBtn onClick={() => setCfgAttackGauge((v) => Math.max(2, v - 1))}>−</StepBtn>
-                      <input type="range" min={2} max={10} step={1} value={cfgAttackGauge}
-                        onChange={(e) => setCfgAttackGauge(Number(e.target.value))} className="flex-1 accent-orange-500" />
-                      <StepBtn onClick={() => setCfgAttackGauge((v) => Math.min(10, v + 1))}>＋</StepBtn>
+                    ゲージ加算方式
+                    <div className="flex gap-1 mt-1">
+                      {([['word', 'ワード数'], ['char', '文字数']] as const).map(([m, lbl]) => (
+                        <button key={m} onClick={() => setCfgGaugeMode(m)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgGaugeMode === m ? 'bg-orange-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                          {lbl}
+                        </button>
+                      ))}
+                      <span className="text-[9px] text-gray-600 self-center ml-1">
+                        {cfgGaugeMode === 'char' ? '長い単語ほどゲージが溜まる' : '1ワード=1ゲージ'}
+                      </span>
                     </div>
                   </div>
+                  {cfgGaugeMode === 'word' ? (
+                    <div className="block text-[11px] text-gray-400 mt-3">
+                      アタックゲージ（何クリアで発射）: <span className="text-orange-300 font-mono">{cfgAttackGauge}</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <StepBtn onClick={() => setCfgAttackGauge((v) => Math.max(2, v - 1))}>−</StepBtn>
+                        <input type="range" min={2} max={10} step={1} value={cfgAttackGauge}
+                          onChange={(e) => setCfgAttackGauge(Number(e.target.value))} className="flex-1 accent-orange-500" />
+                        <StepBtn onClick={() => setCfgAttackGauge((v) => Math.min(10, v + 1))}>＋</StepBtn>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="block text-[11px] text-gray-400 mt-3">
+                      アタックゲージ（何文字で発射）: <span className="text-orange-300 font-mono">{cfgGaugeChars}</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <StepBtn onClick={() => setCfgGaugeChars((v) => Math.max(6, v - 1))}>−</StepBtn>
+                        <input type="range" min={6} max={40} step={1} value={cfgGaugeChars}
+                          onChange={(e) => setCfgGaugeChars(Number(e.target.value))} className="flex-1 accent-orange-500" />
+                        <StepBtn onClick={() => setCfgGaugeChars((v) => Math.min(40, v + 1))}>＋</StepBtn>
+                      </div>
+                    </div>
+                  )}
                   <div className="block text-[11px] text-gray-400 mt-3">
                     アタック数の上限: <span className="text-orange-300 font-mono">{cfgAttackCap}</span>
                     <div className="flex items-center gap-2 mt-1">
