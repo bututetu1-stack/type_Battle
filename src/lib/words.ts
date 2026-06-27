@@ -2074,6 +2074,12 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: '世界', reading: 'せかい' },
     { display: '太陽', reading: 'ひかり' },
     { display: '深淵', reading: 'やみ' },
+    { display: '禁書目録', reading: 'いんでっくす' },
+    { display: '一方通行', reading: 'あくせられーた' },
+    { display: '風紀委員', reading: 'じゃっじめんと' },
+    { display: '幻想殺し', reading: 'いまじんぶれいかー' },
+    { display: '警備員', reading: 'あんちすきる' },
+    { display: '打ち止め', reading: 'らすとおーだー' },
   ],
 };
 
