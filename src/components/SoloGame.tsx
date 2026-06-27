@@ -25,7 +25,7 @@ const KEEP_DURATION = 10000; // 連鎖キープ（ミスで連鎖が切れない
 const PARRY_DURATION = 8000; // 受け流し（被攻撃を逸らす）の効果時間
 const TOTEM_DURATION = 12000; // 不死のトーテム（上限超過無効）の効果時間
 const ATTACK_THRESHOLD = 5; // 何クリアごとに攻撃を発射するか（初期値）
-const TELEGRAPH_DELAY = 1500; // CPU攻撃の着弾予告→確定までの猶予
+const TELEGRAPH_DELAY = 2500; // CPU攻撃の着弾予告→確定までの猶予（相殺の反応時間を確保）
 const CFG_KEY = 'typeRoyale.custom'; // カスタム設定の保存キー
 
 const FREEZE_DURATION = 5000; // フリーズ（着弾予告と自動供給を停止）の効果時間
@@ -288,6 +288,22 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     }
     return alive[Math.floor(Math.random() * alive.length)];
   }, []);
+
+  // 防御の相殺: 来ている着弾予告を n だけ打ち消す（長文は対象外）。
+  // 「1クリアごとに1相殺」でタイピングそのものを防御にする。
+  const offsetIncoming = useCallback((n: number) => {
+    if (n <= 0 || pendingRef.current.length === 0) return;
+    let remaining = n;
+    const sorted = [...pendingRef.current].sort((a, b) => a.confirmAt - b.confirmAt);
+    let changed = false;
+    for (const e of sorted) {
+      if (remaining <= 0) break;
+      if (e.word) continue; // 長文は相殺不可
+      const cut = Math.min(remaining, e.amount);
+      if (cut > 0) { e.amount -= cut; remaining -= cut; changed = true; }
+    }
+    if (changed) updatePending(sorted.filter((e) => e.amount > 0 || e.word));
+  }, [updatePending]);
 
   // 指定量を攻撃: まず受信予告と相殺 → 余剰をターゲットへ。
   const fireAttack = useCallback((amount: number) => {
@@ -591,6 +607,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setKeysTyped((prev) => prev + 1);
         setScore((s) => s + 100 + newCombo * 10);
         sfx.clear();
+        // 1単語クリアごとに、来ている着弾予告を1つ相殺（タイピング＝防御）。
+        offsetIncoming(1);
         // ゲージはクリア数で進む（ミスでは減らない）。threshold クリアごとに発射し、
         // 攻撃量は現在の連鎖に応じて決まる（連鎖が低くても最低1は撃てる）。
         attackProgressRef.current += 1;
@@ -610,7 +628,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [startGame, useItem, fireAttack, grantItem, cycleTargetMode]);
+  }, [startGame, useItem, fireAttack, grantItem, cycleTargetMode, offsetIncoming]);
 
   // --- CPUの挙動: 自滅ランダムウォーク + プレイヤーへの攻撃 + アイテム使用 ---
   useEffect(() => {
@@ -1273,7 +1291,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <div className="text-gray-400 font-bold mb-1.5">ゲージの見方</div>
                 <div className="flex flex-col gap-1 text-left text-gray-500">
                   <div>
-                    <span className="text-red-400 font-bold">左の赤ゲージ（着弾予告）</span> … CPUから送られてくるおじゃまの予告。時間が来るとバックログに加算される。
+                    <span className="text-red-400 font-bold">左の赤ゲージ（着弾予告）</span> … CPUから送られてくるおじゃまの予告。<span className="text-cyan-300">単語を1つ打ち切るごとに1つ相殺（防御）</span>でき、相殺しきれず時間切れになるとバックログに加算される。
                   </div>
                   <div>
                     <span className="text-cyan-400 font-bold">下の青ゲージ（バックログ）</span> … 自分の処理待ちの山。満タンでトップアウト＝敗北。

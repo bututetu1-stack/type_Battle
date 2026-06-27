@@ -20,7 +20,7 @@ const MAX_BACKLOG = 12;
 const INITIAL_SPAWN_INTERVAL = 4000;
 const MIN_SPAWN_INTERVAL = 1000;
 const WRITE_INTERVAL = 400;
-const TELEGRAPH_DELAY = 1500;
+const TELEGRAPH_DELAY = 2500; // 着弾予告→確定までの猶予（相殺の反応時間を確保）
 const PINCH_RATIO = 0.7;
 const PINCH_MULT = 1.5;
 const BRAKE_DURATION = 5000;
@@ -403,6 +403,22 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     return alive[Math.floor(Math.random() * alive.length)][0];
   }, [uid, bossMode, isBoss, bossUid]);
 
+  // 防御の相殺: 来ている着弾予告を n だけ打ち消す（長文は対象外）。
+  // 「1クリアごとに1相殺」でタイピングそのものを防御にする。
+  const offsetIncoming = useCallback((n: number) => {
+    if (n <= 0 || pendingRef.current.length === 0) return;
+    let remaining = n;
+    const sorted = [...pendingRef.current].sort((a, b) => a.confirmAt - b.confirmAt);
+    let changed = false;
+    for (const e of sorted) {
+      if (remaining <= 0) break;
+      if (e.word) continue; // 長文は相殺不可
+      const cut = Math.min(remaining, e.amount);
+      if (cut > 0) { e.amount -= cut; remaining -= cut; changed = true; }
+    }
+    if (changed) updatePending(sorted.filter((e) => e.amount > 0 || e.word));
+  }, [updatePending]);
+
   // 指定量を送る共通処理: 受信予告と相殺 → 余剰を相手へ。
   const sendAmount = useCallback(
     (amount: number) => {
@@ -746,6 +762,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         setMaxCombo((m) => Math.max(m, newCombo));
         setKeysTyped((k) => k + 1);
         sfx.clear();
+        // 1単語クリアごとに、来ている着弾予告を1つ相殺（タイピング＝防御）。
+        offsetIncoming(1);
         // ゲージはクリア数で進む（ミスでは減らない）。5クリアごとに発射。
         attackProgressRef.current += 1;
         if (attackProgressRef.current >= 5) {
@@ -764,7 +782,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [started, launchAttack, sendAmount, useItem, grantItem, cycleTargetMode]);
+  }, [started, launchAttack, sendAmount, useItem, grantItem, cycleTargetMode, offsetIncoming]);
 
   // ベース供給＆加速ループ（シールド/ブレーキ対応）。
   useEffect(() => {
