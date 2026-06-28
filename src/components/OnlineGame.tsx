@@ -216,6 +216,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [attackProgress, setAttackProgress] = useState(0); // 次の攻撃までのゲージ（ミスで減らない）
   const [nowTick, setNowTick] = useState(0); // カウントダウン描画用の時刻
   const [dazzleUntil, setDazzleUntil] = useState(0); // 視認性低下を食らっている終了時刻（自分の画面をゲーミング化）
+  const [resultTab, setResultTab] = useState<'rank' | 'ko' | 'kpm'>('rank'); // 結果画面の表示切替
   // エフェクト用
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
   const [hitId, setHitId] = useState<string | null>(null); // 自分が攻撃した相手
@@ -1347,19 +1348,48 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         <Crown className={`w-16 h-16 mb-4 ${bossMode && !bossWon ? 'text-emerald-400' : 'text-yellow-400'}`} />
         <h2 className="text-3xl font-black tracking-widest mb-1">{bossTitle}</h2>
         <p className="text-yellow-300 mb-6 text-lg text-center">{bossLine}</p>
-        <div className="bg-neutral-900/70 rounded-xl border border-white/10 w-full max-w-md mb-6 divide-y divide-white/5">
-          {ranked.map((p, i) => (
-            <div key={p.name + i} className="flex items-center justify-between px-4 py-2">
-              <span className="flex items-center gap-3">
-                <span className="font-mono text-gray-500 w-6">#{i + 1}</span>
-                <span className={i === 0 ? 'text-yellow-300 font-bold' : 'text-gray-300'}>{p.name}</span>
-              </span>
-              <span className="text-xs text-gray-500 font-mono">
-                {p.kpm} kpm · {p.badges} KO
-              </span>
-            </div>
+        {/* 表示切替: 順位 / KO数ランキング / KPMランキング */}
+        <div className="flex gap-1 mb-2">
+          {([['rank', '順位'], ['ko', 'KO数'], ['kpm', 'KPM']] as const).map(([k, lbl]) => (
+            <button
+              key={k}
+              onClick={() => setResultTab(k)}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
+                resultTab === k ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+              }`}
+            >
+              {lbl}
+            </button>
           ))}
         </div>
+        {(() => {
+          const list = resultTab === 'ko'
+            ? Object.values(players).slice().sort((a, b) => (b.badges || 0) - (a.badges || 0) || (b.kpm || 0) - (a.kpm || 0))
+            : resultTab === 'kpm'
+              ? Object.values(players).slice().sort((a, b) => (b.kpm || 0) - (a.kpm || 0) || (b.badges || 0) - (a.badges || 0))
+              : ranked;
+          return (
+            <div className="bg-neutral-900/70 rounded-xl border border-white/10 w-full max-w-md mb-6 divide-y divide-white/5">
+              {list.map((p, i) => (
+                <div key={p.name + i} className="flex items-center justify-between px-4 py-2">
+                  <span className="flex items-center gap-3">
+                    <span className="font-mono text-gray-500 w-6">#{i + 1}</span>
+                    <span className={i === 0 ? 'text-yellow-300 font-bold' : 'text-gray-300'}>{p.name}</span>
+                  </span>
+                  <span className="text-xs font-mono">
+                    {resultTab === 'ko' ? (
+                      <><span className="text-orange-300 font-bold">{p.badges} KO</span><span className="text-gray-600"> · {p.kpm} kpm</span></>
+                    ) : resultTab === 'kpm' ? (
+                      <><span className="text-cyan-300 font-bold">{p.kpm} kpm</span><span className="text-gray-600"> · {p.badges} KO</span></>
+                    ) : (
+                      <span className="text-gray-500">{p.kpm} kpm · {p.badges} KO</span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
         <p className="text-gray-400 mb-4 font-mono">
           あなたの順位: {myRank} 位 / 最高連鎖 {maxCombo} / KPM {calculateKPM()}
         </p>

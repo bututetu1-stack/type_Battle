@@ -5,7 +5,7 @@ import {
   type KeyConfig, type InputMode,
 } from '../lib/keyconfig';
 import { CAT_META } from '../lib/items';
-import { COLOR_THEMES, loadThemeId, saveThemeId, applyColorTheme, IMAGE_THEME_ID, fileToDataUrl, cropToBgImages, saveBgImage, clearBgImage, loadBgImage } from '../lib/theme';
+import { COLOR_THEMES, loadThemeId, saveThemeId, applyColorTheme, IMAGE_THEME_ID, fileToDataUrl, cropToBgImages, saveBgImage, clearBgImage, loadBgImage, cropToMiniImage, saveBoardImage, clearBoardImage, loadBoardImage } from '../lib/theme';
 import ImageCropper from './ImageCropper';
 
 // プレイヤー設定（入力方式＋キーコンフィグ）。ソロ/オンライン共通でlocalStorageに保存。
@@ -35,6 +35,19 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
     setCropSrc(null);
   };
   const removeBg = () => { clearBgImage(); setHasImage(false); pickTheme(COLOR_THEMES[0].id); };
+  // 盤面(ミニボード)専用画像（任意・3:4でクロップ）。
+  const [hasBoard, setHasBoard] = useState<boolean>(() => !!loadBoardImage());
+  const [boardCropSrc, setBoardCropSrc] = useState<string | null>(null);
+  const onUploadBoard = async (file: File | undefined) => {
+    if (!file) return;
+    try { setBoardCropSrc(await fileToDataUrl(file)); } catch { /* 無視 */ }
+  };
+  const onBoardCropConfirm = async (crop: { x: number; y: number; w: number; h: number }) => {
+    if (!boardCropSrc) return;
+    try { saveBoardImage(await cropToMiniImage(boardCropSrc, crop)); setHasBoard(true); } catch { /* 無視 */ }
+    setBoardCropSrc(null);
+  };
+  const removeBoard = () => { clearBoardImage(); setHasBoard(false); };
   // 「capturing」中は次のキー入力でそのバインドを設定する。
   const [capturing, setCapturing] = useState<string | null>(null);
 
@@ -145,10 +158,24 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
           </div>
           {hasImage && (
             <div className="flex items-center justify-between mt-2 text-[10px] text-gray-500">
-              <span>背景画像を設定中（オンラインでは他の人から見えるあなたの盤面の背景にも使われます）</span>
+              <span>背景画像を設定中（盤面用画像が未設定なら、オンラインの盤面背景にもこの中央が使われます）</span>
               <button onClick={removeBg} className="text-red-400 hover:text-red-300 underline shrink-0 ml-2">削除</button>
             </div>
           )}
+
+          {/* 盤面(ミニボード)専用画像（任意・縦長3:4） */}
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="text-[11px] text-gray-400">盤面（ミニボード）用画像 <span className="text-gray-600">任意・縦長3:4</span></span>
+            <div className="flex items-center gap-2 shrink-0">
+              {hasBoard && <span className="text-[10px] text-cyan-300">設定中</span>}
+              {hasBoard && <button onClick={removeBoard} className="text-[10px] text-red-400 hover:text-red-300 underline">削除</button>}
+              <label className="text-[11px] font-bold bg-neutral-800 hover:bg-neutral-700 rounded-lg px-3 py-1 cursor-pointer">
+                {hasBoard ? '変更' : 'アップロード'}
+                <input type="file" accept="image/*" className="hidden" onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => onUploadBoard(e.target.files?.[0])} />
+              </label>
+            </div>
+          </div>
+          <p className="text-[10px] text-gray-600 mt-1">※ 盤面用画像を設定すると、オンラインで他の人から見えるあなたの盤面（棒グラフ）の背景に、背景画像とは別の画像を使えます。</p>
         </div>
 
         {/* ローマ字（つづり）の表示タイミング */}
@@ -207,7 +234,10 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
       </div>
 
       {cropSrc && (
-        <ImageCropper src={cropSrc} onCancel={() => setCropSrc(null)} onConfirm={onCropConfirm} />
+        <ImageCropper src={cropSrc} onCancel={() => setCropSrc(null)} onConfirm={onCropConfirm} title="背景の切り取り範囲を選ぶ" />
+      )}
+      {boardCropSrc && (
+        <ImageCropper src={boardCropSrc} onCancel={() => setBoardCropSrc(null)} onConfirm={onBoardCropConfirm} aspect={3 / 4} title="盤面用の切り取り範囲を選ぶ（縦長）" />
       )}
     </div>
   );

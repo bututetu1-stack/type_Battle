@@ -21,7 +21,8 @@ export const COLOR_THEMES: ColorTheme[] = [
 
 const KEY = 'typeRoyale.theme';
 const IMG_KEY = 'typeRoyale.bgImage';      // 背景画像（フル・dataURL）
-const IMG_MINI_KEY = 'typeRoyale.bgImageMini'; // ミニボード共有用の縮小画像（dataURL）
+const IMG_MINI_KEY = 'typeRoyale.bgImageMini'; // 背景から作ったミニ（盤面共有のフォールバック）
+const BOARD_KEY = 'typeRoyale.boardImage'; // 盤面(ミニボード)専用画像（任意・dataURL）
 export const IMAGE_THEME_ID = 'image';
 
 export function getColorTheme(id: string): ColorTheme {
@@ -45,14 +46,27 @@ export function saveThemeId(id: string): void {
 export function loadBgImage(): string | null {
   try { return localStorage.getItem(IMG_KEY); } catch { return null; }
 }
-export function loadBgImageMini(): string | null {
-  try { return localStorage.getItem(IMG_MINI_KEY); } catch { return null; }
-}
 export function saveBgImage(full: string, mini: string): void {
   try { localStorage.setItem(IMG_KEY, full); localStorage.setItem(IMG_MINI_KEY, mini); } catch { /* 容量超過などは無視 */ }
 }
 export function clearBgImage(): void {
   try { localStorage.removeItem(IMG_KEY); localStorage.removeItem(IMG_MINI_KEY); } catch { /* 無視 */ }
+}
+
+// --- 盤面(ミニボード)専用画像（任意） ---
+export function loadBoardImage(): string | null {
+  try { return localStorage.getItem(BOARD_KEY); } catch { return null; }
+}
+export function saveBoardImage(mini: string): void {
+  try { localStorage.setItem(BOARD_KEY, mini); } catch { /* 容量超過などは無視 */ }
+}
+export function clearBoardImage(): void {
+  try { localStorage.removeItem(BOARD_KEY); } catch { /* 無視 */ }
+}
+
+// オンラインで他プレイヤーへ共有する盤面背景。盤面専用画像を優先し、無ければ背景から作ったミニを使う。
+export function loadBgImageMini(): string | null {
+  try { return localStorage.getItem(BOARD_KEY) || localStorage.getItem(IMG_MINI_KEY); } catch { return null; }
 }
 
 // body 背景にテーマ（または背景画像）を適用。light 系は theme-light クラスを付与。
@@ -105,6 +119,21 @@ export async function processBgImageFile(file: File): Promise<{ full: string; mi
 export async function cropToBgImages(src: string, crop: { x: number; y: number; w: number; h: number }): Promise<{ full: string; mini: string }> {
   const img = await loadImage(src);
   return cropImage(img, crop);
+}
+
+// 盤面(ミニボード)専用画像を、切り取り範囲から小さな dataURL で作る（共有のため軽量）。
+export async function cropToMiniImage(src: string, crop: { x: number; y: number; w: number; h: number }): Promise<string> {
+  const img = await loadImage(src);
+  const cw = Math.max(1, Math.round(crop.w));
+  const ch = Math.max(1, Math.round(crop.h));
+  const ratio = Math.min(1, 150 / cw);
+  const w = Math.max(1, Math.round(cw * ratio));
+  const h = Math.max(1, Math.round(ch * ratio));
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  if (ctx) ctx.drawImage(img, crop.x, crop.y, cw, ch, 0, 0, w, h);
+  return c.toDataURL('image/jpeg', 0.62);
 }
 
 function cropImage(img: HTMLImageElement, crop: { x: number; y: number; w: number; h: number }): { full: string; mini: string } {
