@@ -16,6 +16,9 @@ export default function ImageCropper({ src, onCancel, onConfirm }: Props) {
   const [disp, setDisp] = useState({ w: 0, h: 0 }); // 表示サイズ
   const [sel, setSel] = useState<Rect>({ x: 0, y: 0, w: 0, h: 0 }); // 表示座標の選択枠
   const drag = useRef<{ mode: 'move' | 'resize'; sx: number; sy: number; o: Rect } | null>(null);
+  // 切り取り枠の縦横比は「画面の比率」に固定する。こうすると全画面背景(cover)が
+  // 再トリミングされず、選んだ枠がそのまま背景になる（枠＝実際の見た目が一致）。
+  const aspect = useRef(typeof window !== 'undefined' ? window.innerWidth / Math.max(1, window.innerHeight) : 16 / 9);
 
   useEffect(() => {
     const im = new Image();
@@ -24,10 +27,16 @@ export default function ImageCropper({ src, onCancel, onConfirm }: Props) {
       let dw = Math.min(maxW, im.width);
       let dh = im.height * (dw / im.width);
       if (dh > maxH) { dh = maxH; dw = im.width * (dh / im.height); }
+      dw = Math.round(dw); dh = Math.round(dh);
       setNat({ w: im.width, h: im.height });
-      setDisp({ w: Math.round(dw), h: Math.round(dh) });
-      const s = Math.round(Math.min(dw, dh) * 0.8);
-      setSel({ x: Math.round((dw - s) / 2), y: Math.round((dh - s) / 2), w: s, h: s });
+      setDisp({ w: dw, h: dh });
+      // 画面比率に合わせた初期枠（表示内に収まるよう調整）。
+      const a = aspect.current;
+      let w = dw * 0.85;
+      let h = w / a;
+      if (h > dh * 0.9) { h = dh * 0.9; w = h * a; }
+      if (w > dw) { w = dw; h = w / a; }
+      setSel({ x: Math.round((dw - w) / 2), y: Math.round((dh - h) / 2), w: Math.round(w), h: Math.round(h) });
     };
     im.src = src;
   }, [src]);
@@ -41,8 +50,11 @@ export default function ImageCropper({ src, onCancel, onConfirm }: Props) {
       if (d.mode === 'move') {
         setSel({ ...d.o, x: clamp(d.o.x + dx, 0, disp.w - d.o.w), y: clamp(d.o.y + dy, 0, disp.h - d.o.h) });
       } else {
-        const w = clamp(d.o.w + dx, 40, disp.w - d.o.x);
-        const h = clamp(d.o.h + dy, 40, disp.h - d.o.y);
+        // 縦横比を保ったままリサイズ（はみ出さないようクランプ）。
+        const a = aspect.current;
+        let w = clamp(d.o.w + dx, 40, disp.w - d.o.x);
+        let h = w / a;
+        if (d.o.y + h > disp.h) { h = disp.h - d.o.y; w = h * a; }
         setSel({ ...d.o, w, h });
       }
     };
@@ -71,7 +83,7 @@ export default function ImageCropper({ src, onCancel, onConfirm }: Props) {
           </h2>
           <button onClick={onCancel} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
         </div>
-        <p className="text-[11px] text-gray-500 mb-3">枠をドラッグで移動 ／ 右下の角でサイズ変更。選んだ範囲が背景＆盤面に使われます。</p>
+        <p className="text-[11px] text-gray-500 mb-3">枠をドラッグで移動 ／ 右下の角でサイズ変更（枠は画面の縦横比に固定）。選んだ範囲がそのまま背景になります。盤面(縦長)には中央あたりが表示されます。</p>
 
         <div className="relative mx-auto select-none touch-none" style={{ width: disp.w, height: disp.h }}>
           <img src={src} alt="" className="absolute inset-0 w-full h-full object-fill rounded-lg pointer-events-none" draggable={false} />
