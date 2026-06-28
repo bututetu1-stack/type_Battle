@@ -985,14 +985,22 @@ export function buildRuby(display: string, reading: string): RubySeg[] {
     else runs.push({ text: ch, kanji });
   }
 
+  const hasKanji = runs.some((r) => r.kanji);
+  if (!hasKanji) {
+    // 漢字が無ければ振り仮名は不要。
+    return runs.map((r) => ({ text: r.text }));
+  }
+
   const segs: RubySeg[] = [];
   let ri = 0; // reading 内のポインタ
+  let consistent = true; // display のかなが reading 内に順番どおり現れるか
   for (let i = 0; i < runs.length; i++) {
     const run = runs[i];
     if (!run.kanji) {
       // かな/記号ランは reading 上をそのまま進める（カタカナはひらがな化して照合）。
       const hira = kataToHira(run.text);
       if (reading.startsWith(hira, ri)) ri += hira.length;
+      else consistent = false; // 表示中のかなが読みに無い＝当て字的で対応づけ不能
       segs.push({ text: run.text });
     } else {
       // 次のかなランの位置を手がかりに、この漢字ランの読みを切り出す。
@@ -1005,8 +1013,10 @@ export function buildRuby(display: string, reading: string): RubySeg[] {
           furi = reading.slice(ri, idx);
           ri = idx;
         } else {
+          // 次のかなランを読み中に見つけられない＝対応づけ不能。
           furi = reading.slice(ri);
           ri = reading.length;
+          consistent = false;
         }
       } else {
         furi = reading.slice(ri);
@@ -1015,6 +1025,11 @@ export function buildRuby(display: string, reading: string): RubySeg[] {
       segs.push({ text: run.text, rt: furi || undefined });
     }
   }
+
+  // 「打ち止め＝ラストオーダー」のように、表示のかなが読みに対応しない当て字では
+  // 上のアルゴリズムが先頭の漢字に読みを全振りしてしまう。その場合は単語全体を
+  // ひとつのルビ単位にして、読みを語全体の上に乗せる（漫画のルビと同じ振る舞い）。
+  if (!consistent) return [{ text: display, rt: reading }];
   return segs;
 }
 
@@ -2114,6 +2129,112 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: '呉越同舟', reading: 'ごえつどうしゅう' },
     { display: '画竜点睛', reading: 'がりょうてんせい' },
     { display: '蛍雪之功', reading: 'けいせつのこう' },
+    // +追加2 (四字熟語さらに拡充)
+    { display: '暗中模索', reading: 'あんちゅうもさく' },
+    { display: '意味深長', reading: 'いみしんちょう' },
+    { display: '威風堂々', reading: 'いふうどうどう' },
+    { display: '有象無象', reading: 'うぞうむぞう' },
+    { display: '海千山千', reading: 'うみせんやません' },
+    { display: '栄枯盛衰', reading: 'えいこせいすい' },
+    { display: '会者定離', reading: 'えしゃじょうり' },
+    { display: '円転滑脱', reading: 'えんてんかつだつ' },
+    { display: '岡目八目', reading: 'おかめはちもく' },
+    { display: '音吐朗々', reading: 'おんとろうろう' },
+    { display: '我武者羅', reading: 'がむしゃら' },
+    { display: '夏炉冬扇', reading: 'かろとうせん' },
+    { display: '感慨無量', reading: 'かんがいむりょう' },
+    { display: '歓喜雀躍', reading: 'かんきじゃくやく' },
+    { display: '勧善懲悪', reading: 'かんぜんちょうあく' },
+    { display: '完全無欠', reading: 'かんぜんむけつ' },
+    { display: '危急存亡', reading: 'ききゅうそんぼう' },
+    { display: '旧態依然', reading: 'きゅうたいいぜん' },
+    { display: '興味津々', reading: 'きょうみしんしん' },
+    { display: '金科玉条', reading: 'きんかぎょくじょう' },
+    { display: '空中楼閣', reading: 'くうちゅうろうかく' },
+    { display: '荒唐無稽', reading: 'こうとうむけい' },
+    { display: '巧言令色', reading: 'こうげんれいしょく' },
+    { display: '五穀豊穣', reading: 'ごこくほうじょう' },
+    { display: '言語道断', reading: 'ごんごどうだん' },
+    { display: '才気煥発', reading: 'さいきかんぱつ' },
+    { display: '三寒四温', reading: 'さんかんしおん' },
+    { display: '時期尚早', reading: 'じきしょうそう' },
+    { display: '自給自足', reading: 'じきゅうじそく' },
+    { display: '試行錯誤', reading: 'しこうさくご' },
+    { display: '四捨五入', reading: 'ししゃごにゅう' },
+    { display: '自縄自縛', reading: 'じじょうじばく' },
+    { display: '七転八倒', reading: 'しちてんばっとう' },
+    { display: '質疑応答', reading: 'しつぎおうとう' },
+    { display: '叱咤激励', reading: 'しったげきれい' },
+    { display: '四分五裂', reading: 'しぶんごれつ' },
+    { display: '自暴自棄', reading: 'じぼうじき' },
+    { display: '周章狼狽', reading: 'しゅうしょうろうばい' },
+    { display: '秋霜烈日', reading: 'しゅうそうれつじつ' },
+    { display: '順風満帆', reading: 'じゅんぷうまんぱん' },
+    { display: '枝葉末節', reading: 'しようまっせつ' },
+    { display: '支離滅裂', reading: 'しりめつれつ' },
+    { display: '心機一転', reading: 'しんきいってん' },
+    { display: '信賞必罰', reading: 'しんしょうひつばつ' },
+    { display: '深謀遠慮', reading: 'しんぼうえんりょ' },
+    { display: '晴耕雨読', reading: 'せいこううどく' },
+    { display: '清廉潔白', reading: 'せいれんけっぱく' },
+    { display: '絶体絶命', reading: 'ぜったいぜつめい' },
+    { display: '千客万来', reading: 'せんきゃくばんらい' },
+    { display: '全身全霊', reading: 'ぜんしんぜんれい' },
+    { display: '千変万化', reading: 'せんぺんばんか' },
+    { display: '千差万別', reading: 'せんさばんべつ' },
+    { display: '前途多難', reading: 'ぜんとたなん' },
+    { display: '粗製濫造', reading: 'そせいらんぞう' },
+    { display: '大胆不敵', reading: 'だいたんふてき' },
+    { display: '大同小異', reading: 'だいどうしょうい' },
+    { display: '多事多難', reading: 'たじたなん' },
+    { display: '多種多様', reading: 'たしゅたよう' },
+    { display: '他力本願', reading: 'たりきほんがん' },
+    { display: '単純明快', reading: 'たんじゅんめいかい' },
+    { display: '中途半端', reading: 'ちゅうとはんぱ' },
+    { display: '猪突猛進', reading: 'ちょとつもうしん' },
+    { display: '沈思黙考', reading: 'ちんしもっこう' },
+    { display: '適者生存', reading: 'てきしゃせいぞん' },
+    { display: '徹頭徹尾', reading: 'てっとうてつび' },
+    { display: '天変地異', reading: 'てんぺんちい' },
+    { display: '天真爛漫', reading: 'てんしんらんまん' },
+    { display: '当意即妙', reading: 'とういそくみょう' },
+    { display: '同床異夢', reading: 'どうしょういむ' },
+    { display: '独立独歩', reading: 'どくりつどっぽ' },
+    { display: '内憂外患', reading: 'ないゆうがいかん' },
+    { display: '日常茶飯', reading: 'にちじょうさはん' },
+    { display: '馬耳東風', reading: 'ばじとうふう' },
+    { display: '八方美人', reading: 'はっぽうびじん' },
+    { display: '半信半疑', reading: 'はんしんはんぎ' },
+    { display: '美辞麗句', reading: 'びじれいく' },
+    { display: '百発百中', reading: 'ひゃっぱつひゃくちゅう' },
+    { display: '百鬼夜行', reading: 'ひゃっきやこう' },
+    { display: '表裏一体', reading: 'ひょうりいったい' },
+    { display: '付和雷同', reading: 'ふわらいどう' },
+    { display: '粉骨砕身', reading: 'ふんこつさいしん' },
+    { display: '平身低頭', reading: 'へいしんていとう' },
+    { display: '変幻自在', reading: 'へんげんじざい' },
+    { display: '暴飲暴食', reading: 'ぼういんぼうしょく' },
+    { display: '抱腹絶倒', reading: 'ほうふくぜっとう' },
+    { display: '満場一致', reading: 'まんじょういっち' },
+    { display: '無我夢中', reading: 'むがむちゅう' },
+    { display: '無病息災', reading: 'むびょうそくさい' },
+    { display: '無味乾燥', reading: 'むみかんそう' },
+    { display: '明朗快活', reading: 'めいろうかいかつ' },
+    { display: '面従腹背', reading: 'めんじゅうふくはい' },
+    { display: '門外不出', reading: 'もんがいふしゅつ' },
+    { display: '唯々諾々', reading: 'いいだくだく' },
+    { display: '勇猛果敢', reading: 'ゆうもうかかん' },
+    { display: '用意周到', reading: 'よういしゅうとう' },
+    { display: '羊頭狗肉', reading: 'ようとうくにく' },
+    { display: '力戦奮闘', reading: 'りきせんふんとう' },
+    { display: '理路整然', reading: 'りろせいぜん' },
+    { display: '和洋折衷', reading: 'わようせっちゅう' },
+    { display: '意気軒昂', reading: 'いきけんこう' },
+    { display: '一念発起', reading: 'いちねんほっき' },
+    { display: '一網打尽', reading: 'いちもうだじん' },
+    { display: '一触即発', reading: 'いっしょくそくはつ' },
+    { display: '紆余曲折', reading: 'うよきょくせつ' },
+    { display: '右顧左眄', reading: 'うこさべん' },
   ],
   kancolle: [
     // 艦娘（艦名）
@@ -2502,25 +2623,6 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: '幻想殺し', reading: 'いまじんぶれいかー' },
     { display: '警備員', reading: 'あんちすきる' },
     { display: '打ち止め', reading: 'らすとおーだー' },
-    // +追加 (18語)
-    { display: '強敵', reading: 'とも' },
-    { display: '本気', reading: 'まじ' },
-    { display: '運命', reading: 'さだめ' },
-    { display: '永遠', reading: 'とわ' },
-    { display: '宇宙', reading: 'そら' },
-    { display: '時間', reading: 'とき' },
-    { display: '故郷', reading: 'くに' },
-    { display: '親友', reading: 'しんゆう' },
-    { display: '月', reading: 'るな' },
-    { display: '太陽', reading: 'そる' },
-    { display: '星', reading: 'すてら' },
-    { display: '竜', reading: 'どらごん' },
-    { display: '紅蓮', reading: 'ぐれん' },
-    { display: '深淵', reading: 'あびす' },
-    { display: '黒猫', reading: 'くろねこ' },
-    { display: '右目', reading: 'がんあい' },
-    { display: '魔王', reading: 'まおう' },
-    { display: '絶対零度', reading: 'あぶそりゅーとぜろ' },
   ],
 };
 
