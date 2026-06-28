@@ -1370,12 +1370,34 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             </div>
 
             {/* お題を画面中央付近に置くための上スペーサー（固定） */}
+            {/* お題エリア（固定高さ）。お題の有無・長短や効果ゲージ増減でレイアウトが動かない。 */}
             <div className="shrink-0 h-2" />
 
-            {/* お題ゲージ行：左に着弾予告ゲージ、中央にお題（上に次のお題プレビュー）。
-                この行は上詰めで固定され、下のゲージ群が増減しても動かない。 */}
-            <div className="shrink-0 w-full flex items-end justify-center gap-3">
-              {/* 着弾予告ゲージ（お題カードの左隣） */}
+            {/* 次のお題プレビュー（固定高さ）。直近の次のお題を常にお題カード直上（下端）に表示。 */}
+            <div className="shrink-0 w-full max-w-lg h-14 flex flex-col justify-end gap-1 overflow-hidden mb-2">
+              {backlog
+                .slice(1, 3)
+                .reverse()
+                .map((word) => (
+                  <div
+                    key={word.id}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-bold opacity-80 flex justify-between items-center ${
+                      word.type === 'ojama'
+                        ? 'bg-red-950/50 text-red-300 border border-red-900/50'
+                        : word.type === 'treasure'
+                          ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50'
+                          : 'bg-blue-950/40 text-blue-200 border border-blue-900/50'
+                    }`}
+                  >
+                    <span>{word.display}</span>
+                    {word.type === 'ojama' && <AlertTriangle className="w-4 h-4" />}
+                    {word.type === 'treasure' && <Sparkles className="w-4 h-4" />}
+                  </div>
+                ))}
+            </div>
+
+            {/* 着弾予告ゲージ（左）＋お題カード（固定高さスロット）。行の高さが一定なので動かない。 */}
+            <div className="shrink-0 w-full flex items-center justify-center gap-3">
               {gameState === 'playing' && (
                 <div className="flex flex-col items-center gap-1 pointer-events-none shrink-0">
                   <div className={`text-sm font-bold text-red-400 mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
@@ -1391,28 +1413,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 </div>
               )}
 
-              {/* お題＋次のお題プレビュー */}
-              <div className="w-full max-w-lg flex flex-col justify-end">
-                <div className="flex flex-col-reverse gap-2 mb-3 h-24 justify-end overflow-hidden mask-image-top">
-                  {backlog
-                    .slice(1, 4)
-                    .map((word) => (
-                      <div
-                        key={word.id}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold opacity-80 flex justify-between items-center transition-all ${
-                          word.type === 'ojama'
-                            ? 'bg-red-950/50 text-red-300 border border-red-900/50'
-                            : word.type === 'treasure'
-                              ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50'
-                              : 'bg-blue-950/40 text-blue-200 border border-blue-900/50'
-                        }`}
-                      >
-                        <span>{word.display}</span>
-                        {word.type === 'ojama' && <AlertTriangle className="w-4 h-4" />}
-                        {word.type === 'treasure' && <Sparkles className="w-4 h-4" />}
-                      </div>
-                    ))}
-                </div>
+              {/* お題カードの固定高さスロット（中央寄せ）。お題の有無や行数が変わっても高さ一定。 */}
+              <div className="w-full max-w-lg h-52 flex items-center justify-center">
                 {renderCurrentWord()}
               </div>
 
