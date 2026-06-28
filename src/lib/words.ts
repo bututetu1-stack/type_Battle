@@ -1083,6 +1083,12 @@ export function poolForThemes(theme: string = 'all'): WordEntry[] {
   const merged: WordEntry[] = [];
   for (const id of ids) {
     if (id === 'custom') { merged.push(...EXTRA_WORDS); continue; }
+    // 自作テーマ（'custom:テーマ名'）。そのグループの追加語句だけを出題する。
+    if (id.startsWith('custom:')) {
+      const g = id.slice('custom:'.length);
+      merged.push(...EXTRA_WORDS.filter((w) => (w.group || '') === g));
+      continue;
+    }
     const p = THEME_POOLS[id];
     if (p) merged.push(...p);
   }
@@ -1099,11 +1105,12 @@ export function setExcludedThemes(ids: string[]): void {
 // --- 追加語句（プレイヤーが追加したカスタム語句） ---
 // ソロは端末の保存ぶん、オンラインは部屋の共有ぶんを、ゲーム開始前にここへ流し込む。
 // 全クライアントで同じ並びにすることでシード同期（お題の順番）が一致する。
-let EXTRA_WORDS: WordEntry[] = [];
-export function setExtraWords(list: { display: string; reading: string }[]): void {
+interface ExtraWord extends WordEntry { group?: string }
+let EXTRA_WORDS: ExtraWord[] = [];
+export function setExtraWords(list: { display: string; reading: string; group?: string }[]): void {
   EXTRA_WORDS = (list || [])
     .filter((w) => w && w.display && w.reading && isTypeableReading(w.reading))
-    .map((w) => ({ display: w.display, reading: w.reading }));
+    .map((w) => ({ display: w.display, reading: w.reading, ...(w.group ? { group: w.group } : {}) }));
 }
 export function getExtraWords(): WordEntry[] {
   return EXTRA_WORDS.slice();

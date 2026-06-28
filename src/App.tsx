@@ -7,7 +7,7 @@ import OnlineRoom from './components/OnlineRoom';
 import PlayerSettings from './components/PlayerSettings';
 import WordEditor from './components/WordEditor';
 import { applyColorTheme, loadThemeId } from './lib/theme';
-import { loadCustomWords, saveCustomWords, type CustomWord } from './lib/customwords';
+import { loadCustomWords, saveCustomWords, loadCustomGroups, saveCustomGroups, type CustomWord } from './lib/customwords';
 import { setExtraWords } from './lib/words';
 
 type View = 'home' | 'solo' | 'lobby' | 'room';
@@ -21,6 +21,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showWords, setShowWords] = useState(false);
   const [customWords, setCustomWords] = useState<CustomWord[]>(() => loadCustomWords());
+  const [customGroups, setCustomGroups] = useState<string[]>(() => loadCustomGroups());
 
   // 起動時に保存済みカラーテーマを body 背景へ適用（全画面共通）。
   useEffect(() => { applyColorTheme(loadThemeId()); }, []);
@@ -29,6 +30,7 @@ export default function App() {
   const updateWords = (list: CustomWord[]) => {
     setCustomWords(list); saveCustomWords(list); setExtraWords(list);
   };
+  const updateGroups = (g: string[]) => { setCustomGroups(g); saveCustomGroups(g); };
 
   // オンライン用に匿名サインイン（バックグラウンドで先行実行）。
   useEffect(() => {
@@ -112,7 +114,9 @@ export default function App() {
           onChange={updateWords}
           onClose={() => setShowWords(false)}
           title="語句を追加（この端末）"
-          note="ここで追加した語句は、この端末のソロや自分の出題に出ます（テーマ『追加した語句』でも遊べます）。"
+          note="ここで追加した語句は、この端末のソロや自分の出題に出ます。自作テーマを作って語句を振り分けると、出題テーマとして個別に選べます。"
+          groups={customGroups}
+          onGroupsChange={updateGroups}
         />
       )}
     </div>

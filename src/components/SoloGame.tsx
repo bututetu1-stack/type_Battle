@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
-import { loadCustomWords } from '../lib/customwords';
+import { loadCustomWords, loadCustomGroups } from '../lib/customwords';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
 import { ITEM_CAT, ITEM_KIND, ITEM_RARITY, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode } from '../lib/items';
@@ -298,6 +298,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const disabledItemsRef = useRef<Set<ItemType>>(new Set(initialCfg.disabledItems));
   useEffect(() => { disabledItemsRef.current = new Set(cfgDisabledItems); }, [cfgDisabledItems]);
   const [cfgKancolle, setCfgKancolle] = useState(initialCfg.kancolle);
+  // 自作テーマ（語句のグループ）。出題テーマとして個別に選べるようにする。
+  const [customGroups, setCustomGroups] = useState<string[]>(() => loadCustomGroups());
+  // スタート画面に戻るたび最新の自作テーマを読み直す（別画面で作成した分を反映）。
+  useEffect(() => { if (gameState === 'start') setCustomGroups(loadCustomGroups()); }, [gameState]);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
   useEffect(() => {
     try {
@@ -1864,6 +1868,22 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                         }`}
                       >
                         {t.label}
+                      </button>
+                    );
+                  })}
+                  {/* 自作テーマ（語句のグループ）。'custom:テーマ名' で個別に出題できる。 */}
+                  {customGroups.map((g) => {
+                    const id = `custom:${g}`;
+                    const sel = theme.split(',').includes(id);
+                    return (
+                      <button
+                        key={id}
+                        onClick={() => setTheme((cur) => toggleThemeSelection(cur, id))}
+                        className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
+                          sel ? 'bg-fuchsia-600 text-white' : 'bg-neutral-800 text-fuchsia-300/80 hover:bg-neutral-700'
+                        }`}
+                      >
+                        🗂 {g}
                       </button>
                     );
                   })}
