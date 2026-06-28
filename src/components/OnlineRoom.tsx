@@ -516,17 +516,22 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         </div>
         <p className="text-[10px] text-gray-600 mb-4">※「持ち寄る」を押すと、その端末で追加した語句が全員の出題に合流します（重複は自動除外）。</p>
 
-        {/* アイテム効果一覧（オンラインの効果。ボス専用・オンライン専用も表示） */}
-        <div className="mb-6 bg-neutral-900/60 border border-white/10 rounded-xl">
+        {/* アイテムのON/OFF＋効果一覧（ホストが各アイテムの有無を設定できる） */}
+        <div className={`mb-6 bg-neutral-900/60 border rounded-xl ${meta.itemsOn === false ? 'opacity-40 pointer-events-none' : 'border-white/10'}`}>
           <button
             onClick={() => setShowItems((v) => !v)}
             className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-bold text-cyan-200"
           >
-            <span>📖 アイテム効果一覧（オンライン）</span>
+            <span>🎛 アイテムのON/OFF・効果一覧 {isHost ? '（ホストが設定）' : ''}
+              {(() => { const n = Array.isArray(meta.disabledItems) ? meta.disabledItems.length : 0; return n > 0 ? <span className="text-fuchsia-300 ml-1">OFF {n}個</span> : null; })()}
+            </span>
             <span className="text-gray-500">{showItems ? '▲ 閉じる' : '▼ 開く'}</span>
           </button>
           {showItems && (
             <div className="px-3 pb-3 flex flex-col gap-3 max-h-72 overflow-y-auto">
+              <p className="text-[10px] text-gray-500 sticky top-0 bg-neutral-900/95 py-1">
+                {isHost ? '右の ON/OFF で各アイテムの出現を切替（OFFは出ません）。' : '各アイテムの ON/OFF はホストが設定します。'}
+              </p>
               {CAT_META.map((c) => {
                 const list = (Object.keys(ITEM_CAT) as ItemType[]).filter(
                   (it) => ITEM_CAT[it] === c.key && !HIDDEN_ITEMS.has(it),
