@@ -1139,6 +1139,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           accent={isOjama ? 'text-red-400' : isTreasure ? 'text-yellow-400' : 'text-cyan-400'}
           typedRomaji={typedRomaji}
           romajiVisible={keyCfg.romajiMode === 'always' || romajiHint}
+          showRuby={keyCfg.showRuby}
         />
       </div>
     );

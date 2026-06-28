@@ -15,6 +15,7 @@ export interface KeyConfig {
   slots: Record<ItemCat, string>; // 各スロット直接発動キー（direct方式）
   target: string; // ターゲット切替キー
   romajiMode: RomajiMode; // ローマ字（つづり）の表示タイミング
+  showRuby: boolean; // お題の漢字にふりがな（ルビ）を振るか
 }
 
 const KEY = 'typeRoyale.keys';
@@ -27,6 +28,7 @@ export function defaultKeyConfig(): KeyConfig {
     slots: { attack: 'Digit1', defense: 'Digit2', timed: 'Digit3' },
     target: 'Tab',
     romajiMode: 'always',
+    showRuby: true,
   };
 }
 
@@ -57,6 +59,7 @@ export function loadKeyConfig(): KeyConfig {
         },
         target: toCode(o.target, def.target),
         romajiMode: o.romajiMode === 'mistake' ? 'mistake' : 'always',
+        showRuby: o.showRuby === false ? false : true,
       };
     }
   } catch { /* 既定値 */ }

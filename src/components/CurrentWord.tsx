@@ -8,11 +8,12 @@ interface CurrentWordProps {
   accent?: string; // 入力中トークンの色（Tailwind クラス）
   typedRomaji?: string[]; // 確定済みトークンで実際に打たれた綴り（index 揃え）
   romajiVisible?: boolean; // ローマ字ガイドを表示するか（ミス時のみ表示モード用）
+  showRuby?: boolean; // 漢字などにふりがな（ルビ）を振るか（OFFで難読チャレンジ）
 }
 
 // 現在のお題の内側表示: 漢字＋ふりがな(ruby) / かな進捗 / ローマ字ガイド。
 // 外枠カード（種別ごとの色）は親側で付ける。
-export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 'text-cyan-400', typedRomaji = [], romajiVisible = true }: CurrentWordProps) {
+export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 'text-cyan-400', typedRomaji = [], romajiVisible = true, showRuby = true }: CurrentWordProps) {
   // 漢字部分にだけ振り仮名を付けたセグメント列。長文でも各セグメントが
   // 独立して折り返せるので、まとめてルビを振った時の縦並びバグが起きない。
   const segs = buildRuby(word.display, word.reading);
@@ -22,7 +23,7 @@ export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 
       {/* 漢字＋ふりがな（漢字のみルビ・横並びで折り返し可能） */}
       <div className="flex flex-wrap justify-center items-end gap-x-0.5 gap-y-1 mb-3 leading-tight">
         {segs.map((s, i) =>
-          s.rt ? (
+          s.rt && showRuby ? (
             <ruby key={i} className="text-3xl md:text-4xl font-bold tracking-wide">
               {s.text}
               <rt className="text-sm md:text-base text-cyan-200/80 font-normal tracking-tight">{s.rt}</rt>
