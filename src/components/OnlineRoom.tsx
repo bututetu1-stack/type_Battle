@@ -20,6 +20,7 @@ import {
   setRoomComeback,
   setRoomItemsOn,
   setRoomCustomWords,
+  setRoomDisabledItems,
   addCpuPlayer,
   removeCpuPlayer,
   removeAllCpus,
@@ -129,6 +130,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         gaugeChars={typeof meta.gaugeChars === 'number' ? meta.gaugeChars : 16}
         comeback={typeof meta.comeback === 'number' ? meta.comeback : 2}
         itemsOn={meta.itemsOn !== false}
+        disabledItems={Array.isArray(meta.disabledItems) ? meta.disabledItems : []}
         customWords={Array.isArray(meta.customWords) ? meta.customWords : []}
         itemPrefs={itemPrefs}
         players={players}
@@ -515,17 +517,32 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                   <div key={c.key}>
                     <div className={`text-[11px] font-bold mb-1 ${c.color}`}>{c.label}</div>
                     <div className="flex flex-col gap-1">
-                      {list.map((it) => (
-                        <div key={it} className="flex items-start gap-2 text-[11px]">
-                          <span className="text-base leading-none shrink-0">{ITEM_EMOJI[it]}</span>
-                          <div>
-                            <span className="font-bold text-gray-200">{ITEM_META[it].name}</span>
-                            {BOSS_ONLY.has(it) && <span className="ml-1 text-[9px] text-yellow-300">[ボス]</span>}
-                            {ONLINE_ONLY.has(it) && <span className="ml-1 text-[9px] text-fuchsia-300">[ONLINE]</span>}
-                            <span className="text-gray-500"> — {ITEM_META[it].desc}</span>
+                      {list.map((it) => {
+                        const dis = Array.isArray(meta.disabledItems) ? meta.disabledItems : [];
+                        const off = dis.includes(it);
+                        const toggle = () => {
+                          if (!isHost) return;
+                          setRoomDisabledItems(roomId, off ? dis.filter((x) => x !== it) : [...dis, it]);
+                        };
+                        return (
+                          <div key={it} className={`flex items-start gap-2 text-[11px] ${off ? 'opacity-45' : ''}`}>
+                            <span className="text-base leading-none shrink-0">{ITEM_EMOJI[it]}</span>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-bold text-gray-200">{ITEM_META[it].name}</span>
+                              {BOSS_ONLY.has(it) && <span className="ml-1 text-[9px] text-yellow-300">[ボス]</span>}
+                              {ONLINE_ONLY.has(it) && <span className="ml-1 text-[9px] text-fuchsia-300">[ONLINE]</span>}
+                              <span className="text-gray-500"> — {ITEM_META[it].desc}</span>
+                            </div>
+                            <button
+                              onClick={toggle}
+                              disabled={!isHost}
+                              className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold disabled:opacity-60 ${off ? 'bg-neutral-700 text-gray-400' : 'bg-fuchsia-600 text-white'}`}
+                            >
+                              {off ? 'OFF' : 'ON'}
+                            </button>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 );

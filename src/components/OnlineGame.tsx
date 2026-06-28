@@ -166,13 +166,14 @@ interface OnlineGameProps {
   gaugeChars?: number;
   comeback?: number; // 逆転補正の強さ（0=なし〜3=強）
   itemsOn?: boolean; // アイテム全体のON/OFF（false でお宝・アイテムが出ない）
+  disabledItems?: string[]; // 個別にOFFにしたアイテム（排出から除外）
   customWords?: { display: string; reading: string }[]; // 部屋共有の追加語句
   itemPrefs: ItemPrefs;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, badgeCap, badgeRate, gaugeMode, gaugeChars, comeback, itemsOn = true, customWords = [], itemPrefs, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, badgeCap, badgeRate, gaugeMode, gaugeChars, comeback, itemsOn = true, disabledItems = [], customWords = [], itemPrefs, players, onExit }: OnlineGameProps) {
   // ボスモード関連の派生フラグ。
   const bossMode = mode === 'boss';
   const isBoss = bossMode && uid === bossUid;
@@ -281,6 +282,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   }, [itemRate]);
   const itemsOnRef = useRef(itemsOn); // アイテムON/OFF（OFFならお宝もアイテムも出さない）
   useEffect(() => { itemsOnRef.current = itemsOn; }, [itemsOn]);
+  const disabledItemsRef = useRef<Set<string>>(new Set(disabledItems)); // 個別OFFのアイテム
+  useEffect(() => { disabledItemsRef.current = new Set(disabledItems); }, [disabledItems]);
   // アイテムの使い方設定（自分用）。ゲーム中に参照するため ref で保持。
   const autoFullRef = useRef(itemPrefs.autoFull);
   const useModeRef = useRef(itemPrefs.use);
@@ -825,8 +828,11 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     } else {
       items = ['brake', 'longbomb', 'rapid', 'keep', 'parry', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon', 'dazzle'];
     }
+    // 個別にOFFにされたアイテムを除外。
+    if (disabledItemsRef.current.size > 0) items = items.filter((it) => !disabledItemsRef.current.has(it));
     // HPアップは上限に達したら抽選から除外する。
     if (hpUpCountRef.current >= MAX_HP_UP) items = items.filter((it) => it !== 'maxhp');
+    if (items.length === 0) return; // 候補が無ければ何も出さない
     // 有利/不利でドロップ内容を変える。基準は「自分のピンチ度（バックログ量）」と
     // 「生存者中の順位（相対的な劣勢）」を半々で合成。劣勢ほど防御/逆転、優勢ほど攻撃。
     const pinch = Math.min(1, stateRef.current.backlog.length / selfMax);

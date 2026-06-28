@@ -127,6 +127,7 @@ interface CustomCfg {
   autoFull: boolean; // 完全オート（有利不利を見て自動で使用）
   use: Record<ItemCat, UseMode>; // カテゴリ別の使い方（保持/即時）
   itemsOn: boolean; // アイテム全体のON/OFF（OFFならお宝・アイテムが一切出ない）
+  disabledItems: ItemType[]; // 個別にOFFにしたアイテム（排出から除外）
 }
 const validMode = (v: unknown): UseMode => (v === 'instant' ? 'instant' : 'hold');
 function loadCfg(): CustomCfg {
@@ -137,7 +138,7 @@ function loadCfg(): CustomCfg {
     badgeCap: 4, badgeRate: 25,
     gaugeMode: 'word', gaugeChars: 16, comeback: 2,
     autoFull: false, use: { attack: 'hold', defense: 'hold', timed: 'hold' },
-    itemsOn: true,
+    itemsOn: true, disabledItems: [],
   };
   try {
     const raw = localStorage.getItem(CFG_KEY);
@@ -165,6 +166,7 @@ function loadCfg(): CustomCfg {
           ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), timed: validMode(o.use.timed ?? o.use.disrupt) }
           : def.use,
         itemsOn: typeof o.itemsOn === 'boolean' ? o.itemsOn : def.itemsOn,
+        disabledItems: Array.isArray(o.disabledItems) ? o.disabledItems.filter((x: unknown) => typeof x === 'string') : def.disabledItems,
       };
     }
   } catch { /* localStorage 不可環境は既定値 */ }
@@ -290,6 +292,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgAutoFull, setCfgAutoFull] = useState(initialCfg.autoFull);
   const [cfgUse, setCfgUse] = useState<Record<ItemCat, UseMode>>(initialCfg.use);
   const [cfgItemsOn, setCfgItemsOn] = useState(initialCfg.itemsOn);
+  const [cfgDisabledItems, setCfgDisabledItems] = useState<ItemType[]>(initialCfg.disabledItems);
+  const disabledItemsRef = useRef<Set<ItemType>>(new Set(initialCfg.disabledItems));
+  useEffect(() => { disabledItemsRef.current = new Set(cfgDisabledItems); }, [cfgDisabledItems]);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
   useEffect(() => {
     try {
@@ -297,10 +302,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies, cpuStr: cfgCpuStr,
         treasureRate: cfgTreasureRate, attackGauge: cfgAttackGauge, attackCap: cfgAttackCap, comboStep: cfgComboStep,
         badgeCap: cfgBadgeCap, badgeRate: cfgBadgeRate, gaugeMode: cfgGaugeMode, gaugeChars: cfgGaugeChars, comeback: cfgComeback,
-        autoFull: cfgAutoFull, use: cfgUse, itemsOn: cfgItemsOn,
+        autoFull: cfgAutoFull, use: cfgUse, itemsOn: cfgItemsOn, disabledItems: cfgDisabledItems,
       }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgGaugeMode, cfgGaugeChars, cfgComeback, cfgAutoFull, cfgUse, cfgItemsOn]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgGaugeMode, cfgGaugeChars, cfgComeback, cfgAutoFull, cfgUse, cfgItemsOn, cfgDisabledItems]);
   const attackCapRef = useRef(initialCfg.attackCap);
   const comboStepRef = useRef(initialCfg.comboStep);
   const badgeCapRef = useRef(initialCfg.badgeCap);
@@ -639,6 +644,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const atkBoost = 1 + Math.max(0, -bias) * k;
     const weighted: { item: ItemType; w: number }[] = [];
     for (const it of ALL_ITEMS) {
+      if (disabledItemsRef.current.has(it)) continue; // 個別にOFFにされたアイテムは出さない
       if (it === 'gaugedown' && gaugeDownObtainedRef.current) continue; // 一人一個まで
       if (it === 'maxhp' && hpUpCountRef.current >= MAX_HP_UP) continue; // 上限に達したら出さない
       const kind = ITEM_KIND[it];
@@ -647,6 +653,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       w *= ITEM_RARITY[it] ?? 1; // レアリティ係数（トーテム/大掃除などの強力アイテムを抑える）
       weighted.push({ item: it, w });
     }
+    if (weighted.length === 0) return; // 全アイテムOFFなどで候補が無ければ何も出さない
     const total = weighted.reduce((s, x) => s + x.w, 0);
     let acc = r * total;
     let pick: ItemType = weighted[0].item;
@@ -1674,6 +1681,30 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                       <span className="text-gray-600 ml-1 self-center">（なしにするとお宝もアイテムも出ません）</span>
                     </div>
                   </div>
+                  {cfgItemsOn && (
+                    <div className="block text-[11px] text-gray-400 mt-3">
+                      アイテムの個別ON/OFF <span className="text-gray-600">（OFFのアイテムは出ません）</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {ALL_ITEMS.map((it) => {
+                          const off = cfgDisabledItems.includes(it);
+                          return (
+                            <button
+                              key={it}
+                              onClick={() => setCfgDisabledItems((prev) => off ? prev.filter((x) => x !== it) : [...prev, it])}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors flex items-center gap-0.5 ${off ? 'bg-neutral-800 text-gray-600 line-through' : 'bg-fuchsia-700/70 text-white'}`}
+                              title={ITEM_META[it].desc}
+                            >
+                              <span>{ITEM_EMOJI[it]}</span>{ITEM_META[it].name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="flex gap-2 mt-1">
+                        <button onClick={() => setCfgDisabledItems([])} className="text-[9px] text-cyan-400 hover:text-cyan-300 underline">全部ON</button>
+                        <button onClick={() => setCfgDisabledItems([...ALL_ITEMS])} className="text-[9px] text-gray-500 hover:text-gray-300 underline">全部OFF</button>
+                      </div>
+                    </div>
+                  )}
                   <div className="block text-[11px] text-gray-400 mt-3">
                     ゲージ加算方式
                     <div className="flex gap-1 mt-1">
