@@ -1290,23 +1290,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}
 
-          {/* 着弾予告ゲージ（CPUからの攻撃）。固定長トラックを常に表示し、下から量ぶん点灯。
-              トラック全体のサイズは一定なので、量が増減してもウィジェットは上下しない。 */}
-          {gameState === 'playing' && (
-            <div className="absolute left-0 bottom-24 z-20 flex flex-col items-center gap-1 pointer-events-none">
-              <div className={`text-sm font-bold text-red-400 mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
-              <div className="w-6 flex flex-col-reverse gap-[4px]">
-                {Array.from({ length: Math.min(maxBacklog, 16) }).map((_, i) => {
-                  const filled = i < Math.min(totalIncoming, 16);
-                  return (
-                    <div key={i} className={`w-full h-[16px] rounded ${filled ? 'bg-red-500 border border-red-300/50 shadow-[0_0_7px_rgba(239,68,68,0.65)]' : 'bg-neutral-800/50 border border-neutral-700/40'}`} />
-                  );
-                })}
-              </div>
-              <div className="text-[10px] text-gray-400 text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
-            </div>
-          )}
-
           <div className="flex-1 min-h-0 flex flex-col items-center pt-4 relative z-10">
             {gameState === 'playing' && (
               <div className="absolute top-2 right-0 text-right">
@@ -1386,28 +1369,55 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               )}
             </div>
 
-            <div className="shrink-0 w-full max-w-lg h-56 flex flex-col justify-end overflow-hidden relative">
-              <div className="flex flex-col-reverse gap-2 mb-4 overflow-hidden mask-image-top">
-                {backlog
-                  .slice(1)
-                  .map((word) => (
-                    <div
-                      key={word.id}
-                      className={`px-4 py-2 rounded-lg text-sm font-bold opacity-70 flex justify-between items-center transition-all ${
-                        word.type === 'ojama'
-                          ? 'bg-red-950/50 text-red-300 border border-red-900/50'
-                          : word.type === 'treasure'
-                            ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50'
-                            : 'bg-blue-950/40 text-blue-200 border border-blue-900/50'
-                      }`}
-                    >
-                      <span>{word.display}</span>
-                      {word.type === 'ojama' && <AlertTriangle className="w-4 h-4" />}
-                      {word.type === 'treasure' && <Sparkles className="w-4 h-4" />}
-                    </div>
-                  ))}
+            {/* お題を画面中央付近に置くための上スペーサー（固定） */}
+            <div className="shrink-0 h-2" />
+
+            {/* お題ゲージ行：左に着弾予告ゲージ、中央にお題（上に次のお題プレビュー）。
+                この行は上詰めで固定され、下のゲージ群が増減しても動かない。 */}
+            <div className="shrink-0 w-full flex items-end justify-center gap-3">
+              {/* 着弾予告ゲージ（お題カードの左隣） */}
+              {gameState === 'playing' && (
+                <div className="flex flex-col items-center gap-1 pointer-events-none shrink-0">
+                  <div className={`text-sm font-bold text-red-400 mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
+                  <div className="w-6 flex flex-col-reverse gap-[3px]">
+                    {Array.from({ length: Math.min(maxBacklog, 12) }).map((_, i) => {
+                      const filled = i < Math.min(totalIncoming, 12);
+                      return (
+                        <div key={i} className={`w-full h-[13px] rounded ${filled ? 'bg-red-500 border border-red-300/50 shadow-[0_0_7px_rgba(239,68,68,0.65)]' : 'bg-neutral-800/50 border border-neutral-700/40'}`} />
+                      );
+                    })}
+                  </div>
+                  <div className="text-[10px] text-gray-400 text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
+                </div>
+              )}
+
+              {/* お題＋次のお題プレビュー */}
+              <div className="w-full max-w-lg flex flex-col justify-end">
+                <div className="flex flex-col-reverse gap-2 mb-3 h-24 justify-end overflow-hidden mask-image-top">
+                  {backlog
+                    .slice(1, 4)
+                    .map((word) => (
+                      <div
+                        key={word.id}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold opacity-80 flex justify-between items-center transition-all ${
+                          word.type === 'ojama'
+                            ? 'bg-red-950/50 text-red-300 border border-red-900/50'
+                            : word.type === 'treasure'
+                              ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50'
+                              : 'bg-blue-950/40 text-blue-200 border border-blue-900/50'
+                        }`}
+                      >
+                        <span>{word.display}</span>
+                        {word.type === 'ojama' && <AlertTriangle className="w-4 h-4" />}
+                        {word.type === 'treasure' && <Sparkles className="w-4 h-4" />}
+                      </div>
+                    ))}
+                </div>
+                {renderCurrentWord()}
               </div>
-              {renderCurrentWord()}
+
+              {/* 着弾予告ゲージぶんの幅をバランスさせ、お題を中央寄りに保つスペーサー */}
+              {gameState === 'playing' && <div className="w-6 shrink-0" />}
             </div>
 
             {/* グループ3: アイテムスロット〜アタックゲージ（画面下部に固定）。
