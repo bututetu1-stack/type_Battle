@@ -60,12 +60,12 @@ export const ITEM_RARITY: Partial<Record<ItemType, number>> = {
   meteor: 0.6,
   quake: 0.5,
   regen: 0.7,
-  longbomb: 0.8,
+  longbomb: 0.3, // ロング送信（相殺不可の長文）→ 強力すぎるためレアに
   reflect: 0.7,
   overcharge: 0.8,
   siphon: 0.7,
   thunder: 0.7,
-  jammer: 0.7,
+  jammer: 0.3, // ジャマー（全員へ長文）→ 強力すぎるためレアに
 };
 
 export const CAT_META: { key: ItemCat; label: string; color: string }[] = [

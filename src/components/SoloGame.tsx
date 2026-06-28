@@ -926,7 +926,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         const item = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
         setDummies((prev) => prev.map((d) => (d.id === user.id ? { ...d, lastItem: item, itemAt: Date.now() } : d)));
         const incomingNew = pendingRef.current.reduce((s, e) => s + e.amount, 0);
-        if (item === 'longbomb' && incomingNew < 6 && Date.now() >= freezeUntilRef.current) {
+        // 既に山または着弾予告に長文がある相手には、新たな長文を送らない（重ねがけ防止）。
+        const alreadyHasLong =
+          pendingRef.current.some((e) => !!e.word) ||
+          stateRef.current.backlog.some((w) => w.type === 'ojama' && w.reading.length >= 10);
+        if (item === 'longbomb' && !alreadyHasLong && incomingNew < 6 && Date.now() >= freezeUntilRef.current) {
           const lw = randomLongWord();
           lastAttackerRef.current = user.id;
           setDummies((prev) => prev.map((d) => (d.id === user.id ? { ...d, atk: (d.atk ?? 0) + 1 } : d)));
@@ -1267,7 +1271,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       </header>
 
       <main className="flex-1 min-h-0 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]">
-        <div className="flex-1 grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
+        <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {dummies.slice(0, Math.ceil(dummies.length / 2)).map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
               <MiniBoard
@@ -1883,7 +1887,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           )}
         </div>
 
-        <div className="flex-1 grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
+        <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {dummies.slice(Math.ceil(dummies.length / 2)).map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
               <MiniBoard

@@ -601,7 +601,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1).filter((w) => w.type !== 'ojama')]));
       else if (item === 'longbomb') {
         // ロング送信: ターゲットに長い単語を1個送りつける。
-        const targetId = pickTarget();
+        // 既に長文を抱えている相手には送らない（重ねがけ防止）。長文の無い相手を優先。
+        const picked = pickTarget();
+        let targetId = picked && !playersRef.current[picked]?.hasLong ? picked : null;
+        if (!targetId) {
+          const free = Object.entries(playersRef.current)
+            .filter(([id, p]) => id !== uid && isLive(p) && !p.hasLong && (!bossMode || isBoss || id === bossUid));
+          targetId = free.length ? free[Math.floor(Math.random() * free.length)][0] : null;
+        }
         if (targetId) {
           const lw = randomLongWord();
           sendAttack(roomId, targetId, uid, 1, lw);
@@ -766,11 +773,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             ? Object.keys(playersRef.current).filter((id) => id !== bossUid && isLive(playersRef.current[id]))
             : isLive(playersRef.current[bossUid]) ? [bossUid] : []
           : Object.entries(playersRef.current).filter(([id, p]) => id !== uid && isLive(p)).map(([id]) => id);
-        for (const id of opponents) {
+        // 既に長文を抱えている相手は除外（重ねがけ防止）。
+        const jamTargets = opponents.filter((id) => !playersRef.current[id]?.hasLong);
+        for (const id of jamTargets) {
           sendAttack(roomId, id, uid, 1, randomLongWord());
           fireBeam(id);
         }
-        setAttackFlash({ amount: opponents.length, name: '全体へジャマー📡' });
+        setAttackFlash({ amount: jamTargets.length, name: '全体へジャマー📡' });
         setTimeout(() => setAttackFlash(null), 800);
         sfx.attack();
       }
@@ -1093,6 +1102,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     const curRomajiDone = parts.slice(0, tokenIndex).reduce((s, r) => s + r.length, 0) + currentTyping.length;
     summaryRef.current = {
       backlog: backlog.length, combo, kpm: calculateKPM(), badges: myBadges,
+      // 山または着弾予告に長文(相殺不可)を抱えているか → 長文の重ねがけ防止に使う
+      hasLong: backlog.some((w) => w.type === 'ojama' && w.reading.length >= 10)
+        || pendingRef.current.some((e) => !!e.word),
       curDisplay: cur?.display ?? '', curReading: cur?.reading ?? '',
       curIdx: tokenIndex, curTyping: currentTyping, curRomaji, curRomajiDone,
     };
@@ -1474,7 +1486,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       </header>
 
       <main className="flex-1 min-h-0 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]">
-        <div className="flex-1 grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
+        <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {others.slice(0, Math.ceil(others.length / 2)).map(([id, p]) => (
             <div
               key={id}
@@ -1827,7 +1839,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           </div>
         </div>
 
-        <div className="flex-1 grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
+        <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {others.slice(Math.ceil(others.length / 2)).map(([id, p]) => (
             <div
               key={id}
