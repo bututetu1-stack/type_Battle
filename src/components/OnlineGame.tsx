@@ -1426,14 +1426,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   return (
     <div className={`h-screen bg-transparent text-white font-sans overflow-hidden flex flex-col ${shake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
-      {/* 視認性低下: 食らっている間、画面全体をゲーミング(虹色)に光らせて見づらくする */}
+      {/* 視認性低下: 食らっている間は、お題パネルやゲージなど“実際の要素”を
+          虹色＋ブレで歪ませて読みにくくする（フィルタは centerRef 等に適用）。 */}
       {dazzleUntil > nowTick && (
-        <>
-          <div className="fixed inset-0 pointer-events-none z-[45] dazzle-overlay" />
-          <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[46] pointer-events-none text-xs font-black text-white bg-black/50 rounded-full px-3 py-1">
-            🌈 視認性低下中… {Math.max(0, Math.ceil((dazzleUntil - nowTick) / 1000))}s
-          </div>
-        </>
+        <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[46] pointer-events-none text-xs font-black text-white bg-black/60 rounded-full px-3 py-1">
+          🌈 視認性低下中… {Math.max(0, Math.ceil((dazzleUntil - nowTick) / 1000))}s
+        </div>
       )}
       {/* 被弾時の赤フラッシュ（画面端を強く） */}
       <div
@@ -1588,7 +1586,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           ))}
         </div>
 
-        <div ref={centerRef} className="w-2/4 flex flex-col h-full min-h-0 relative">
+        <div ref={centerRef} className={`w-2/4 flex flex-col h-full min-h-0 relative ${dazzleUntil > nowTick ? 'dazzle-fx' : ''}`}>
           {isDanger && selfAlive && started && (
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}
@@ -1971,14 +1969,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         .board-fx-banner { animation: boardFxBanner 1.3s ease-out forwards; }
         @keyframes boardFxFlash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
         .board-fx-flash { animation: boardFxFlash 1.3s ease-out forwards; }
-        @keyframes dazzleHue { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
-        .dazzle-overlay {
-          background: linear-gradient(115deg, rgba(255,0,0,0.35), rgba(255,165,0,0.35), rgba(255,255,0,0.35), rgba(0,255,0,0.35), rgba(0,180,255,0.35), rgba(140,0,255,0.35), rgba(255,0,160,0.35));
-          background-size: 300% 300%;
-          mix-blend-mode: screen;
-          animation: dazzleHue 1.2s linear infinite, dazzleShift 2.4s ease-in-out infinite;
+        /* 視認性低下: 実際の要素(お題パネル/各ゲージ/文字)自体を虹色シフト＋ブレ＋
+           過彩度で歪ませて読みにくくする。フラットなオーバーレイより視認性が大きく下がる。 */
+        @keyframes dazzleFilter {
+          0%   { filter: hue-rotate(0deg)   saturate(3) contrast(1.5) blur(1.3px); }
+          100% { filter: hue-rotate(360deg) saturate(3) contrast(1.5) blur(1.3px); }
         }
-        @keyframes dazzleShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        .dazzle-fx { animation: dazzleFilter 0.85s linear infinite; }
       `,
         }}
       />
