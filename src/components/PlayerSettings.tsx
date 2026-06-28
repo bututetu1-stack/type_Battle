@@ -5,7 +5,8 @@ import {
   type KeyConfig, type InputMode,
 } from '../lib/keyconfig';
 import { CAT_META } from '../lib/items';
-import { COLOR_THEMES, loadThemeId, saveThemeId, applyColorTheme, IMAGE_THEME_ID, processBgImageFile, saveBgImage, clearBgImage, loadBgImage } from '../lib/theme';
+import { COLOR_THEMES, loadThemeId, saveThemeId, applyColorTheme, IMAGE_THEME_ID, fileToDataUrl, cropToBgImages, saveBgImage, clearBgImage, loadBgImage } from '../lib/theme';
+import ImageCropper from './ImageCropper';
 
 // プレイヤー設定（入力方式＋キーコンフィグ）。ソロ/オンライン共通でlocalStorageに保存。
 export default function PlayerSettings({ onClose }: { onClose: () => void }) {
@@ -13,17 +14,25 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
   const [themeId, setThemeId] = useState<string>(() => loadThemeId());
   const [hasImage, setHasImage] = useState<boolean>(() => !!loadBgImage());
   const [imgBusy, setImgBusy] = useState(false);
+  const [cropSrc, setCropSrc] = useState<string | null>(null); // クロップ画面に渡す元画像
   const pickTheme = (id: string) => { setThemeId(id); saveThemeId(id); applyColorTheme(id); };
+  // アップロード → まずクロップ画面を開く。
   const onUploadBg = async (file: File | undefined) => {
     if (!file) return;
     setImgBusy(true);
+    try { setCropSrc(await fileToDataUrl(file)); } catch { /* 読み込み失敗は無視 */ }
+    setImgBusy(false);
+  };
+  // クロップ確定 → フル/ミニを生成して保存・適用。
+  const onCropConfirm = async (crop: { x: number; y: number; w: number; h: number }) => {
+    if (!cropSrc) return;
     try {
-      const { full, mini } = await processBgImageFile(file);
+      const { full, mini } = await cropToBgImages(cropSrc, crop);
       saveBgImage(full, mini);
       setHasImage(true);
       pickTheme(IMAGE_THEME_ID);
-    } catch { /* 読み込み失敗は無視 */ }
-    setImgBusy(false);
+    } catch { /* 失敗は無視 */ }
+    setCropSrc(null);
   };
   const removeBg = () => { clearBgImage(); setHasImage(false); pickTheme(COLOR_THEMES[0].id); };
   // 「capturing」中は次のキー入力でそのバインドを設定する。
@@ -131,7 +140,7 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
             >
               <span className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center text-sm bg-neutral-900">🖼</span>
               <span className={`text-[10px] font-bold ${themeId === IMAGE_THEME_ID ? 'text-cyan-200' : 'text-gray-400'}`}>{imgBusy ? '処理中' : '画像'}</span>
-              <input type="file" accept="image/*" className="hidden" onChange={(e) => onUploadBg(e.target.files?.[0])} />
+              <input type="file" accept="image/*" className="hidden" onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => onUploadBg(e.target.files?.[0])} />
             </label>
           </div>
           {hasImage && (
@@ -196,6 +205,10 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
           </button>
         </div>
       </div>
+
+      {cropSrc && (
+        <ImageCropper src={cropSrc} onCancel={() => setCropSrc(null)} onConfirm={onCropConfirm} />
+      )}
     </div>
   );
 }

@@ -75,32 +75,51 @@ export function applyColorTheme(id: string): void {
   body.classList.toggle('theme-light', t.light === true);
 }
 
-// 画像ファイルを読み込み、フル用とミニボード共有用に縮小した dataURL を返す。
-export async function processBgImageFile(file: File): Promise<{ full: string; mini: string }> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
+// ファイルを dataURL に読み込む。
+export function fileToDataUrl(file: File): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result));
     r.onerror = reject;
     r.readAsDataURL(file);
   });
-  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
     const im = new Image();
     im.onload = () => resolve(im);
     im.onerror = reject;
-    im.src = dataUrl;
+    im.src = src;
   });
-  const scale = (maxW: number, quality: number): string => {
-    const ratio = Math.min(1, maxW / img.width);
-    const w = Math.max(1, Math.round(img.width * ratio));
-    const h = Math.max(1, Math.round(img.height * ratio));
+}
+
+// 画像ファイルを読み込み、フル用とミニボード共有用に縮小した dataURL を返す（全体使用）。
+export async function processBgImageFile(file: File): Promise<{ full: string; mini: string }> {
+  const src = await fileToDataUrl(file);
+  const img = await loadImage(src);
+  return cropImage(img, { x: 0, y: 0, w: img.width, h: img.height });
+}
+
+// 元画像の dataURL と切り取り範囲（元画像ピクセル座標）から、フル/ミニの dataURL を作る。
+export async function cropToBgImages(src: string, crop: { x: number; y: number; w: number; h: number }): Promise<{ full: string; mini: string }> {
+  const img = await loadImage(src);
+  return cropImage(img, crop);
+}
+
+function cropImage(img: HTMLImageElement, crop: { x: number; y: number; w: number; h: number }): { full: string; mini: string } {
+  const cw = Math.max(1, Math.round(crop.w));
+  const ch = Math.max(1, Math.round(crop.h));
+  const render = (maxW: number, quality: number): string => {
+    const ratio = Math.min(1, maxW / cw);
+    const w = Math.max(1, Math.round(cw * ratio));
+    const h = Math.max(1, Math.round(ch * ratio));
     const c = document.createElement('canvas');
     c.width = w; c.height = h;
     const ctx = c.getContext('2d');
-    if (ctx) ctx.drawImage(img, 0, 0, w, h);
+    if (ctx) ctx.drawImage(img, crop.x, crop.y, cw, ch, 0, 0, w, h);
     return c.toDataURL('image/jpeg', quality);
   };
   // フルは画面背景用にそこそこ、ミニは共有のため極小（通信量を抑える）。
-  const full = scale(1280, 0.78);
-  const mini = scale(120, 0.6);
-  return { full, mini };
+  return { full: render(1280, 0.78), mini: render(120, 0.6) };
 }
