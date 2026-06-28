@@ -656,27 +656,27 @@ export const WORD_POOL: WordEntry[] = [
   { display: '彗星', reading: 'すいせい' },
   { display: '日食', reading: 'にっしょく' },
   // 語彙拡充: 動物・生き物
-  { display: '麒麟', reading: 'きりん' },
-  { display: '駱駝', reading: 'らくだ' },
-  { display: '栗鼠', reading: 'りす' },
-  { display: '土竜', reading: 'もぐら' },
-  { display: '蝙蝠', reading: 'こうもり' },
+  { display: 'きりん', reading: 'きりん' },
+  { display: 'らくだ', reading: 'らくだ' },
+  { display: 'りす', reading: 'りす' },
+  { display: 'もぐら', reading: 'もぐら' },
+  { display: 'こうもり', reading: 'こうもり' },
   { display: '梟', reading: 'ふくろう' },
-  { display: '啄木鳥', reading: 'きつつき' },
-  { display: '翡翠', reading: 'かわせみ' },
-  { display: '雲雀', reading: 'ひばり' },
+  { display: 'きつつき', reading: 'きつつき' },
+  { display: 'かわせみ', reading: 'かわせみ' },
+  { display: 'ひばり', reading: 'ひばり' },
   { display: '燕', reading: 'つばめ' },
   { display: '鶯', reading: 'うぐいす' },
-  { display: '蟷螂', reading: 'かまきり' },
+  { display: 'かまきり', reading: 'かまきり' },
   { display: '兜虫', reading: 'かぶとむし' },
   { display: '鍬形', reading: 'くわがた' },
   { display: '蛍', reading: 'ほたる' },
-  { display: '蜻蛉', reading: 'とんぼ' },
-  { display: '海月', reading: 'くらげ' },
-  { display: '海星', reading: 'ひとで' },
+  { display: 'とんぼ', reading: 'とんぼ' },
+  { display: 'くらげ', reading: 'くらげ' },
+  { display: 'ひとで', reading: 'ひとで' },
   { display: '蛸', reading: 'たこ' },
-  { display: '烏賊', reading: 'いか' },
-  { display: '鮟鱇', reading: 'あんこう' },
+  { display: 'いか', reading: 'いか' },
+  { display: 'あんこう', reading: 'あんこう' },
   { display: '河豚', reading: 'ふぐ' },
   { display: '鰻', reading: 'うなぎ' },
   { display: '鯨', reading: 'くじら' },
@@ -907,8 +907,10 @@ export const ROMAJI_MAP: Record<string, string[]> = {
   'ちぇ': ['che', 'tye', 'cye'], 'しぇ': ['she', 'sye'], 'じぇ': ['je', 'jye', 'zye'],
   'うぁ': ['wha', 'ula', 'uxa'], 'うぃ': ['wi', 'whi', 'uli', 'uxi'],
   'うぇ': ['we', 'whe', 'ule', 'uxe'], 'うぉ': ['who', 'ulo', 'uxo'],
+  'ゔ': ['vu'], // 単独の「ゔ」（ヴ）。これが無いと「ゔ」を含む読みが入力・追加できなかった。
   'ゔぁ': ['va', 'vula', 'vuxa'], 'ゔぃ': ['vi', 'vuli', 'vuxi'],
   'ゔぇ': ['ve', 'vule', 'vuxe'], 'ゔぉ': ['vo', 'vulo', 'vuxo'],
+  'ゔゃ': ['vya'], 'ゔゅ': ['vyu'], 'ゔょ': ['vyo'],
   'ー': ['-'],
   'っ': ['xtsu', 'xtu', 'ltsu', 'ltu'],
   'ぁ': ['xa', 'la'], 'ぃ': ['xi', 'li'], 'ぅ': ['xu', 'lu'], 'ぇ': ['xe', 'le'], 'ぉ': ['xo', 'lo'],
@@ -1051,9 +1053,18 @@ export function toggleThemeSelection(current: string, id: string): string {
 // 'all' か未指定は全語彙（WORD_POOL＋全テーマプールをマージ）。
 export function poolForThemes(theme: string = 'all'): WordEntry[] {
   const ids = (theme || 'all').split(',').map((s) => s.trim()).filter(Boolean);
-  // 'all'／未指定は全語彙＋追加語句。順序を固定（ALL_POOLの後にEXTRA_WORDS）し、
-  // オンラインでも全員同じプール＝シード同期が崩れないようにする。
-  if (ids.length === 0 || ids.includes('all')) return [...ALL_POOL, ...EXTRA_WORDS];
+  // 'all'／未指定は全語彙＋追加語句。順序を固定し、オンラインでも全員同じプール＝
+  // シード同期が崩れないようにする。除外テーマ(EXCLUDED_THEMES)がある場合はそれを抜く。
+  if (ids.length === 0 || ids.includes('all')) {
+    if (EXCLUDED_THEMES.size === 0) return [...ALL_POOL, ...EXTRA_WORDS];
+    const out: WordEntry[] = [];
+    const seen = new Set<string>();
+    const push = (e: WordEntry) => { const k = e.display + '|' + e.reading; if (!seen.has(k)) { seen.add(k); out.push(e); } };
+    WORD_POOL.forEach(push);
+    for (const [tid, pool] of Object.entries(THEME_POOLS)) if (!EXCLUDED_THEMES.has(tid)) pool.forEach(push);
+    EXTRA_WORDS.forEach(push);
+    return out;
+  }
   const merged: WordEntry[] = [];
   for (const id of ids) {
     if (id === 'custom') { merged.push(...EXTRA_WORDS); continue; }
@@ -1061,6 +1072,13 @@ export function poolForThemes(theme: string = 'all'): WordEntry[] {
     if (p) merged.push(...p);
   }
   return merged.length ? merged : [...ALL_POOL, ...EXTRA_WORDS];
+}
+
+// 'all'(全語彙)出題から除外するテーマ。例: 艦これ('kancolle')を除外。
+// 全クライアントで同じにする必要がある（ソロは個人設定、オンラインは部屋設定）。
+let EXCLUDED_THEMES = new Set<string>();
+export function setExcludedThemes(ids: string[]): void {
+  EXCLUDED_THEMES = new Set((ids || []).filter((x) => typeof x === 'string'));
 }
 
 // --- 追加語句（プレイヤーが追加したカスタム語句） ---
@@ -1534,7 +1552,7 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: 'メロン', reading: 'めろん' },
     { display: '人参', reading: 'にんじん' },
     { display: '玉葱', reading: 'たまねぎ' },
-    { display: '馬鈴薯', reading: 'じゃがいも' },
+    { display: 'じゃがいも', reading: 'じゃがいも' },
     { display: '南瓜', reading: 'かぼちゃ' },
     { display: '茄子', reading: 'なす' },
     { display: '胡瓜', reading: 'きゅうり' },
@@ -1687,9 +1705,9 @@ const THEME_POOLS: Record<string, WordEntry[]> = {
     { display: '新緑', reading: 'しんりょく' },
     { display: '花畑', reading: 'はなばたけ' },
     { display: '菜の花', reading: 'なのはな' },
-    { display: '向日葵', reading: 'ひまわり' },
+    { display: 'ひまわり', reading: 'ひまわり' },
     { display: '紫陽花', reading: 'あじさい' },
-    { display: '蒲公英', reading: 'たんぽぽ' },
+    { display: 'たんぽぽ', reading: 'たんぽぽ' },
     { display: '朝顔', reading: 'あさがお' },
     { display: 'すすき', reading: 'すすき' },
     { display: '松ぼっくり', reading: 'まつぼっくり' },

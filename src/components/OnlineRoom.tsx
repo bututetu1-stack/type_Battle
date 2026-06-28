@@ -21,6 +21,7 @@ import {
   setRoomItemsOn,
   setRoomCustomWords,
   setRoomDisabledItems,
+  setRoomKancolle,
   setPlayerWords,
   addCpuPlayer,
   removeCpuPlayer,
@@ -149,6 +150,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         comeback={typeof meta.comeback === 'number' ? meta.comeback : 2}
         itemsOn={meta.itemsOn !== false}
         disabledItems={Array.isArray(meta.disabledItems) ? meta.disabledItems : []}
+        kancolleOn={meta.kancolleOn !== false}
         customWords={sharedWords}
         itemPrefs={itemPrefs}
         players={players}
@@ -439,6 +441,16 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                 </button>
               );
             })}
+          </div>
+          {/* 「すべて」出題に艦これ語を含めるか（多すぎる時はホストがOFF） */}
+          <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-400">
+            <span>「すべて」に艦これ⚓を含める {isHost ? '（ホスト）' : ''}</span>
+            {([[true, 'あり'], [false, 'なし']] as const).map(([on, lbl]) => (
+              <button key={String(on)} onClick={() => isHost && setRoomKancolle(roomId, on)} disabled={!isHost}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors disabled:opacity-60 ${(meta.kancolleOn !== false) === on ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                {lbl}
+              </button>
+            ))}
           </div>
         </div>
 

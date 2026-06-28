@@ -40,6 +40,7 @@ export interface RoomMeta {
   comeback?: number; // 逆転補正の強さ 0〜3（既定2）
   itemsOn?: boolean; // アイテム全体のON/OFF（false でお宝・アイテムが一切出ない。未設定は true）
   disabledItems?: string[]; // 個別にOFFにしたアイテム種別（排出から除外。ホストが設定）
+  kancolleOn?: boolean; // 'all'出題に艦これ語を含めるか（未設定は true。false で艦これ除外）
   customWords?: { display: string; reading: string }[]; // 部屋共有の追加語句（ホストが追加）
 }
 
@@ -258,6 +259,11 @@ export async function setRoomCustomWords(roomId: string, words: { display: strin
 // ホスト操作: 個別にOFFにするアイテムを設定（全員の排出から除外）。
 export async function setRoomDisabledItems(roomId: string, items: string[]): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { disabledItems: items });
+}
+
+// ホスト操作: 'all'出題に艦これ語を含めるか（全員に反映）。
+export async function setRoomKancolle(roomId: string, on: boolean): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { kancolleOn: on });
 }
 
 // 各プレイヤーが自分の追加語句を「持ち寄る」（自分のノードに書込。全員の出題に合流）。

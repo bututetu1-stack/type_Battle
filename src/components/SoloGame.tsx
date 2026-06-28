@@ -4,7 +4,7 @@ import {
   Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine, Settings,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
-import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords } from '../lib/words';
+import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
 import { loadCustomWords } from '../lib/customwords';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
@@ -128,6 +128,7 @@ interface CustomCfg {
   use: Record<ItemCat, UseMode>; // カテゴリ別の使い方（保持/即時）
   itemsOn: boolean; // アイテム全体のON/OFF（OFFならお宝・アイテムが一切出ない）
   disabledItems: ItemType[]; // 個別にOFFにしたアイテム（排出から除外）
+  kancolle: boolean; // 'all'出題に艦これ語を含めるか（OFFで艦これを出題から除外）
 }
 const validMode = (v: unknown): UseMode => (v === 'instant' ? 'instant' : 'hold');
 function loadCfg(): CustomCfg {
@@ -138,7 +139,7 @@ function loadCfg(): CustomCfg {
     badgeCap: 4, badgeRate: 25,
     gaugeMode: 'word', gaugeChars: 16, comeback: 2,
     autoFull: false, use: { attack: 'hold', defense: 'hold', timed: 'hold' },
-    itemsOn: true, disabledItems: [],
+    itemsOn: true, disabledItems: [], kancolle: true,
   };
   try {
     const raw = localStorage.getItem(CFG_KEY);
@@ -167,6 +168,7 @@ function loadCfg(): CustomCfg {
           : def.use,
         itemsOn: typeof o.itemsOn === 'boolean' ? o.itemsOn : def.itemsOn,
         disabledItems: Array.isArray(o.disabledItems) ? o.disabledItems.filter((x: unknown) => typeof x === 'string') : def.disabledItems,
+        kancolle: typeof o.kancolle === 'boolean' ? o.kancolle : def.kancolle,
       };
     }
   } catch { /* localStorage 不可環境は既定値 */ }
@@ -295,6 +297,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgDisabledItems, setCfgDisabledItems] = useState<ItemType[]>(initialCfg.disabledItems);
   const disabledItemsRef = useRef<Set<ItemType>>(new Set(initialCfg.disabledItems));
   useEffect(() => { disabledItemsRef.current = new Set(cfgDisabledItems); }, [cfgDisabledItems]);
+  const [cfgKancolle, setCfgKancolle] = useState(initialCfg.kancolle);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
   useEffect(() => {
     try {
@@ -302,10 +305,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies, cpuStr: cfgCpuStr,
         treasureRate: cfgTreasureRate, attackGauge: cfgAttackGauge, attackCap: cfgAttackCap, comboStep: cfgComboStep,
         badgeCap: cfgBadgeCap, badgeRate: cfgBadgeRate, gaugeMode: cfgGaugeMode, gaugeChars: cfgGaugeChars, comeback: cfgComeback,
-        autoFull: cfgAutoFull, use: cfgUse, itemsOn: cfgItemsOn, disabledItems: cfgDisabledItems,
+        autoFull: cfgAutoFull, use: cfgUse, itemsOn: cfgItemsOn, disabledItems: cfgDisabledItems, kancolle: cfgKancolle,
       }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgGaugeMode, cfgGaugeChars, cfgComeback, cfgAutoFull, cfgUse, cfgItemsOn, cfgDisabledItems]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgGaugeMode, cfgGaugeChars, cfgComeback, cfgAutoFull, cfgUse, cfgItemsOn, cfgDisabledItems, cfgKancolle]);
   const attackCapRef = useRef(initialCfg.attackCap);
   const comboStepRef = useRef(initialCfg.comboStep);
   const badgeCapRef = useRef(initialCfg.badgeCap);
@@ -732,6 +735,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
   const startGame = useCallback(() => {
     setExtraWords(loadCustomWords()); // 端末の追加語句を出題プールへ（オンラインで上書きされていても戻す）
+    setExcludedThemes(cfgKancolle ? [] : ['kancolle']); // 艦これOFFなら全語彙から除外
     const newSeed = randomSeed();
     const wordRng = mulberry32(newSeed);
     const itemRng = mulberry32((newSeed ^ 0x9e3779b9) >>> 0);
@@ -795,7 +799,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       }),
     );
     sfx.start();
-  }, [cfgInitial, cfgMin, cfgAccel, cfgHp, cfgEnemies, cfgCpuStr, cfgAttackGauge, updatePending, nextWord]);
+  }, [cfgInitial, cfgMin, cfgAccel, cfgHp, cfgEnemies, cfgCpuStr, cfgAttackGauge, cfgKancolle, updatePending, nextWord]);
 
   const gameOver = useCallback(() => {
     setGameState('gameover');
@@ -1863,6 +1867,16 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                       </button>
                     );
                   })}
+                </div>
+                {/* 「すべて」出題に艦これ語を含めるか（多すぎる時はOFF） */}
+                <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-gray-400">
+                  <span>「すべて」に艦これ⚓を含める</span>
+                  {([[true, 'あり'], [false, 'なし']] as const).map(([on, lbl]) => (
+                    <button key={String(on)} onClick={() => setCfgKancolle(on)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgKancolle === on ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                      {lbl}
+                    </button>
+                  ))}
                 </div>
               </div>
 
