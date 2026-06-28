@@ -161,12 +161,13 @@ interface OnlineGameProps {
   gaugeMode?: 'word' | 'char';
   gaugeChars?: number;
   comeback?: number; // 逆転補正の強さ（0=なし〜3=強）
+  itemsOn?: boolean; // アイテム全体のON/OFF（false でお宝・アイテムが出ない）
   itemPrefs: ItemPrefs;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, badgeCap, badgeRate, gaugeMode, gaugeChars, comeback, itemPrefs, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, badgeCap, badgeRate, gaugeMode, gaugeChars, comeback, itemsOn = true, itemPrefs, players, onExit }: OnlineGameProps) {
   // ボスモード関連の派生フラグ。
   const bossMode = mode === 'boss';
   const isBoss = bossMode && uid === bossUid;
@@ -271,6 +272,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   useEffect(() => {
     itemRateRef.current = itemRate;
   }, [itemRate]);
+  const itemsOnRef = useRef(itemsOn); // アイテムON/OFF（OFFならお宝もアイテムも出さない）
+  useEffect(() => { itemsOnRef.current = itemsOn; }, [itemsOn]);
   // アイテムの使い方設定（自分用）。ゲーム中に参照するため ref で保持。
   const autoFullRef = useRef(itemPrefs.autoFull);
   const useModeRef = useRef(itemPrefs.use);
@@ -288,7 +291,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // 引き直しの rng 消費数も一致＝同期は崩れない。種別はローカル乱数（localType）。
   const genWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    return generateWord(rng, categoryRef.current, bagRef.current, true, itemRateRef.current / 100, treasureBoostRef.current);
+    return generateWord(rng, categoryRef.current, bagRef.current, true, itemsOnRef.current ? itemRateRef.current / 100 : 0, treasureBoostRef.current);
   }, []);
 
   const pushToast = useCallback((text: string, kind: 'ko' | 'in' | 'item') => {
@@ -1746,7 +1749,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             {/* グループ3: アイテムスロット〜アタックゲージ（画面下部に固定）。
                 高さは常に一定なので、効果ゲージが何個出ても上のお題グループは動かない。 */}
             <div className="shrink-0 w-full flex flex-col items-center">
-              {/* アイテムスロット（攻撃/防御/妨害）。入力方式で表示を切替。 */}
+              {/* アイテムスロット（攻撃/防御/妨害）。入力方式で表示を切替。アイテムOFFなら非表示。 */}
+              {itemsOn && (
               <div className="flex flex-col items-center gap-1">
                 <div className="flex justify-center gap-2">
                   {CAT_META.map((c) => {
@@ -1788,6 +1792,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   )}
                 </div>
               </div>
+              )}
 
             {/* 発動中アイテムの残り時間カウントダウン（保持アイテムの下）。
                 効果が無いときは描画せず、バックログ/アタックゲージはスロット直下に置く。

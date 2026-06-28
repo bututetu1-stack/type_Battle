@@ -18,6 +18,7 @@ import {
   setRoomGaugeMode,
   setRoomGaugeChars,
   setRoomComeback,
+  setRoomItemsOn,
   addCpuPlayer,
   removeCpuPlayer,
   removeAllCpus,
@@ -123,6 +124,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         gaugeMode={meta.gaugeMode === 'char' ? 'char' : 'word'}
         gaugeChars={typeof meta.gaugeChars === 'number' ? meta.gaugeChars : 16}
         comeback={typeof meta.comeback === 'number' ? meta.comeback : 2}
+        itemsOn={meta.itemsOn !== false}
         itemPrefs={itemPrefs}
         players={players}
         onExit={handleLeave}
@@ -212,8 +214,28 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
           )}
         </div>
 
+        {/* アイテムのON/OFF（ホストが選択） */}
+        <div className="mb-3">
+          <div className="text-xs text-gray-500 mb-1.5">アイテム {isHost ? '（ホストが選択）' : ''}</div>
+          <div className="flex gap-1">
+            {([[true, 'あり'], [false, 'なし']] as const).map(([on, lbl]) => (
+              <button
+                key={String(on)}
+                onClick={() => isHost && setRoomItemsOn(roomId, on)}
+                disabled={!isHost}
+                className={`px-3 py-1 rounded text-xs font-bold transition-colors disabled:opacity-60 ${
+                  (meta.itemsOn !== false) === on ? 'bg-fuchsia-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                }`}
+              >
+                {lbl}
+              </button>
+            ))}
+            <span className="text-[10px] text-gray-600 self-center ml-1">なしでお宝・アイテムが出ません</span>
+          </div>
+        </div>
+
         {/* お宝(アイテム)出現率（ホストが選択） */}
-        <div className="mb-5">
+        <div className={`mb-5 ${meta.itemsOn === false ? 'opacity-40 pointer-events-none' : ''}`}>
           <div className="text-xs text-gray-500 mb-1.5 flex items-center justify-between">
             <span>お宝（アイテム）出現率 {isHost ? '（ホストが選択）' : ''}</span>
             <span className="text-yellow-300 font-mono font-bold">
@@ -227,7 +249,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
             step={5}
             value={typeof meta.itemRate === 'number' ? meta.itemRate : 30}
             onChange={(e) => isHost && setRoomItemRate(roomId, Number(e.target.value))}
-            disabled={!isHost}
+            disabled={!isHost || meta.itemsOn === false}
             className="w-full accent-yellow-500 disabled:opacity-60"
           />
           <p className="text-[10px] text-gray-600 mt-0.5">

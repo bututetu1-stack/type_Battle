@@ -124,6 +124,7 @@ interface CustomCfg {
   comeback: number; // 逆転補正の強さ（0=なし〜3=強）。有利不利でアイテム傾向を変える
   autoFull: boolean; // 完全オート（有利不利を見て自動で使用）
   use: Record<ItemCat, UseMode>; // カテゴリ別の使い方（保持/即時）
+  itemsOn: boolean; // アイテム全体のON/OFF（OFFならお宝・アイテムが一切出ない）
 }
 const validMode = (v: unknown): UseMode => (v === 'instant' ? 'instant' : 'hold');
 function loadCfg(): CustomCfg {
@@ -134,6 +135,7 @@ function loadCfg(): CustomCfg {
     badgeCap: 4, badgeRate: 25,
     gaugeMode: 'word', gaugeChars: 16, comeback: 2,
     autoFull: false, use: { attack: 'hold', defense: 'hold', timed: 'hold' },
+    itemsOn: true,
   };
   try {
     const raw = localStorage.getItem(CFG_KEY);
@@ -160,6 +162,7 @@ function loadCfg(): CustomCfg {
         use: o.use && typeof o.use === 'object'
           ? { attack: validMode(o.use.attack), defense: validMode(o.use.defense), timed: validMode(o.use.timed ?? o.use.disrupt) }
           : def.use,
+        itemsOn: typeof o.itemsOn === 'boolean' ? o.itemsOn : def.itemsOn,
       };
     }
   } catch { /* localStorage 不可環境は既定値 */ }
@@ -284,6 +287,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgComeback, setCfgComeback] = useState(initialCfg.comeback);
   const [cfgAutoFull, setCfgAutoFull] = useState(initialCfg.autoFull);
   const [cfgUse, setCfgUse] = useState<Record<ItemCat, UseMode>>(initialCfg.use);
+  const [cfgItemsOn, setCfgItemsOn] = useState(initialCfg.itemsOn);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
   useEffect(() => {
     try {
@@ -291,10 +295,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies, cpuStr: cfgCpuStr,
         treasureRate: cfgTreasureRate, attackGauge: cfgAttackGauge, attackCap: cfgAttackCap, comboStep: cfgComboStep,
         badgeCap: cfgBadgeCap, badgeRate: cfgBadgeRate, gaugeMode: cfgGaugeMode, gaugeChars: cfgGaugeChars, comeback: cfgComeback,
-        autoFull: cfgAutoFull, use: cfgUse,
+        autoFull: cfgAutoFull, use: cfgUse, itemsOn: cfgItemsOn,
       }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgGaugeMode, cfgGaugeChars, cfgComeback, cfgAutoFull, cfgUse]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgGaugeMode, cfgGaugeChars, cfgComeback, cfgAutoFull, cfgUse, cfgItemsOn]);
   const attackCapRef = useRef(initialCfg.attackCap);
   const comboStepRef = useRef(initialCfg.comboStep);
   const badgeCapRef = useRef(initialCfg.badgeCap);
@@ -312,6 +316,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const cpuStrengthRef = useRef(initialCfg.cpuStr / 10); // 0..1 の目標強さ
   const treasureRateRef = useRef(initialCfg.treasureRate / 100); // お宝の基本出現率（0..1）
   useEffect(() => { treasureRateRef.current = cfgTreasureRate / 100; }, [cfgTreasureRate]);
+  const itemsOnRef = useRef(initialCfg.itemsOn); // アイテムON/OFF（OFFならお宝もアイテムも出さない）
+  useEffect(() => { itemsOnRef.current = cfgItemsOn; }, [cfgItemsOn]);
   // ゲーム中に参照するための ref（設定はスタート画面で変える想定）。
   const autoFullRef = useRef(cfgAutoFull);
   const useModeRef = useRef(cfgUse);
@@ -339,7 +345,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // 出題バッグから次の単語を生成（全語を1巡するまで重複しない）。
   const nextWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    return generateWord(rng, themeRef.current, bagRef.current, false, treasureRateRef.current, treasureBoostRef.current);
+    return generateWord(rng, themeRef.current, bagRef.current, false, itemsOnRef.current ? treasureRateRef.current : 0, treasureBoostRef.current);
   }, []);
   const pendingRef = useRef<Telegraph[]>([]);
   const updatePending = useCallback((next: Telegraph[]) => {
@@ -924,7 +930,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
       // 一部のCPUがアイテムを使用。多くは演出のみ（ミニボードに絵文字）だが、
       // ロング送信を引いた時は実際にプレイヤーへ長文（ことわざ）を送りつける。
-      if (Math.random() < 0.15) {
+      // アイテムOFFのときはCPUもアイテムを使わない。
+      if (itemsOnRef.current && Math.random() < 0.15) {
         const user = alive[Math.floor(Math.random() * alive.length)];
         const item = ALL_ITEMS[Math.floor(Math.random() * ALL_ITEMS.length)];
         setDummies((prev) => prev.map((d) => (d.id === user.id ? { ...d, lastItem: item, itemAt: Date.now() } : d)));
@@ -1431,8 +1438,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             {/* グループ3: アイテムスロット〜アタックゲージ（画面下部に固定）。
                 高さは常に一定なので、効果ゲージが何個出ても上のお題グループは動かない。 */}
             <div className="shrink-0 w-full flex flex-col items-center">
-              {/* アイテムスロット（攻撃/防御/妨害）。入力方式に応じて選択強調 or 割当キーを表示。 */}
-              {gameState === 'playing' && (
+              {/* アイテムスロット（攻撃/防御/妨害）。入力方式に応じて選択強調 or 割当キーを表示。
+                  アイテムOFFのときはスロットを表示しない。 */}
+              {gameState === 'playing' && cfgItemsOn && (
                 <div className="flex flex-col items-center gap-1">
                   <div className="flex justify-center gap-2">
                     {CAT_META.map((c) => {
@@ -1649,6 +1657,18 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                         className="flex-1 accent-yellow-500"
                       />
                       <StepBtn onClick={() => setCfgTreasureRate((v) => Math.min(80, v + 5))}>＋</StepBtn>
+                    </div>
+                  </div>
+                  <div className="block text-[11px] text-gray-400 mt-3">
+                    アイテム
+                    <div className="flex gap-1 mt-1">
+                      {([[true, 'あり'], [false, 'なし']] as const).map(([on, lbl]) => (
+                        <button key={String(on)} onClick={() => setCfgItemsOn(on)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgItemsOn === on ? 'bg-fuchsia-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                          {lbl}
+                        </button>
+                      ))}
+                      <span className="text-gray-600 ml-1 self-center">（なしにするとお宝もアイテムも出ません）</span>
                     </div>
                   </div>
                   <div className="block text-[11px] text-gray-400 mt-3">
