@@ -5,6 +5,7 @@ import SoloGame from './components/SoloGame';
 import Lobby from './components/Lobby';
 import OnlineRoom from './components/OnlineRoom';
 import PlayerSettings from './components/PlayerSettings';
+import { applyColorTheme, loadThemeId } from './lib/theme';
 
 type View = 'home' | 'solo' | 'lobby' | 'room';
 
@@ -15,6 +16,9 @@ export default function App() {
   const [name, setName] = useState('');
   const [roomId, setRoomId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  // 起動時に保存済みカラーテーマを body 背景へ適用（全画面共通）。
+  useEffect(() => { applyColorTheme(loadThemeId()); }, []);
 
   // オンライン用に匿名サインイン（バックグラウンドで先行実行）。
   useEffect(() => {
@@ -58,7 +62,7 @@ export default function App() {
 
   // ホーム
   return (
-    <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-transparent text-white flex flex-col items-center justify-center p-6">
       <Swords className="w-20 h-20 text-cyan-500 mb-6" />
       <h1 className="text-5xl font-black tracking-widest mb-2">TYPE ROYALE</h1>
       <p className="text-gray-500 mb-12 tracking-wide">タイピング・バトルロワイヤル</p>

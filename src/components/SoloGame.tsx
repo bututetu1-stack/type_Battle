@@ -1140,7 +1140,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   ).filter((e) => nowTick > 0 && e.until > nowTick);
 
   return (
-    <div className={`h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
+    <div className={`h-screen bg-transparent text-white font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
       {/* 被弾時の赤フラッシュ */}
       <div

@@ -1316,7 +1316,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         : `⚔ 討伐成功！ 挑戦者チームの勝利（ボス: ${bossPlayer?.name ?? ''}）`
       : `勝者: ${winner?.name ?? '—'}`;
     return (
-      <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center justify-center p-6">
+      <div className="min-h-screen bg-transparent text-white flex flex-col items-center justify-center p-6">
         <Crown className={`w-16 h-16 mb-4 ${bossMode && !bossWon ? 'text-emerald-400' : 'text-yellow-400'}`} />
         <h2 className="text-3xl font-black tracking-widest mb-1">{bossTitle}</h2>
         <p className="text-yellow-300 mb-6 text-lg text-center">{bossLine}</p>
@@ -1361,7 +1361,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const word = backlog[0];
 
   return (
-    <div className={`h-screen bg-neutral-950 text-white font-sans overflow-hidden flex flex-col ${shake ? 'screen-shake' : ''}`}>
+    <div className={`h-screen bg-transparent text-white font-sans overflow-hidden flex flex-col ${shake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
       {/* 被弾時の赤フラッシュ（画面端を強く） */}
       <div

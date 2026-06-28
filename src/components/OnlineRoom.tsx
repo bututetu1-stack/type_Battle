@@ -143,7 +143,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-transparent text-white flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-md">
         <div className="flex items-center gap-3 mb-6">
           <Swords className="text-cyan-400 w-7 h-7" />

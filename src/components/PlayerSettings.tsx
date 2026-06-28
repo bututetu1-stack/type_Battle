@@ -5,10 +5,13 @@ import {
   type KeyConfig, type InputMode,
 } from '../lib/keyconfig';
 import { CAT_META } from '../lib/items';
+import { COLOR_THEMES, loadThemeId, saveThemeId, applyColorTheme } from '../lib/theme';
 
 // プレイヤー設定（入力方式＋キーコンフィグ）。ソロ/オンライン共通でlocalStorageに保存。
 export default function PlayerSettings({ onClose }: { onClose: () => void }) {
   const [cfg, setCfg] = useState<KeyConfig>(() => loadKeyConfig());
+  const [themeId, setThemeId] = useState<string>(() => loadThemeId());
+  const pickTheme = (id: string) => { setThemeId(id); saveThemeId(id); applyColorTheme(id); };
   // 「capturing」中は次のキー入力でそのバインドを設定する。
   const [capturing, setCapturing] = useState<string | null>(null);
 
@@ -85,6 +88,25 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
               >
                 <div className="text-sm font-bold">{m.label}</div>
                 <div className="text-[10px] text-gray-500">{m.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* カラーテーマ（背景の雰囲気） */}
+        <div className="mb-4">
+          <div className="text-xs text-gray-500 mb-1.5">カラーテーマ（背景）</div>
+          <div className="grid grid-cols-4 gap-2">
+            {COLOR_THEMES.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => pickTheme(t.id)}
+                className={`rounded-lg px-1 py-2 flex flex-col items-center gap-1 border transition-colors ${
+                  themeId === t.id ? 'border-cyan-400 bg-cyan-950/40' : 'border-white/10 bg-neutral-800 hover:bg-neutral-700'
+                }`}
+              >
+                <span className="w-7 h-7 rounded-full border border-white/20" style={{ background: t.css }} />
+                <span className={`text-[10px] font-bold ${themeId === t.id ? 'text-cyan-200' : 'text-gray-400'}`}>{t.label}</span>
               </button>
             ))}
           </div>
