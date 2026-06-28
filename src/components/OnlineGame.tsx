@@ -67,6 +67,7 @@ export const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   thunder: { name: 'サンダーボルト', desc: '首位（最多連鎖）の相手へ落雷+5' },
   jammer: { name: 'ジャマー', desc: '全相手へ長文おじゃまを送りつける' },
   siphon: { name: 'サイフォン', desc: '8秒間 攻撃が当たるたび自分のHPが回復' },
+  dazzle: { name: '視認性低下', desc: '8秒間 狙った相手の画面をゲーミング(虹色)に光らせる' },
 };
 export const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡',
@@ -102,8 +103,10 @@ export const ITEM_EMOJI: Record<ItemType, string> = {
   thunder: '⚡',
   jammer: '📡',
   siphon: '🧛',
+  dazzle: '🌈',
 };
 const RAPID_DURATION = 8000;
+const DAZZLE_DURATION = 8000; // 視認性低下（相手画面ゲーミング化）の効果時間
 const KEEP_DURATION = 10000;
 const PARRY_DURATION = 8000; // 受け流し（被攻撃を他プレイヤーへ逸らす）の効果時間
 const FREEZE_DURATION = 5000; // フリーズ（着弾予告と自動供給を停止）の効果時間
@@ -211,6 +214,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [muted, setMuted] = useState(false);
   const [attackProgress, setAttackProgress] = useState(0); // 次の攻撃までのゲージ（ミスで減らない）
   const [nowTick, setNowTick] = useState(0); // カウントダウン描画用の時刻
+  const [dazzleUntil, setDazzleUntil] = useState(0); // 視認性低下を食らっている終了時刻（自分の画面をゲーミング化）
   // エフェクト用
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
   const [hitId, setHitId] = useState<string | null>(null); // 自分が攻撃した相手
@@ -789,6 +793,17 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         setAttackFlash({ amount: jamTargets.length, name: '全体へジャマー📡' });
         setTimeout(() => setAttackFlash(null), 800);
         sfx.attack();
+      } else if (item === 'dazzle') {
+        // 視認性低下: 狙った相手の画面を一定時間ゲーミング(虹色)に光らせる（おじゃまではなく演出デバフ）。
+        const targetId = pickTarget();
+        if (targetId) {
+          sendAttack(roomId, targetId, uid, 0, undefined, 'dazzle');
+          fireBeam(targetId);
+          const name = playersRef.current[targetId]?.name || '相手';
+          setAttackFlash({ amount: 1, name: `${name} を視認性低下🌈` });
+          setTimeout(() => setAttackFlash(null), 800);
+          sfx.attack();
+        }
       }
     },
     [pickTarget, fireBeam, roomId, uid, bossUid, bossMode, isBoss, sendAmount],
@@ -801,12 +816,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     // オンライン専用 reflect/overcharge/thunder/jammer/siphon を追加。
     if (bossMode && isBoss) {
       // ボス専用＋自衛系＋全体攻撃。
-      items = ['meteor', 'quake', 'regen', 'brake', 'keep', 'barrier', 'freeze', 'guard', 'snipe', 'burst', 'flood', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon'];
+      items = ['meteor', 'quake', 'regen', 'brake', 'keep', 'barrier', 'freeze', 'guard', 'snipe', 'burst', 'flood', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon', 'dazzle'];
     } else if (bossMode) {
       // 挑戦者: 攻撃協力系を多めに＋追加アイテム。
-      items = ['brake', 'rapid', 'keep', 'parry', 'rally', 'focus', 'longbomb', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon'];
+      items = ['brake', 'rapid', 'keep', 'parry', 'rally', 'focus', 'longbomb', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon', 'dazzle'];
     } else {
-      items = ['brake', 'longbomb', 'rapid', 'keep', 'parry', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon'];
+      items = ['brake', 'longbomb', 'rapid', 'keep', 'parry', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon', 'dazzle'];
     }
     // HPアップは上限に達したら抽選から除外する。
     if (hpUpCountRef.current >= MAX_HP_UP) items = items.filter((it) => it !== 'maxhp');
@@ -905,6 +920,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   useEffect(() => {
     if (!started) return;
     const unsub = subscribeAttacks(roomId, uid, (ev) => {
+      // 視認性低下: おじゃまではなく自分の画面をゲーミング化する演出デバフ。
+      if (ev.fx === 'dazzle') {
+        setDazzleUntil(Date.now() + DAZZLE_DURATION);
+        const fromName = playersRef.current[ev.from]?.name || '相手';
+        pushToast(`${fromName} に視認性低下🌈をかけられた！`, 'in');
+        if (ev.from) { lastAttackerRef.current = ev.from; fireIncoming(ev.from); }
+        return;
+      }
       // フリーズ中に来た攻撃は無効化（予告に積まず破棄）。解除後にまとめて来ない。
       if (Date.now() < freezeUntilRef.current) {
         const fromName = playersRef.current[ev.from]?.name || '相手';
@@ -1366,6 +1389,15 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   return (
     <div className={`h-screen bg-transparent text-white font-sans overflow-hidden flex flex-col ${shake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
+      {/* 視認性低下: 食らっている間、画面全体をゲーミング(虹色)に光らせて見づらくする */}
+      {dazzleUntil > nowTick && (
+        <>
+          <div className="fixed inset-0 pointer-events-none z-[45] dazzle-overlay" />
+          <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[46] pointer-events-none text-xs font-black text-white bg-black/50 rounded-full px-3 py-1">
+            🌈 視認性低下中… {Math.max(0, Math.ceil((dazzleUntil - nowTick) / 1000))}s
+          </div>
+        </>
+      )}
       {/* 被弾時の赤フラッシュ（画面端を強く） */}
       <div
         className={`fixed inset-0 pointer-events-none z-40 transition-opacity duration-150 ${damageFlash ? 'opacity-100' : 'opacity-0'}`}
@@ -1900,6 +1932,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         .board-fx-banner { animation: boardFxBanner 1.3s ease-out forwards; }
         @keyframes boardFxFlash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
         .board-fx-flash { animation: boardFxFlash 1.3s ease-out forwards; }
+        @keyframes dazzleHue { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
+        .dazzle-overlay {
+          background: linear-gradient(115deg, rgba(255,0,0,0.35), rgba(255,165,0,0.35), rgba(255,255,0,0.35), rgba(0,255,0,0.35), rgba(0,180,255,0.35), rgba(140,0,255,0.35), rgba(255,0,160,0.35));
+          background-size: 300% 300%;
+          mix-blend-mode: screen;
+          animation: dazzleHue 1.2s linear infinite, dazzleShift 2.4s ease-in-out infinite;
+        }
+        @keyframes dazzleShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
       `,
         }}
       />

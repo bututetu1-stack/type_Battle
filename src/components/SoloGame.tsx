@@ -83,6 +83,7 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   thunder: { name: 'サンダーボルト', icon: '⚡', desc: '首位の相手へ落雷の大ダメージ' },
   jammer: { name: 'ジャマー', icon: '📡', desc: '全相手へ長文おじゃまを送りつける' },
   siphon: { name: 'サイフォン', icon: '🧛', desc: '一定時間 攻撃が当たるたび自分のHPが回復' },
+  dazzle: { name: '視認性低下', icon: '🌈', desc: '一定時間 狙った相手の画面をゲーミングに光らせる' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡', clear: '🌀', brake: '⏸', longbomb: '📨', rapid: '⚡', keep: '🔒',
@@ -91,7 +92,7 @@ const ITEM_EMOJI: Record<ItemType, string> = {
   barrier: '🛡️', freeze: '🧊', purge: '🧹', guard: '🧱',
   snipe: '🎯', burst: '💥', heavy: '🔨', flood: '🌊', drain: '🩸', mirror: '🪞',
   goldify: '✨', luck: '🍀', maxhp: '❤️',
-  reflect: '🪞', overcharge: '🔋', thunder: '⚡', jammer: '📡', siphon: '🧛',
+  reflect: '🪞', overcharge: '🔋', thunder: '⚡', jammer: '📡', siphon: '🧛', dazzle: '🌈',
 };
 // プレイ中にドロップするアイテム（統合・削除した shield/clear/heavy/mirror は除外）。
 const ALL_ITEMS: ItemType[] = [

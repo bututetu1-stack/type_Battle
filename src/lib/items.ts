@@ -23,7 +23,7 @@ export const ITEM_CAT: Record<ItemType, ItemCat> = {
   // 攻撃（相手におじゃまを送る系）
   longbomb: 'attack', snipe: 'attack', burst: 'attack', heavy: 'attack', flood: 'attack', drain: 'attack',
   mirror: 'attack', meteor: 'attack', quake: 'attack', rally: 'attack', focus: 'attack',
-  thunder: 'attack', jammer: 'attack',
+  thunder: 'attack', jammer: 'attack', dazzle: 'attack',
   // 防御（即時に自分を守る/利する系）
   shield: 'defense', clear: 'defense', purge: 'defense', guard: 'defense', barrier: 'defense', shrink: 'defense',
   regen: 'defense',
@@ -42,7 +42,7 @@ export const ITEM_KIND: Record<ItemType, 'def' | 'atk' | 'util'> = {
   reflect: 'def', overcharge: 'util', siphon: 'def',
   longbomb: 'atk', rapid: 'atk', meteor: 'atk', quake: 'atk', rally: 'atk', focus: 'atk',
   snipe: 'atk', burst: 'atk', heavy: 'atk', flood: 'atk', drain: 'atk',
-  thunder: 'atk', jammer: 'atk',
+  thunder: 'atk', jammer: 'atk', dazzle: 'atk',
 };
 
 // アイテムのレアリティ係数（ドロップ重みの乗数。1.0=標準、低いほど出にくい）。
@@ -66,6 +66,7 @@ export const ITEM_RARITY: Partial<Record<ItemType, number>> = {
   siphon: 0.7,
   thunder: 0.7,
   jammer: 0.3, // ジャマー（全員へ長文）→ 強力すぎるためレアに
+  dazzle: 0.6, // 視認性低下（相手画面をゲーミング化）
 };
 
 export const CAT_META: { key: ItemCat; label: string; color: string }[] = [

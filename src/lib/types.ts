@@ -71,7 +71,8 @@ export type ItemType =
   | 'overcharge' // 一定時間 アタックゲージが倍速で溜まる
   | 'thunder' // 首位（最多連鎖）の相手へ落雷の大ダメージ
   | 'jammer' // 全相手へ長文おじゃまを送りつけて手を止める
-  | 'siphon'; // 一定時間 攻撃が着弾するたび自分のバックログが1減る
+  | 'siphon' // 一定時間 攻撃が着弾するたび自分のバックログが1減る
+  | 'dazzle'; // 視認性低下: 一定時間 ターゲットの画面をゲーミング(虹色)に光らせる
 
 // アイテムの大分類（演出/説明用）。
 export type ItemCategory = 'defense' | 'attack' | 'timed' | 'boss';

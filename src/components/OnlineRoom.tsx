@@ -42,7 +42,7 @@ const HIDDEN_ITEMS = new Set<ItemType>(['shield', 'clear', 'heavy', 'mirror']);
 // ボス戦専用アイテム（一覧で印を付ける）。
 const BOSS_ONLY = new Set<ItemType>(['meteor', 'quake', 'regen', 'rally', 'focus']);
 // オンライン専用アイテム（一覧で印を付ける）。
-const ONLINE_ONLY = new Set<ItemType>(['reflect', 'overcharge', 'thunder', 'jammer', 'siphon']);
+const ONLINE_ONLY = new Set<ItemType>(['reflect', 'overcharge', 'thunder', 'jammer', 'siphon', 'dazzle']);
 
 // ルーム購読 + 待機画面。status が playing/finished になったら OnlineGame を描画。
 export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {

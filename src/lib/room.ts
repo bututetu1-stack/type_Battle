@@ -319,20 +319,23 @@ export interface AttackEvent {
   from: string;
   amount: number;
   word?: { display: string; reading: string }; // ロング送信の単語（任意）
+  fx?: string; // 特殊効果（'dazzle'=視認性低下など。おじゃまではなく相手画面への演出）
 }
 
 // 対象プレイヤーへおじゃまを送信（/attacks/{targetUid} に push）。
-// word を渡すと「ロング送信」（指定の長い単語を1個挿入させる）になる。
+// word を渡すと「ロング送信」、fx を渡すと特殊効果（視認性低下など）になる。
 export function sendAttack(
   roomId: string,
   targetUid: string,
   fromUid: string,
   amount: number,
   word?: { display: string; reading: string },
+  fx?: string,
 ): void {
-  if (amount <= 0) return;
+  if (amount <= 0 && !fx) return; // fx だけのイベント（amount 0）は許可する
   const payload: Record<string, unknown> = { from: fromUid, amount, at: serverTimestamp() };
   if (word) payload.word = word;
+  if (fx) payload.fx = fx;
   push(ref(db, `rooms/${roomId}/attacks/${targetUid}`), payload).catch(() => {});
 }
 
@@ -342,7 +345,7 @@ export function subscribeAttacks(roomId: string, uid: string, cb: (ev: AttackEve
   const unsub = onChildAdded(aRef, (snap) => {
     const val = snap.val();
     if (val && typeof val.amount === 'number') {
-      cb({ id: snap.key || '', from: val.from || '', amount: val.amount, word: val.word });
+      cb({ id: snap.key || '', from: val.from || '', amount: val.amount, word: val.word, fx: val.fx });
     }
     remove(snap.ref).catch(() => {});
   });
