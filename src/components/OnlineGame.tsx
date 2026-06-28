@@ -963,6 +963,15 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     return () => unsub();
   }, [started, roomId, uid, updatePending, pushToast, fireIncoming]);
 
+  // 迎撃: 相殺可能な予告が来ているのに山が空＝何もできず暇、を解消する。
+  // 山が空のあいだ迎撃用の短いお題を供給し、打ち切れば1つ相殺できる（速い人ほど多く防げる）。
+  // 迎撃ワードはローカル生成（Math.random）なので共有シードを消費せず、お題の同期は崩れない。
+  useEffect(() => {
+    if (!started || status !== 'playing' || !selfAlive || backlog.length > 0) return;
+    const cancelable = pending.some((e) => !e.word && e.amount > 0);
+    if (cancelable) setBacklog([makeShortWord('normal', categoryRef.current)]);
+  }, [pending, backlog, started, status, selfAlive]);
+
   // 予告ゲージの確定処理。
   useEffect(() => {
     if (!started || status !== 'playing') return; // 決着後は着弾処理を止める

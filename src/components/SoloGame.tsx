@@ -1043,6 +1043,15 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     return () => clearInterval(id);
   }, [gameState, gameOver, updatePending, deflectToCpu, pushToast, overflowProtect]);
 
+  // 迎撃: 相殺可能な予告が来ているのに山が空＝何もできず暇、を解消する。
+  // 山が空のあいだは迎撃用の短いお題を供給し、打ち切れば1つ相殺できる（速い人ほど多く防げる）。
+  // 長文(相殺不可)しか来ていない場合は供給しない（従来どおり防げない設計を維持）。
+  useEffect(() => {
+    if (gameState !== 'playing' || backlog.length > 0) return;
+    const cancelable = pending.some((e) => !e.word && e.amount > 0);
+    if (cancelable) setBacklog([makeShortWord('normal', themeRef.current)]);
+  }, [pending, backlog, gameState]);
+
   // 全CPUを倒したら勝利（ソロの勝利条件）。
   useEffect(() => {
     if (gameState !== 'playing') return;
