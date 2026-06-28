@@ -5,12 +5,16 @@ import type { ItemCat } from './items';
 // cycle=スロット切替＋発動 / direct=各スロットに割当てたキーで即発動
 export type InputMode = 'cycle' | 'direct';
 
+// ローマ字表示モード: always=常に表示 / mistake=入力ミスをしたときだけ表示
+export type RomajiMode = 'always' | 'mistake';
+
 export interface KeyConfig {
   inputMode: InputMode;
   cycle: string; // スロット切替キー（cycle方式）
   fire: string; // 発動キー（cycle方式）
   slots: Record<ItemCat, string>; // 各スロット直接発動キー（direct方式）
   target: string; // ターゲット切替キー
+  romajiMode: RomajiMode; // ローマ字（つづり）の表示タイミング
 }
 
 const KEY = 'typeRoyale.keys';
@@ -22,6 +26,7 @@ export function defaultKeyConfig(): KeyConfig {
     fire: 'Enter',
     slots: { attack: 'Digit1', defense: 'Digit2', timed: 'Digit3' },
     target: 'Tab',
+    romajiMode: 'always',
   };
 }
 
@@ -51,6 +56,7 @@ export function loadKeyConfig(): KeyConfig {
           timed: toCode(s.timed ?? s.disrupt, def.slots.timed),
         },
         target: toCode(o.target, def.target),
+        romajiMode: o.romajiMode === 'mistake' ? 'mistake' : 'always',
       };
     }
   } catch { /* 既定値 */ }

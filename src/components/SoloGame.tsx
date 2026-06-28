@@ -219,6 +219,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [selectedSlot, setSelectedSlot] = useState<ItemCat>('attack');
 
   const [missFlash, setMissFlash] = useState(false);
+  const [romajiHint, setRomajiHint] = useState(false); // ミス時のみ表示モードで、ミス後にローマ字を出す
   const [itemFlash, setItemFlash] = useState(false);
   const [attackFlash, setAttackFlash] = useState<{ amount: number; name: string } | null>(null);
   const [hitDummy, setHitDummy] = useState<number | null>(null);
@@ -825,6 +826,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         if (Date.now() >= keepUntilRef.current) setCombo(0);
         setMissCount((m) => m + 1);
         setMissFlash(true);
+        setRomajiHint(true); // ミスしたらこのワードはローマ字を表示（次のワードで消える）
         sfx.miss();
         setTimeout(() => setMissFlash(false), 150);
       } else if (result.wordCleared && result.nextState) {
@@ -833,6 +835,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setTokenIndex(0);
         setCurrentTyping('');
         setTypedRomaji([]); // 次のワードへ：実打綴りをリセット
+        setRomajiHint(false); // 次のワードへ：ローマ字ヒントを消す
         setCombo(newCombo);
         setMaxCombo((m) => Math.max(m, newCombo));
         setKeysTyped((prev) => prev + 1);
@@ -1098,6 +1101,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           currentTyping={currentTyping}
           accent={isOjama ? 'text-red-400' : isTreasure ? 'text-yellow-400' : 'text-cyan-400'}
           typedRomaji={typedRomaji}
+          romajiVisible={keyCfg.romajiMode === 'always' || romajiHint}
         />
       </div>
     );

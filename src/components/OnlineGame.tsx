@@ -198,6 +198,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [missCount, setMissCount] = useState(0); // ミスタイプ数（リザルト用）
   const [spawnInterval, setSpawnInterval] = useState(typeof spawnMs === 'number' ? spawnMs : INITIAL_SPAWN_INTERVAL);
   const [missFlash, setMissFlash] = useState(false);
+  const [romajiHint, setRomajiHint] = useState(false); // ミス時のみ表示モードで、ミス後にローマ字を出す
   const [pending, setPending] = useState<Telegraph[]>([]);
   const [attackFlash, setAttackFlash] = useState<{ amount: number; name: string } | null>(null);
   // アイテムは攻撃/防御/妨害の3スロットで保持。Spaceで選択切替、Enterで発動。
@@ -1016,6 +1017,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         if (Date.now() >= keepUntilRef.current) setCombo(0);
         setMissCount((m) => m + 1);
         setMissFlash(true);
+        setRomajiHint(true); // ミスしたらこのワードはローマ字を表示（次のワードで消える）
         sfx.miss();
         setTimeout(() => setMissFlash(false), 150);
       } else if (result.wordCleared && result.nextState) {
@@ -1024,6 +1026,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         setTokenIndex(0);
         setCurrentTyping('');
         setTypedRomaji([]); // 次のワードへ：実打綴りをリセット
+        setRomajiHint(false); // 次のワードへ：ローマ字ヒントを消す
         setCombo(newCombo);
         setMaxCombo((m) => Math.max(m, newCombo));
         setKeysTyped((k) => k + 1);
@@ -1319,7 +1322,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             <div key={p.name + i} className="flex items-center justify-between px-4 py-2">
               <span className="flex items-center gap-3">
                 <span className="font-mono text-gray-500 w-6">#{i + 1}</span>
-                <span className={p.alive ? 'text-yellow-300 font-bold' : 'text-gray-300'}>{p.name}</span>
+                <span className={i === 0 ? 'text-yellow-300 font-bold' : 'text-gray-300'}>{p.name}</span>
               </span>
               <span className="text-xs text-gray-500 font-mono">
                 {p.kpm} kpm · {p.badges} KO
@@ -1733,6 +1736,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                       currentTyping={currentTyping}
                       accent={word.type === 'ojama' ? 'text-red-400' : word.type === 'treasure' ? 'text-yellow-400' : 'text-cyan-400'}
                       typedRomaji={typedRomaji}
+                      romajiVisible={keyCfg.romajiMode === 'always' || romajiHint}
                     />
                   </div>
                 )}

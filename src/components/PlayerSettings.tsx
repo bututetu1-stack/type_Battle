@@ -90,6 +90,28 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
+        {/* ローマ字（つづり）の表示タイミング */}
+        <div className="mb-4">
+          <div className="text-xs text-gray-500 mb-1.5">ローマ字（つづり）の表示</div>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { id: 'always', label: '常に表示', desc: 'いつでもつづりを表示' },
+              { id: 'mistake', label: 'ミス時のみ', desc: '入力を間違えた時だけ表示' },
+            ] as const).map((m) => (
+              <button
+                key={m.id}
+                onClick={() => update({ ...cfg, romajiMode: m.id })}
+                className={`rounded-lg px-3 py-2 text-left border transition-colors ${
+                  cfg.romajiMode === m.id ? 'bg-cyan-600/20 border-cyan-500 text-cyan-200' : 'bg-neutral-800 border-white/10 text-gray-400 hover:bg-neutral-700'
+                }`}
+              >
+                <div className="text-sm font-bold">{m.label}</div>
+                <div className="text-[10px] text-gray-500">{m.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* キー割当 */}
         <div className="bg-neutral-950/50 rounded-xl p-3 divide-y divide-white/5">
           {cfg.inputMode === 'cycle' ? (
