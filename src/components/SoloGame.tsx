@@ -4,7 +4,8 @@ import {
   Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine, Settings,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
-import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, THEMES, toggleThemeSelection } from '../lib/words';
+import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords } from '../lib/words';
+import { loadCustomWords } from '../lib/customwords';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
 import { ITEM_CAT, ITEM_KIND, ITEM_RARITY, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode } from '../lib/items';
@@ -722,6 +723,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   }, []);
 
   const startGame = useCallback(() => {
+    setExtraWords(loadCustomWords()); // 端末の追加語句を出題プールへ（オンラインで上書きされていても戻す）
     const newSeed = randomSeed();
     const wordRng = mulberry32(newSeed);
     const itemRng = mulberry32((newSeed ^ 0x9e3779b9) >>> 0);

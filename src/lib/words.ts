@@ -1051,13 +1051,40 @@ export function toggleThemeSelection(current: string, id: string): string {
 // 'all' か未指定は全語彙（WORD_POOL＋全テーマプールをマージ）。
 export function poolForThemes(theme: string = 'all'): WordEntry[] {
   const ids = (theme || 'all').split(',').map((s) => s.trim()).filter(Boolean);
-  if (ids.length === 0 || ids.includes('all')) return ALL_POOL;
+  // 'all'／未指定は全語彙＋追加語句。順序を固定（ALL_POOLの後にEXTRA_WORDS）し、
+  // オンラインでも全員同じプール＝シード同期が崩れないようにする。
+  if (ids.length === 0 || ids.includes('all')) return [...ALL_POOL, ...EXTRA_WORDS];
   const merged: WordEntry[] = [];
   for (const id of ids) {
+    if (id === 'custom') { merged.push(...EXTRA_WORDS); continue; }
     const p = THEME_POOLS[id];
     if (p) merged.push(...p);
   }
-  return merged.length ? merged : ALL_POOL;
+  return merged.length ? merged : [...ALL_POOL, ...EXTRA_WORDS];
+}
+
+// --- 追加語句（プレイヤーが追加したカスタム語句） ---
+// ソロは端末の保存ぶん、オンラインは部屋の共有ぶんを、ゲーム開始前にここへ流し込む。
+// 全クライアントで同じ並びにすることでシード同期（お題の順番）が一致する。
+let EXTRA_WORDS: WordEntry[] = [];
+export function setExtraWords(list: { display: string; reading: string }[]): void {
+  EXTRA_WORDS = (list || [])
+    .filter((w) => w && w.display && w.reading && isTypeableReading(w.reading))
+    .map((w) => ({ display: w.display, reading: w.reading }));
+}
+export function getExtraWords(): WordEntry[] {
+  return EXTRA_WORDS.slice();
+}
+
+// 読み（かな）が最後までローマ字入力できるか検証する（追加語句のバリデーション用）。
+export function isTypeableReading(reading: string): boolean {
+  if (!reading) return false;
+  const toks = tokenizeWord(reading);
+  if (toks.length === 0) return false;
+  // トークンのかなを連結して元の読みと一致し、かつ全トークンに綴り候補があること。
+  const joined = toks.map((t) => t.kana).join('');
+  if (joined !== reading) return false;
+  return toks.every((t) => t.romaji && t.romaji.length > 0 && t.romaji[0].length > 0);
 }
 
 // 出題バッグ（シャッフル袋）。プールの全語を1巡するまで同じ語を出さないための状態。
@@ -1221,6 +1248,7 @@ export const THEMES: Theme[] = [
   { id: 'yoji', label: '四字熟語' },
   { id: 'kancolle', label: '艦これ⚓' },
   { id: 'ateji', label: '二つ名・当て字' },
+  { id: 'custom', label: '追加した語句' },
 ];
 
 // テーマごとの語彙プール。'all' は全語彙（WORD_POOL）を使う。

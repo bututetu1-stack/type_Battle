@@ -19,12 +19,14 @@ import {
   setRoomGaugeChars,
   setRoomComeback,
   setRoomItemsOn,
+  setRoomCustomWords,
   addCpuPlayer,
   removeCpuPlayer,
   removeAllCpus,
   type RoomSnapshot,
 } from '../lib/room';
 import { THEMES, toggleThemeSelection } from '../lib/words';
+import WordEditor from './WordEditor';
 import { loadItemPrefs, saveItemPrefs, CAT_META, USE_MODES, ITEM_CAT, type ItemPrefs } from '../lib/items';
 import type { ItemType } from '../lib/types';
 import OnlineGame, { ITEM_META, ITEM_EMOJI } from './OnlineGame';
@@ -52,6 +54,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
   const [starting, setStarting] = useState(false);
   const [cpuStr, setCpuStr] = useState(5); // 追加するCPUの強さ(0〜10)
   const [showItems, setShowItems] = useState(false); // アイテム効果一覧の開閉
+  const [showWords, setShowWords] = useState(false); // 追加語句エディタの開閉
 
   useEffect(() => {
     setupPresence(roomId, uid).catch(() => {});
@@ -125,6 +128,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         gaugeChars={typeof meta.gaugeChars === 'number' ? meta.gaugeChars : 16}
         comeback={typeof meta.comeback === 'number' ? meta.comeback : 2}
         itemsOn={meta.itemsOn !== false}
+        customWords={Array.isArray(meta.customWords) ? meta.customWords : []}
         itemPrefs={itemPrefs}
         players={players}
         onExit={handleLeave}
@@ -462,6 +466,17 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
           )}
         </div>
 
+        {/* 追加語句（部屋共有。ホストが追加すると全員の出題に出る） */}
+        <div className="mb-4">
+          <button
+            onClick={() => setShowWords(true)}
+            className="w-full bg-neutral-800/70 hover:bg-neutral-700 rounded-xl px-4 py-2.5 font-bold text-sm flex items-center justify-center gap-2 text-gray-200"
+          >
+            📚 語句を追加（部屋共有） <span className="text-xs text-gray-500">({Array.isArray(meta.customWords) ? meta.customWords.length : 0})</span>
+            {!isHost && <span className="text-[10px] text-gray-500">閲覧のみ</span>}
+          </button>
+        </div>
+
         {/* アイテム効果一覧（オンラインの効果。ボス専用・オンライン専用も表示） */}
         <div className="mb-6 bg-neutral-900/60 border border-white/10 rounded-xl">
           <button
@@ -527,6 +542,19 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         </div>
         {isHost && <p className="text-xs text-gray-600 mt-3 text-center">※ 1人でも開始できます（動作確認用）</p>}
       </div>
+
+      {showWords && (
+        <WordEditor
+          words={Array.isArray(meta.customWords) ? meta.customWords : []}
+          onChange={(list) => { if (isHost) setRoomCustomWords(roomId, list); }}
+          onClose={() => setShowWords(false)}
+          title="語句を追加（部屋共有）"
+          readOnly={!isHost}
+          note={isHost
+            ? 'ここで追加した語句は、この部屋の全員の出題に出ます（テーマ『追加した語句』でも遊べます）。'
+            : 'ホストが追加した、この部屋の共有語句です（閲覧のみ）。'}
+        />
+      )}
     </div>
   );
 }

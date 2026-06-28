@@ -39,6 +39,7 @@ export interface RoomMeta {
   gaugeChars?: number; // 文字数方式のときの発射しきい値（既定16）
   comeback?: number; // 逆転補正の強さ 0〜3（既定2）
   itemsOn?: boolean; // アイテム全体のON/OFF（false でお宝・アイテムが一切出ない。未設定は true）
+  customWords?: { display: string; reading: string }[]; // 部屋共有の追加語句（ホストが追加）
 }
 
 export interface RoomPlayer {
@@ -244,6 +245,11 @@ export async function setRoomComeback(roomId: string, v: number): Promise<void> 
 // ホスト操作: アイテムのON/OFF（false でお宝・アイテムを一切出さない）。
 export async function setRoomItemsOn(roomId: string, on: boolean): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { itemsOn: on });
+}
+
+// ホスト操作: 部屋共有の追加語句を設定（全員の出題に反映）。
+export async function setRoomCustomWords(roomId: string, words: { display: string; reading: string }[]): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/meta`), { customWords: words });
 }
 
 // --- CPU（ホストがシミュレートする擬似プレイヤー）---
