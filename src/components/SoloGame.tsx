@@ -300,8 +300,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgKancolle, setCfgKancolle] = useState(initialCfg.kancolle);
   // 自作テーマ（語句のグループ）。出題テーマとして個別に選べるようにする。
   const [customGroups, setCustomGroups] = useState<string[]>(() => loadCustomGroups());
+  // 結果画面などタイトル以外からカスタム設定オーバーレイを開くためのフラグ。
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // スタート画面に戻るたび最新の自作テーマを読み直す（別画面で作成した分を反映）。
-  useEffect(() => { if (gameState === 'start') setCustomGroups(loadCustomGroups()); }, [gameState]);
+  useEffect(() => { if (gameState === 'start' || settingsOpen) setCustomGroups(loadCustomGroups()); }, [gameState, settingsOpen]);
   // 設定が変わるたび localStorage に保存（タイトルに戻ってもリセットされない）。
   useEffect(() => {
     try {
@@ -738,6 +740,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   }, []);
 
   const startGame = useCallback(() => {
+    setSettingsOpen(false); // 設定オーバーレイを閉じる（結果画面から開いていた場合）
     setExtraWords(loadCustomWords()); // 端末の追加語句を出題プールへ（オンラインで上書きされていても戻す）
     setExcludedThemes(cfgKancolle ? [] : ['kancolle']); // 艦これOFFなら全語彙から除外
     const newSeed = randomSeed();
@@ -1557,14 +1560,21 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             </div>
           </div>
 
-          {gameState === 'start' && (
+          {(gameState === 'start' || settingsOpen) && (
             // ヘッダー(h-16)の下を画面いっぱいに使う固定オーバーレイ。
             // 画面サイズに合わせてスクロール領域が広がる（収まる時は中央／はみ出す時は上からスクロール）。
             <div className="fixed left-0 right-0 top-16 bottom-0 bg-neutral-950/90 backdrop-blur-sm z-30 overflow-y-auto">
               <div className="min-h-full flex flex-col items-center justify-center w-full py-8 px-2">
               <Swords className="w-20 h-20 text-cyan-500 mb-6" />
               <h2 className="text-4xl font-black tracking-widest mb-2 text-white">TYPE ROYALE</h2>
-              <p className="text-gray-400 mb-6 font-mono">Press [SPACE] to Start</p>
+              <p className="text-gray-400 mb-3 font-mono">Press [SPACE] to {gameState === 'start' ? 'Start' : 'Retry'}</p>
+              {/* 結果画面から設定を開いた場合：このまま再挑戦／結果へ戻る */}
+              {settingsOpen && gameState !== 'start' && (
+                <div className="flex gap-2 mb-5">
+                  <button onClick={() => startGame()} className="bg-cyan-600 hover:bg-cyan-500 rounded-lg px-4 py-1.5 font-bold text-sm">▶ この設定で再挑戦</button>
+                  <button onClick={() => setSettingsOpen(false)} className="bg-neutral-700 hover:bg-neutral-600 rounded-lg px-4 py-1.5 font-bold text-sm">結果へ戻る</button>
+                </div>
+              )}
 
               {/* カスタム設定（ソロは常に設定変更可能） */}
               <div className="mb-6 w-full max-w-sm bg-neutral-900/60 border border-amber-700/40 rounded-xl p-4">
@@ -1966,6 +1976,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <Stat label="SEED" value={seed} small />
               </div>
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
+              <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-amber-300" /> カスタム設定を変更
+              </button>
             </div>
           )}
 
@@ -1984,6 +1997,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <Stat label="SEED" value={seed} small />
               </div>
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
+              <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-amber-300" /> カスタム設定を変更
+              </button>
             </div>
           )}
         </div>
