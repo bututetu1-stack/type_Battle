@@ -61,6 +61,7 @@ export interface RoomPlayer {
   str?: number; // CPUの強さ（0..1）。isCpu のときのみ意味を持つ
   hasLong?: boolean; // 山または着弾予告に長文(相殺不可)を抱えているか（長文の重ねがけ防止用）
   boardImg?: string; // そのプレイヤーが設定した盤面背景画像（縮小dataURL。開始時に一度だけ書込）
+  words?: { display: string; reading: string }[]; // このプレイヤーが持ち寄った追加語句（全員の出題に合流）
   // 観戦用（プレイ中の現在ワードと入力進捗。脱落者が他プレイヤーの入力画面を覗ける）。
   curDisplay?: string; // 現在打っているワード（表示テキスト）
   curReading?: string; // 現在打っているワードの読み（かな）
@@ -257,6 +258,11 @@ export async function setRoomCustomWords(roomId: string, words: { display: strin
 // ホスト操作: 個別にOFFにするアイテムを設定（全員の排出から除外）。
 export async function setRoomDisabledItems(roomId: string, items: string[]): Promise<void> {
   await update(ref(db, `rooms/${roomId}/meta`), { disabledItems: items });
+}
+
+// 各プレイヤーが自分の追加語句を「持ち寄る」（自分のノードに書込。全員の出題に合流）。
+export async function setPlayerWords(roomId: string, uid: string, words: { display: string; reading: string }[]): Promise<void> {
+  await update(ref(db, `rooms/${roomId}/players/${uid}`), { words });
 }
 
 // --- CPU（ホストがシミュレートする擬似プレイヤー）---

@@ -21,6 +21,7 @@ import {
   setRoomItemsOn,
   setRoomCustomWords,
   setRoomDisabledItems,
+  setPlayerWords,
   addCpuPlayer,
   removeCpuPlayer,
   removeAllCpus,
@@ -105,6 +106,23 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
 
   const { meta, players } = snap;
 
+  // 部屋で実際に出題する追加語句 = ホストの共有語句 ＋ 全員が持ち寄った語句（重複除外）。
+  // 全クライアントで同じ並びにするため、uid をソートして決定的に統合する（シード同期を維持）。
+  const sharedWords = (() => {
+    const out: { display: string; reading: string }[] = [];
+    const seen = new Set<string>();
+    const push = (w?: { display?: string; reading?: string }) => {
+      if (!w || !w.display || !w.reading) return;
+      const k = w.display + '|' + w.reading;
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push({ display: w.display, reading: w.reading });
+    };
+    (Array.isArray(meta.customWords) ? meta.customWords : []).forEach(push);
+    Object.keys(players).sort().forEach((id) => (players[id].words || []).forEach(push));
+    return out;
+  })();
+
   // 対戦中／決着 → ゲーム画面へ。
   if (meta.status === 'playing' || meta.status === 'finished') {
     return (
@@ -131,7 +149,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         comeback={typeof meta.comeback === 'number' ? meta.comeback : 2}
         itemsOn={meta.itemsOn !== false}
         disabledItems={Array.isArray(meta.disabledItems) ? meta.disabledItems : []}
-        customWords={Array.isArray(meta.customWords) ? meta.customWords : []}
+        customWords={sharedWords}
         itemPrefs={itemPrefs}
         players={players}
         onExit={handleLeave}
@@ -469,33 +487,34 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
           )}
         </div>
 
-        {/* 追加語句（部屋共有。ホストが追加すると全員の出題に出る） */}
-        <div className="mb-4 flex gap-2">
+        {/* 追加語句（部屋共有）。ホストが共有リストを編集でき、参加者は各自の端末語句を「持ち寄れる」。 */}
+        <div className="mb-1 flex gap-2">
           <button
             onClick={() => setShowWords(true)}
             className="flex-1 bg-neutral-800/70 hover:bg-neutral-700 rounded-xl px-4 py-2.5 font-bold text-sm flex items-center justify-center gap-2 text-gray-200"
           >
-            📚 語句を追加（部屋共有） <span className="text-xs text-gray-500">({Array.isArray(meta.customWords) ? meta.customWords.length : 0})</span>
-            {!isHost && <span className="text-[10px] text-gray-500">閲覧のみ</span>}
+            📚 語句を追加（部屋共有） <span className="text-xs text-gray-500">(合計 {sharedWords.length})</span>
+            {!isHost && <span className="text-[10px] text-gray-500">編集はホスト</span>}
           </button>
-          {isHost && (
-            <button
-              onClick={() => {
-                const local = loadCustomWords();
-                if (local.length === 0) return;
-                const cur = Array.isArray(meta.customWords) ? meta.customWords : [];
-                const seen = new Set(cur.map((w) => w.display + '|' + w.reading));
-                const merged = [...cur];
-                for (const w of local) { const k = w.display + '|' + w.reading; if (!seen.has(k)) { seen.add(k); merged.push(w); } }
-                setRoomCustomWords(roomId, merged);
-              }}
-              title="この端末に保存した追加語句を、まとめて部屋へ追加します"
-              className="bg-fuchsia-700/80 hover:bg-fuchsia-600 rounded-xl px-3 py-2.5 font-bold text-xs text-white whitespace-nowrap"
-            >
-              端末の語句を一括追加
-            </button>
-          )}
+          {(() => {
+            const mine = players[uid]?.words || [];
+            const local = loadCustomWords();
+            const contributing = mine.length > 0;
+            return (
+              <button
+                onClick={() => setPlayerWords(roomId, uid, contributing ? [] : local)}
+                disabled={!contributing && local.length === 0}
+                title="この端末に保存した追加語句を、全員の出題に持ち寄ります"
+                className={`rounded-xl px-3 py-2.5 font-bold text-xs whitespace-nowrap disabled:opacity-50 ${
+                  contributing ? 'bg-fuchsia-600 text-white' : 'bg-neutral-800/70 hover:bg-neutral-700 text-gray-200'
+                }`}
+              >
+                {contributing ? `持ち寄り中(${mine.length}) 取消` : `自分の語句を持ち寄る(${local.length})`}
+              </button>
+            );
+          })()}
         </div>
+        <p className="text-[10px] text-gray-600 mb-4">※「持ち寄る」を押すと、その端末で追加した語句が全員の出題に合流します（重複は自動除外）。</p>
 
         {/* アイテム効果一覧（オンラインの効果。ボス専用・オンライン専用も表示） */}
         <div className="mb-6 bg-neutral-900/60 border border-white/10 rounded-xl">
