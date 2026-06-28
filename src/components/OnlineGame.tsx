@@ -1685,10 +1685,11 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                 ))}
             </div>
 
-            {/* 着弾予告ゲージ（左）＋お題カード（固定高さスロット）。行の高さが一定なので動かない。 */}
-            <div className="shrink-0 w-full flex items-center justify-center gap-3">
+            {/* お題カード（固定高さ・中央寄せ）。プレビューと同じ max-w-lg 中央寄せで横位置を揃える。
+                着弾予告ゲージはカードの左隣に絶対配置し、カードの中央位置に影響させない。 */}
+            <div className="shrink-0 w-full max-w-lg relative">
               {started && (
-                <div className="flex flex-col items-center gap-1 pointer-events-none shrink-0">
+                <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 w-12 flex flex-col items-center gap-1 pointer-events-none">
                   <div className={`text-sm font-bold text-red-400 mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
                   <div className="w-6 flex flex-col-reverse gap-[3px]">
                     {Array.from({ length: Math.min(selfMax, 12) }).map((_, i) => {
@@ -1703,7 +1704,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               )}
 
               {/* お題カードの固定高さスロット（中央寄せ）。お題の有無や行数が変わっても高さ一定。 */}
-              <div className="w-full max-w-lg h-52 flex items-center justify-center">
+              <div className="h-52 flex items-center justify-center">
                 {word && (
                   <div
                     className={`w-full p-6 rounded-xl border-2 shadow-2xl ${
@@ -1724,9 +1725,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   </div>
                 )}
               </div>
-
-              {/* 着弾予告ゲージぶんの幅をバランスさせ、お題を中央寄りに保つスペーサー */}
-              {started && <div className="w-6 shrink-0" />}
             </div>
 
             {/* グループ3: アイテムスロット〜アタックゲージ（画面下部に固定）。
