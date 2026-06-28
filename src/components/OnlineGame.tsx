@@ -1706,7 +1706,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               <div className="w-full max-w-lg h-52 flex items-center justify-center">
                 {word && (
                   <div
-                    className={`p-6 rounded-xl border-2 shadow-2xl ${
+                    className={`w-full p-6 rounded-xl border-2 shadow-2xl ${
                       word.type === 'ojama'
                         ? 'border-red-500/50 bg-red-950/30'
                         : word.type === 'treasure'

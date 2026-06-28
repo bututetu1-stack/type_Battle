@@ -1080,7 +1080,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const isTreasure = word.type === 'treasure';
     return (
       <div
-        className={`p-6 rounded-xl border-2 shadow-2xl mb-4 transition-all duration-200 ${
+        className={`w-full p-6 rounded-xl border-2 shadow-2xl mb-4 transition-all duration-200 ${
           isOjama
             ? 'border-red-500/50 bg-red-950/30'
             : isTreasure
