@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause, ArrowLeft,
-  Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine, Settings,
+  Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine, Settings, RotateCcw,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
@@ -1139,7 +1139,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           accent={isOjama ? 'text-red-400' : isTreasure ? 'text-yellow-400' : 'text-cyan-400'}
           typedRomaji={typedRomaji}
           romajiVisible={keyCfg.romajiMode === 'always' || romajiHint}
-          showRuby={keyCfg.showRuby}
+          readingMode={keyCfg.readingMode}
         />
       </div>
     );
@@ -1291,6 +1291,15 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           <Hud label="KPM" value={calculateKPM()} />
           <Hud label="K.O." value={playerKOs} icon={<Trophy className="w-4 h-4 text-yellow-500" />} />
           <Hud label="BADGE" value={Math.min(playerKOs, 4)} icon={<Shield className="w-4 h-4 text-blue-400" />} />
+          {gameState === 'playing' && (
+            <button
+              onClick={() => setGameState('start')}
+              className="text-gray-500 hover:text-amber-300 self-center"
+              title="中断して最初から（スタート画面へ戻る）"
+            >
+              <RotateCcw className="w-5 h-5" />
+            </button>
+          )}
           <button
             onClick={() => {
               const next = !muted;

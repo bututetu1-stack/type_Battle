@@ -1,5 +1,6 @@
 import type { Word } from '../lib/types';
 import { buildRuby } from '../lib/words';
+import type { ReadingMode } from '../lib/keyconfig';
 
 interface CurrentWordProps {
   word: Word;
@@ -8,12 +9,12 @@ interface CurrentWordProps {
   accent?: string; // 入力中トークンの色（Tailwind クラス）
   typedRomaji?: string[]; // 確定済みトークンで実際に打たれた綴り（index 揃え）
   romajiVisible?: boolean; // ローマ字ガイドを表示するか（ミス時のみ表示モード用）
-  showRuby?: boolean; // 漢字などにふりがな（ルビ）を振るか（OFFで難読チャレンジ）
+  readingMode?: ReadingMode; // 読みの見せ方: full=ふりがな+かな / kana=かなのみ / none=漢字のみ
 }
 
 // 現在のお題の内側表示: 漢字＋ふりがな(ruby) / かな進捗 / ローマ字ガイド。
 // 外枠カード（種別ごとの色）は親側で付ける。
-export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 'text-cyan-400', typedRomaji = [], romajiVisible = true, showRuby = true }: CurrentWordProps) {
+export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 'text-cyan-400', typedRomaji = [], romajiVisible = true, readingMode = 'full' }: CurrentWordProps) {
   // 漢字部分にだけ振り仮名を付けたセグメント列。長文でも各セグメントが
   // 独立して折り返せるので、まとめてルビを振った時の縦並びバグが起きない。
   const segs = buildRuby(word.display, word.reading);
@@ -23,7 +24,7 @@ export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 
       {/* 漢字＋ふりがな（漢字のみルビ・横並びで折り返し可能） */}
       <div className="flex flex-wrap justify-center items-end gap-x-0.5 gap-y-1 mb-3 leading-tight">
         {segs.map((s, i) =>
-          s.rt && showRuby ? (
+          s.rt && readingMode === 'full' ? (
             <ruby key={i} className="text-3xl md:text-4xl font-bold tracking-wide">
               {s.text}
               <rt className="text-sm md:text-base text-cyan-200/80 font-normal tracking-tight">{s.rt}</rt>
@@ -36,7 +37,9 @@ export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 
         )}
       </div>
 
-      {/* かな（打鍵進捗のハイライト）。長文でも折り返せるようにする。 */}
+      {/* かな（打鍵進捗のハイライト）。長文でも折り返せるようにする。
+          readingMode='none'（漢字のみ）の時は読みを隠すため非表示。 */}
+      {readingMode !== 'none' && (
       <div className="flex flex-wrap justify-center items-center text-xl md:text-2xl font-bold tracking-widest mb-3">
         {word.tokens.map((t, i) => {
           let colorClass = 'text-gray-500';
@@ -49,11 +52,13 @@ export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 
           );
         })}
       </div>
+      )}
 
       {/* ローマ字ガイド: 入力済みは薄く残し、次に打つ1文字だけを強調する。
-          「ミス時のみ表示」モードでは romajiVisible=false の間は高さだけ確保して隠す。 */}
+          「ミス時のみ表示」モードでは romajiVisible=false の間は高さだけ確保して隠す。
+          readingMode='none'（漢字のみ）の時はローマ字も隠して完全に読みを伏せる。 */}
       <div className="flex flex-wrap justify-center items-center text-lg md:text-xl font-mono tracking-[0.15em] min-h-[1.6em]">
-        {romajiVisible && word.tokens.map((t, i) => {
+        {readingMode !== 'none' && romajiVisible && word.tokens.map((t, i) => {
           // そのトークンに表示する綴り：確定済みは実際に打った綴り、入力中は入力に合う候補、未入力は既定。
           const str =
             i < tokenIndex

@@ -8,6 +8,10 @@ export type InputMode = 'cycle' | 'direct';
 // ローマ字表示モード: always=常に表示 / mistake=入力ミスをしたときだけ表示
 export type RomajiMode = 'always' | 'mistake';
 
+// お題の読みの見せ方:
+//   full=ふりがな＋かな進捗 / kana=かな進捗のみ（ふりがな無し）/ none=漢字のみ（読みを全部隠す）
+export type ReadingMode = 'full' | 'kana' | 'none';
+
 export interface KeyConfig {
   inputMode: InputMode;
   cycle: string; // スロット切替キー（cycle方式）
@@ -15,7 +19,7 @@ export interface KeyConfig {
   slots: Record<ItemCat, string>; // 各スロット直接発動キー（direct方式）
   target: string; // ターゲット切替キー
   romajiMode: RomajiMode; // ローマ字（つづり）の表示タイミング
-  showRuby: boolean; // お題の漢字にふりがな（ルビ）を振るか
+  readingMode: ReadingMode; // お題の読みの見せ方（ふりがな/かな/漢字のみ）
 }
 
 const KEY = 'typeRoyale.keys';
@@ -28,7 +32,7 @@ export function defaultKeyConfig(): KeyConfig {
     slots: { attack: 'Digit1', defense: 'Digit2', timed: 'Digit3' },
     target: 'Tab',
     romajiMode: 'always',
-    showRuby: true,
+    readingMode: 'full',
   };
 }
 
@@ -59,7 +63,13 @@ export function loadKeyConfig(): KeyConfig {
         },
         target: toCode(o.target, def.target),
         romajiMode: o.romajiMode === 'mistake' ? 'mistake' : 'always',
-        showRuby: o.showRuby === false ? false : true,
+        // 旧 showRuby(boolean) からの移行: false→かなのみ, それ以外→ふりがな付き。
+        readingMode:
+          o.readingMode === 'kana' || o.readingMode === 'none'
+            ? o.readingMode
+            : o.showRuby === false
+              ? 'kana'
+              : 'full',
       };
     }
   } catch { /* 既定値 */ }

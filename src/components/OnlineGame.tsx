@@ -1822,7 +1822,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                       accent={word.type === 'ojama' ? 'text-red-400' : word.type === 'treasure' ? 'text-yellow-400' : 'text-cyan-400'}
                       typedRomaji={typedRomaji}
                       romajiVisible={keyCfg.romajiMode === 'always' || romajiHint}
-                      showRuby={keyCfg.showRuby}
+                      readingMode={keyCfg.readingMode}
                     />
                   </div>
                 )}

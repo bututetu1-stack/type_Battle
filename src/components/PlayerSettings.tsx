@@ -200,19 +200,20 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* ふりがな（ルビ）の表示。OFFで難読漢字チャレンジ。 */}
+        {/* お題の読みの見せ方。「漢字のみ」でふりがな・かな・ローマ字を全部隠す難読チャレンジ。 */}
         <div className="mb-4">
-          <div className="text-xs text-gray-500 mb-1.5">ふりがな（ルビ）</div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="text-xs text-gray-500 mb-1.5">お題の読み（むずかしさ）</div>
+          <div className="grid grid-cols-3 gap-2">
             {([
-              { on: true, label: '表示', desc: '漢字の上に読みを表示' },
-              { on: false, label: '非表示', desc: '読みを隠す（難読チャレンジ）' },
+              { id: 'full', label: 'ふりがな', desc: '漢字の上に読み＋かな' },
+              { id: 'kana', label: 'かなのみ', desc: 'ふりがな無し・かなは表示' },
+              { id: 'none', label: '漢字のみ', desc: '読みを全部隠す（難読）' },
             ] as const).map((m) => (
               <button
-                key={String(m.on)}
-                onClick={() => update({ ...cfg, showRuby: m.on })}
-                className={`rounded-lg px-3 py-2 text-left border transition-colors ${
-                  cfg.showRuby === m.on ? 'bg-cyan-600/20 border-cyan-500 text-cyan-200' : 'bg-neutral-800 border-white/10 text-gray-400 hover:bg-neutral-700'
+                key={m.id}
+                onClick={() => update({ ...cfg, readingMode: m.id })}
+                className={`rounded-lg px-2 py-2 text-left border transition-colors ${
+                  cfg.readingMode === m.id ? 'bg-cyan-600/20 border-cyan-500 text-cyan-200' : 'bg-neutral-800 border-white/10 text-gray-400 hover:bg-neutral-700'
                 }`}
               >
                 <div className="text-sm font-bold">{m.label}</div>
@@ -220,6 +221,7 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
               </button>
             ))}
           </div>
+          <p className="text-[10px] text-gray-600 mt-1">※「漢字のみ」は ふりがな・かな・ローマ字をすべて隠します（漢字を見て読みを打つ）。</p>
         </div>
 
         {/* キー割当 */}
