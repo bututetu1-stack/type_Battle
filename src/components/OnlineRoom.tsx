@@ -27,6 +27,7 @@ import {
 } from '../lib/room';
 import { THEMES, toggleThemeSelection } from '../lib/words';
 import WordEditor from './WordEditor';
+import { loadCustomWords } from '../lib/customwords';
 import { loadItemPrefs, saveItemPrefs, CAT_META, USE_MODES, ITEM_CAT, type ItemPrefs } from '../lib/items';
 import type { ItemType } from '../lib/types';
 import OnlineGame, { ITEM_META, ITEM_EMOJI } from './OnlineGame';
@@ -467,14 +468,31 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
         </div>
 
         {/* 追加語句（部屋共有。ホストが追加すると全員の出題に出る） */}
-        <div className="mb-4">
+        <div className="mb-4 flex gap-2">
           <button
             onClick={() => setShowWords(true)}
-            className="w-full bg-neutral-800/70 hover:bg-neutral-700 rounded-xl px-4 py-2.5 font-bold text-sm flex items-center justify-center gap-2 text-gray-200"
+            className="flex-1 bg-neutral-800/70 hover:bg-neutral-700 rounded-xl px-4 py-2.5 font-bold text-sm flex items-center justify-center gap-2 text-gray-200"
           >
             📚 語句を追加（部屋共有） <span className="text-xs text-gray-500">({Array.isArray(meta.customWords) ? meta.customWords.length : 0})</span>
             {!isHost && <span className="text-[10px] text-gray-500">閲覧のみ</span>}
           </button>
+          {isHost && (
+            <button
+              onClick={() => {
+                const local = loadCustomWords();
+                if (local.length === 0) return;
+                const cur = Array.isArray(meta.customWords) ? meta.customWords : [];
+                const seen = new Set(cur.map((w) => w.display + '|' + w.reading));
+                const merged = [...cur];
+                for (const w of local) { const k = w.display + '|' + w.reading; if (!seen.has(k)) { seen.add(k); merged.push(w); } }
+                setRoomCustomWords(roomId, merged);
+              }}
+              title="この端末に保存した追加語句を、まとめて部屋へ追加します"
+              className="bg-fuchsia-700/80 hover:bg-fuchsia-600 rounded-xl px-3 py-2.5 font-bold text-xs text-white whitespace-nowrap"
+            >
+              端末の語句を一括追加
+            </button>
+          )}
         </div>
 
         {/* アイテム効果一覧（オンラインの効果。ボス専用・オンライン専用も表示） */}

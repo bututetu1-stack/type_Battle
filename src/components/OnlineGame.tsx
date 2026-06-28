@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { mulberry32, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, setExtraWords } from '../lib/words';
+import { loadBgImageMini } from '../lib/theme';
 import { processKey, type PlayerState } from '../lib/engine';
 import {
   serverNow, writePlayerSummary, finishGame, resetRoom, sendAttack, subscribeAttacks,
@@ -400,8 +401,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     setSlots({ attack: null, defense: null, timed: null });
     setSelectedSlot('attack');
     slotsRef.current = { attack: null, defense: null, timed: null };
-    // 新しいゲーム開始時に自分の状態をリセット（再戦対応）。
-    writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '' });
+    // 新しいゲーム開始時に自分の状態をリセット（再戦対応）。盤面背景画像は開始時に一度だけ書込（共有）。
+    writePlayerSummary(roomId, uid, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '', boardImg: loadBgImageMini() ?? '' });
     // ホストは CPU の生存も復活させておく（カウントダウン中に反映させ、開始直後の誤決着を防ぐ）。
     if (uid === hostUid) {
       cpuSimRef.current = {};
@@ -1545,6 +1546,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                 hit={hitId === id}
                 incoming={incomingId === id}
                 itemEmoji={p.itemAt && Date.now() - p.itemAt < 1500 ? ITEM_EMOJI[p.lastItem as ItemType] : undefined}
+                bgImage={p.boardImg || undefined}
               />
             </div>
           ))}
@@ -1760,7 +1762,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               <div className="h-52 flex items-center justify-center">
                 {word && (
                   <div
-                    className={`w-full p-6 rounded-xl border-2 shadow-2xl ${
+                    className={`lt-solid w-full p-6 rounded-xl border-2 shadow-2xl ${
                       word.type === 'ojama'
                         ? 'border-red-500/50 bg-red-950/30'
                         : word.type === 'treasure'
@@ -1901,6 +1903,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                 hit={hitId === id}
                 incoming={incomingId === id}
                 itemEmoji={p.itemAt && Date.now() - p.itemAt < 1500 ? ITEM_EMOJI[p.lastItem as ItemType] : undefined}
+                bgImage={p.boardImg || undefined}
               />
             </div>
           ))}

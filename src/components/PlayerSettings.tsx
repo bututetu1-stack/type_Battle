@@ -5,13 +5,27 @@ import {
   type KeyConfig, type InputMode,
 } from '../lib/keyconfig';
 import { CAT_META } from '../lib/items';
-import { COLOR_THEMES, loadThemeId, saveThemeId, applyColorTheme } from '../lib/theme';
+import { COLOR_THEMES, loadThemeId, saveThemeId, applyColorTheme, IMAGE_THEME_ID, processBgImageFile, saveBgImage, clearBgImage, loadBgImage } from '../lib/theme';
 
 // プレイヤー設定（入力方式＋キーコンフィグ）。ソロ/オンライン共通でlocalStorageに保存。
 export default function PlayerSettings({ onClose }: { onClose: () => void }) {
   const [cfg, setCfg] = useState<KeyConfig>(() => loadKeyConfig());
   const [themeId, setThemeId] = useState<string>(() => loadThemeId());
+  const [hasImage, setHasImage] = useState<boolean>(() => !!loadBgImage());
+  const [imgBusy, setImgBusy] = useState(false);
   const pickTheme = (id: string) => { setThemeId(id); saveThemeId(id); applyColorTheme(id); };
+  const onUploadBg = async (file: File | undefined) => {
+    if (!file) return;
+    setImgBusy(true);
+    try {
+      const { full, mini } = await processBgImageFile(file);
+      saveBgImage(full, mini);
+      setHasImage(true);
+      pickTheme(IMAGE_THEME_ID);
+    } catch { /* 読み込み失敗は無視 */ }
+    setImgBusy(false);
+  };
+  const removeBg = () => { clearBgImage(); setHasImage(false); pickTheme(COLOR_THEMES[0].id); };
   // 「capturing」中は次のキー入力でそのバインドを設定する。
   const [capturing, setCapturing] = useState<string | null>(null);
 
@@ -109,7 +123,23 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
                 <span className={`text-[10px] font-bold ${themeId === t.id ? 'text-cyan-200' : 'text-gray-400'}`}>{t.label}</span>
               </button>
             ))}
+            {/* 背景画像（自分のPCから） */}
+            <label
+              className={`rounded-lg px-1 py-2 flex flex-col items-center gap-1 border cursor-pointer transition-colors ${
+                themeId === IMAGE_THEME_ID ? 'border-cyan-400 bg-cyan-950/40' : 'border-white/10 bg-neutral-800 hover:bg-neutral-700'
+              }`}
+            >
+              <span className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center text-sm bg-neutral-900">🖼</span>
+              <span className={`text-[10px] font-bold ${themeId === IMAGE_THEME_ID ? 'text-cyan-200' : 'text-gray-400'}`}>{imgBusy ? '処理中' : '画像'}</span>
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => onUploadBg(e.target.files?.[0])} />
+            </label>
           </div>
+          {hasImage && (
+            <div className="flex items-center justify-between mt-2 text-[10px] text-gray-500">
+              <span>背景画像を設定中（オンラインでは他の人から見えるあなたの盤面の背景にも使われます）</span>
+              <button onClick={removeBg} className="text-red-400 hover:text-red-300 underline shrink-0 ml-2">削除</button>
+            </div>
+          )}
         </div>
 
         {/* ローマ字（つづり）の表示タイミング */}

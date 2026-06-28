@@ -1,10 +1,11 @@
-// カラーテーマ（ダーク系の複数テーマ）。背景の雰囲気を切り替える。
+// カラーテーマ（ダーク系＋ライト＋カスタム背景画像）。背景の雰囲気を切り替える。
 // 各画面のルートは bg-transparent にして、body の背景（ここで設定）を見せる。
 export interface ColorTheme {
   id: string;
   label: string;
   css: string; // body に適用する background（グラデーション可）
   swatch: string; // 設定画面のプレビュー色
+  light?: boolean; // ライト系（body に theme-light クラスを付け、文字色を暗くする）
 }
 
 export const COLOR_THEMES: ColorTheme[] = [
@@ -15,9 +16,13 @@ export const COLOR_THEMES: ColorTheme[] = [
   { id: 'forest', label: '深緑', css: 'radial-gradient(circle at 50% -10%, #0d2a1b 0%, #061009 60%)', swatch: '#0c2418' },
   { id: 'sunset', label: '黄昏', css: 'radial-gradient(circle at 50% -10%, #2e1a0c 0%, #140a05 60%)', swatch: '#2a160a' },
   { id: 'mono', label: '漆黒', css: '#000000', swatch: '#000000' },
+  { id: 'light', label: 'ライト', css: 'radial-gradient(circle at 50% -10%, #ffffff 0%, #dfe5ee 70%)', swatch: '#e8edf4', light: true },
 ];
 
 const KEY = 'typeRoyale.theme';
+const IMG_KEY = 'typeRoyale.bgImage';      // 背景画像（フル・dataURL）
+const IMG_MINI_KEY = 'typeRoyale.bgImageMini'; // ミニボード共有用の縮小画像（dataURL）
+export const IMAGE_THEME_ID = 'image';
 
 export function getColorTheme(id: string): ColorTheme {
   return COLOR_THEMES.find((t) => t.id === id) ?? COLOR_THEMES[0];
@@ -26,6 +31,7 @@ export function getColorTheme(id: string): ColorTheme {
 export function loadThemeId(): string {
   try {
     const v = localStorage.getItem(KEY);
+    if (v === IMAGE_THEME_ID && loadBgImage()) return v;
     if (v && COLOR_THEMES.some((t) => t.id === v)) return v;
   } catch { /* 既定 */ }
   return COLOR_THEMES[0].id;
@@ -35,10 +41,66 @@ export function saveThemeId(id: string): void {
   try { localStorage.setItem(KEY, id); } catch { /* 保存不可は無視 */ }
 }
 
-// body 背景にテーマを適用（全画面共通の背景になる）。
+// --- 背景画像（自分の端末から） ---
+export function loadBgImage(): string | null {
+  try { return localStorage.getItem(IMG_KEY); } catch { return null; }
+}
+export function loadBgImageMini(): string | null {
+  try { return localStorage.getItem(IMG_MINI_KEY); } catch { return null; }
+}
+export function saveBgImage(full: string, mini: string): void {
+  try { localStorage.setItem(IMG_KEY, full); localStorage.setItem(IMG_MINI_KEY, mini); } catch { /* 容量超過などは無視 */ }
+}
+export function clearBgImage(): void {
+  try { localStorage.removeItem(IMG_KEY); localStorage.removeItem(IMG_MINI_KEY); } catch { /* 無視 */ }
+}
+
+// body 背景にテーマ（または背景画像）を適用。light 系は theme-light クラスを付与。
 export function applyColorTheme(id: string): void {
-  const t = getColorTheme(id);
   if (typeof document === 'undefined') return;
-  document.body.style.background = t.css;
-  document.body.style.backgroundAttachment = 'fixed';
+  const body = document.body;
+  if (id === IMAGE_THEME_ID) {
+    const img = loadBgImage();
+    if (img) {
+      // 文字が読めるよう上から半透明の暗幕を重ねる。
+      body.style.background = `linear-gradient(rgba(8,8,10,0.55), rgba(8,8,10,0.55)), url("${img}") center/cover fixed`;
+      body.classList.remove('theme-light');
+      return;
+    }
+    // 画像が無ければ標準へフォールバック。
+  }
+  const t = getColorTheme(id);
+  body.style.background = t.css;
+  body.style.backgroundAttachment = 'fixed';
+  body.classList.toggle('theme-light', t.light === true);
+}
+
+// 画像ファイルを読み込み、フル用とミニボード共有用に縮小した dataURL を返す。
+export async function processBgImageFile(file: File): Promise<{ full: string; mini: string }> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = reject;
+    im.src = dataUrl;
+  });
+  const scale = (maxW: number, quality: number): string => {
+    const ratio = Math.min(1, maxW / img.width);
+    const w = Math.max(1, Math.round(img.width * ratio));
+    const h = Math.max(1, Math.round(img.height * ratio));
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d');
+    if (ctx) ctx.drawImage(img, 0, 0, w, h);
+    return c.toDataURL('image/jpeg', quality);
+  };
+  // フルは画面背景用にそこそこ、ミニは共有のため極小（通信量を抑える）。
+  const full = scale(1280, 0.78);
+  const mini = scale(120, 0.6);
+  return { full, mini };
 }

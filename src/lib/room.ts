@@ -59,6 +59,7 @@ export interface RoomPlayer {
   isCpu?: boolean; // CPU（ホストがシミュレートする擬似プレイヤー）
   str?: number; // CPUの強さ（0..1）。isCpu のときのみ意味を持つ
   hasLong?: boolean; // 山または着弾予告に長文(相殺不可)を抱えているか（長文の重ねがけ防止用）
+  boardImg?: string; // そのプレイヤーが設定した盤面背景画像（縮小dataURL。開始時に一度だけ書込）
   // 観戦用（プレイ中の現在ワードと入力進捗。脱落者が他プレイヤーの入力画面を覗ける）。
   curDisplay?: string; // 現在打っているワード（表示テキスト）
   curReading?: string; // 現在打っているワードの読み（かな）
@@ -184,7 +185,7 @@ export function writePlayerSummary(
   roomId: string,
   uid: string,
   summary: Partial<
-    Pick<RoomPlayer, 'backlog' | 'combo' | 'kpm' | 'badges' | 'alive' | 'rank' | 'koBy' | 'lastItem' | 'itemAt' | 'hasLong'
+    Pick<RoomPlayer, 'backlog' | 'combo' | 'kpm' | 'badges' | 'alive' | 'rank' | 'koBy' | 'lastItem' | 'itemAt' | 'hasLong' | 'boardImg'
       | 'curDisplay' | 'curReading' | 'curIdx' | 'curTyping' | 'curRomaji' | 'curRomajiDone'>
   >,
 ): void {
