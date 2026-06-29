@@ -167,14 +167,14 @@ interface OnlineGameProps {
   comeback?: number; // 逆転補正の強さ（0=なし〜3=強）
   itemsOn?: boolean; // アイテム全体のON/OFF（false でお宝・アイテムが出ない）
   disabledItems?: string[]; // 個別にOFFにしたアイテム（排出から除外）
-  kancolleOn?: boolean; // 'all'出題に艦これ語を含めるか（false で除外）
+  excludedThemes?: string[]; // 'all'(すべて)出題から除外するテーマid（全員一致）
   customWords?: { display: string; reading: string }[]; // 部屋共有の追加語句
   itemPrefs: ItemPrefs;
   players: Record<string, RoomPlayer>;
   onExit: () => void;
 }
 
-export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, badgeCap, badgeRate, gaugeMode, gaugeChars, comeback, itemsOn = true, disabledItems = [], kancolleOn = true, customWords = [], itemPrefs, players, onExit }: OnlineGameProps) {
+export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid, category, mode, bossUid, itemRate, hp, spawnMs, attackGauge, attackCap, comboStep, badgeCap, badgeRate, gaugeMode, gaugeChars, comeback, itemsOn = true, disabledItems = [], excludedThemes = [], customWords = [], itemPrefs, players, onExit }: OnlineGameProps) {
   // ボスモード関連の派生フラグ。
   const bossMode = mode === 'boss';
   const isBoss = bossMode && uid === bossUid;
@@ -375,7 +375,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   useEffect(() => {
     // 部屋共有の追加語句を出題プールへ反映（全員同じ並び＝シード同期が崩れない）。genWord より前に必須。
     setExtraWords(customWords);
-    setExcludedThemes(kancolleOn ? [] : ['kancolle']); // 艦これOFFなら全語彙から除外（全員一致）
+    setExcludedThemes(excludedThemes); // OFFにしたテーマを「すべて」出題から除外（全員一致）
     const rng = mulberry32(seed >>> 0);
     wordRngRef.current = rng;
     itemRngRef.current = mulberry32((seed ^ 0x9e3779b9) >>> 0);

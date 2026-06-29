@@ -128,7 +128,7 @@ interface CustomCfg {
   use: Record<ItemCat, UseMode>; // カテゴリ別の使い方（保持/即時）
   itemsOn: boolean; // アイテム全体のON/OFF（OFFならお宝・アイテムが一切出ない）
   disabledItems: ItemType[]; // 個別にOFFにしたアイテム（排出から除外）
-  kancolle: boolean; // 'all'出題に艦これ語を含めるか（OFFで艦これを出題から除外）
+  excludedThemes: string[]; // 'all'(すべて)出題から除外するテーマid（例: ['kancolle']）
 }
 const validMode = (v: unknown): UseMode => (v === 'instant' ? 'instant' : 'hold');
 function loadCfg(): CustomCfg {
@@ -139,7 +139,7 @@ function loadCfg(): CustomCfg {
     badgeCap: 4, badgeRate: 25,
     gaugeMode: 'word', gaugeChars: 16, comeback: 2,
     autoFull: false, use: { attack: 'hold', defense: 'hold', timed: 'hold' },
-    itemsOn: true, disabledItems: [], kancolle: true,
+    itemsOn: true, disabledItems: [], excludedThemes: [],
   };
   try {
     const raw = localStorage.getItem(CFG_KEY);
@@ -168,7 +168,10 @@ function loadCfg(): CustomCfg {
           : def.use,
         itemsOn: typeof o.itemsOn === 'boolean' ? o.itemsOn : def.itemsOn,
         disabledItems: Array.isArray(o.disabledItems) ? o.disabledItems.filter((x: unknown) => typeof x === 'string') : def.disabledItems,
-        kancolle: typeof o.kancolle === 'boolean' ? o.kancolle : def.kancolle,
+        // 旧 kancolle(boolean) からの移行: false なら ['kancolle'] を除外に。
+        excludedThemes: Array.isArray(o.excludedThemes)
+          ? o.excludedThemes.filter((x: unknown) => typeof x === 'string')
+          : o.kancolle === false ? ['kancolle'] : def.excludedThemes,
       };
     }
   } catch { /* localStorage 不可環境は既定値 */ }
@@ -297,7 +300,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [cfgDisabledItems, setCfgDisabledItems] = useState<ItemType[]>(initialCfg.disabledItems);
   const disabledItemsRef = useRef<Set<ItemType>>(new Set(initialCfg.disabledItems));
   useEffect(() => { disabledItemsRef.current = new Set(cfgDisabledItems); }, [cfgDisabledItems]);
-  const [cfgKancolle, setCfgKancolle] = useState(initialCfg.kancolle);
+  const [cfgExcluded, setCfgExcluded] = useState<string[]>(initialCfg.excludedThemes);
   // 自作テーマ（語句のグループ）。出題テーマとして個別に選べるようにする。
   const [customGroups, setCustomGroups] = useState<string[]>(() => loadCustomGroups());
   // 結果画面などタイトル以外からカスタム設定オーバーレイを開くためのフラグ。
@@ -311,10 +314,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         initial: cfgInitial, min: cfgMin, accel: cfgAccel, theme, hp: cfgHp, enemies: cfgEnemies, cpuStr: cfgCpuStr,
         treasureRate: cfgTreasureRate, attackGauge: cfgAttackGauge, attackCap: cfgAttackCap, comboStep: cfgComboStep,
         badgeCap: cfgBadgeCap, badgeRate: cfgBadgeRate, gaugeMode: cfgGaugeMode, gaugeChars: cfgGaugeChars, comeback: cfgComeback,
-        autoFull: cfgAutoFull, use: cfgUse, itemsOn: cfgItemsOn, disabledItems: cfgDisabledItems, kancolle: cfgKancolle,
+        autoFull: cfgAutoFull, use: cfgUse, itemsOn: cfgItemsOn, disabledItems: cfgDisabledItems, excludedThemes: cfgExcluded,
       }));
     } catch { /* 保存不可環境は無視 */ }
-  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgGaugeMode, cfgGaugeChars, cfgComeback, cfgAutoFull, cfgUse, cfgItemsOn, cfgDisabledItems, cfgKancolle]);
+  }, [cfgInitial, cfgMin, cfgAccel, theme, cfgHp, cfgEnemies, cfgCpuStr, cfgTreasureRate, cfgAttackGauge, cfgAttackCap, cfgComboStep, cfgBadgeCap, cfgBadgeRate, cfgGaugeMode, cfgGaugeChars, cfgComeback, cfgAutoFull, cfgUse, cfgItemsOn, cfgDisabledItems, cfgExcluded]);
   const attackCapRef = useRef(initialCfg.attackCap);
   const comboStepRef = useRef(initialCfg.comboStep);
   const badgeCapRef = useRef(initialCfg.badgeCap);
@@ -742,7 +745,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const startGame = useCallback(() => {
     setSettingsOpen(false); // 設定オーバーレイを閉じる（結果画面から開いていた場合）
     setExtraWords(loadCustomWords()); // 端末の追加語句を出題プールへ（オンラインで上書きされていても戻す）
-    setExcludedThemes(cfgKancolle ? [] : ['kancolle']); // 艦これOFFなら全語彙から除外
+    setExcludedThemes(cfgExcluded); // OFFにしたテーマを「すべて」出題から除外
     const newSeed = randomSeed();
     const wordRng = mulberry32(newSeed);
     const itemRng = mulberry32((newSeed ^ 0x9e3779b9) >>> 0);
@@ -806,7 +809,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       }),
     );
     sfx.start();
-  }, [cfgInitial, cfgMin, cfgAccel, cfgHp, cfgEnemies, cfgCpuStr, cfgAttackGauge, cfgKancolle, updatePending, nextWord]);
+  }, [cfgInitial, cfgMin, cfgAccel, cfgHp, cfgEnemies, cfgCpuStr, cfgAttackGauge, cfgExcluded, updatePending, nextWord]);
 
   const gameOver = useCallback(() => {
     setGameState('gameover');
@@ -1908,15 +1911,28 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                     );
                   })}
                 </div>
-                {/* 「すべて」出題に艦これ語を含めるか（多すぎる時はOFF） */}
-                <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-gray-400">
-                  <span>「すべて」に艦これ⚓を含める</span>
-                  {([[true, 'あり'], [false, 'なし']] as const).map(([on, lbl]) => (
-                    <button key={String(on)} onClick={() => setCfgKancolle(on)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgKancolle === on ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
-                      {lbl}
-                    </button>
-                  ))}
+                {/* 「すべて」出題に各テーマを含めるか（OFFにしたテーマは混ざらない） */}
+                <div className="mt-3">
+                  <div className="text-[11px] text-gray-500 text-center mb-1">「すべて」に含めるテーマ（OFFで除外）</div>
+                  <div className="flex flex-wrap gap-1 justify-center">
+                    {THEMES.filter((t) => t.id !== 'all' && t.id !== 'custom').map((t) => {
+                      const off = cfgExcluded.includes(t.id);
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => setCfgExcluded((prev) => off ? prev.filter((x) => x !== t.id) : [...prev, t.id])}
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${off ? 'bg-neutral-800 text-gray-600 line-through' : 'bg-cyan-700/70 text-white'}`}
+                          title={off ? '「すべて」に含めない' : '「すべて」に含める'}
+                        >
+                          {t.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-2 justify-center mt-1">
+                    <button onClick={() => setCfgExcluded([])} className="text-[9px] text-cyan-400 hover:text-cyan-300 underline">全部含める</button>
+                    <button onClick={() => setCfgExcluded(THEMES.filter((t) => t.id !== 'all' && t.id !== 'custom').map((t) => t.id))} className="text-[9px] text-gray-500 hover:text-gray-300 underline">全部除外</button>
+                  </div>
                 </div>
               </div>
 

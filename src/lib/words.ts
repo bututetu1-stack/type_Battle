@@ -1083,9 +1083,20 @@ export function poolForThemes(theme: string = 'all'): WordEntry[] {
   // シード同期が崩れないようにする。除外テーマ(EXCLUDED_THEMES)がある場合はそれを抜く。
   if (ids.length === 0 || ids.includes('all')) {
     if (EXCLUDED_THEMES.size === 0) return [...ALL_POOL, ...EXTRA_WORDS];
+    // 除外テーマに属する語のキーを集める。テーマ語は WORD_POOL にも重複し得るため、
+    // テーマのプールをスキップするだけでは消えない。キー単位で最終プールから除外する。
+    const exKeys = new Set<string>();
+    for (const tid of EXCLUDED_THEMES) {
+      const p = THEME_POOLS[tid];
+      if (p) for (const e of p) exKeys.add(e.display + '|' + e.reading);
+    }
     const out: WordEntry[] = [];
     const seen = new Set<string>();
-    const push = (e: WordEntry) => { const k = e.display + '|' + e.reading; if (!seen.has(k)) { seen.add(k); out.push(e); } };
+    const push = (e: WordEntry) => {
+      const k = e.display + '|' + e.reading;
+      if (seen.has(k) || exKeys.has(k)) return;
+      seen.add(k); out.push(e);
+    };
     WORD_POOL.forEach(push);
     for (const [tid, pool] of Object.entries(THEME_POOLS)) if (!EXCLUDED_THEMES.has(tid)) pool.forEach(push);
     EXTRA_WORDS.forEach(push);
