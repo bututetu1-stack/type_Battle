@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { X, Plus, Trash2, BookPlus, FolderPlus } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { X, Plus, Trash2, BookPlus, FolderPlus, FolderInput } from 'lucide-react';
 import { validReading, sanitizeGroupName, type CustomWord } from '../lib/customwords';
 
 interface Props {
@@ -24,7 +24,11 @@ export default function WordEditor({ words, onChange, onClose, title = '語句�
   const [err, setErr] = useState('');
   const [active, setActive] = useState<string>(ALL); // 表示中／追加先テーマ
   const [newGroup, setNewGroup] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set()); // 複数選択（key=display|reading）
+  const [moveTarget, setMoveTarget] = useState(''); // 一括移動先テーマ（''=未分類）
   const displayRef = useRef<HTMLInputElement>(null);
+  const draggingRef = useRef(false);
+  const dragModeRef = useRef<'add' | 'remove'>('add');
 
   const grouping = !!groups; // テーマ分け機能の有効/無効
   const groupList = groups ?? [];
@@ -45,8 +49,33 @@ export default function WordEditor({ words, onChange, onClose, title = '語句�
   };
 
   const remove = (w: CustomWord) => onChange(words.filter((x) => x !== w));
-  const reassign = (w: CustomWord, g: string) =>
-    onChange(words.map((x) => (x === w ? { display: x.display, reading: x.reading, ...(g ? { group: g } : {}) } : x)));
+
+  // --- 複数選択（チェックボックス＋ドラッグ）でテーマ一括移動・一括削除 ---
+  const keyOf = (w: CustomWord) => `${w.display}|${w.reading}`;
+  const applySel = (k: string, mode: 'add' | 'remove') =>
+    setSelected((prev) => { const n = new Set(prev); if (mode === 'add') n.add(k); else n.delete(k); return n; });
+  const toggleOne = (w: CustomWord) =>
+    setSelected((prev) => { const n = new Set(prev); const k = keyOf(w); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const startDrag = (w: CustomWord) => {
+    const k = keyOf(w);
+    dragModeRef.current = selected.has(k) ? 'remove' : 'add';
+    draggingRef.current = true;
+    applySel(k, dragModeRef.current);
+  };
+  const dragOver = (w: CustomWord) => { if (draggingRef.current) applySel(keyOf(w), dragModeRef.current); };
+  useEffect(() => {
+    const up = () => { draggingRef.current = false; };
+    window.addEventListener('pointerup', up);
+    return () => window.removeEventListener('pointerup', up);
+  }, []);
+  const moveSelected = (g: string) => {
+    onChange(words.map((w) => (selected.has(keyOf(w)) ? { display: w.display, reading: w.reading, ...(g ? { group: g } : {}) } : w)));
+    setSelected(new Set());
+  };
+  const deleteSelected = () => {
+    onChange(words.filter((w) => !selected.has(keyOf(w))));
+    setSelected(new Set());
+  };
 
   const addGroup = () => {
     const name = sanitizeGroupName(newGroup);
@@ -72,6 +101,12 @@ export default function WordEditor({ words, onChange, onClose, title = '語句�
   });
 
   const groupCount = (g: string) => words.filter((w) => (g === NONE ? !w.group : w.group === g)).length;
+
+  const multi = grouping && !readOnly; // 複数選択UIの有効/無効
+  const visibleKeys = visible.map(keyOf);
+  const allVisSelected = visibleKeys.length > 0 && visibleKeys.every((k) => selected.has(k));
+  const selectAllVisible = () =>
+    setSelected((prev) => { const n = new Set(prev); if (allVisSelected) visibleKeys.forEach((k) => n.delete(k)); else visibleKeys.forEach((k) => n.add(k)); return n; });
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
@@ -168,39 +203,81 @@ export default function WordEditor({ words, onChange, onClose, title = '語句�
           </div>
         )}
 
-        <div className="text-xs text-gray-500 mb-1.5">追加済み（{visible.length}{grouping && active !== ALL ? ` / 全${words.length}` : ''}）</div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs text-gray-500">追加済み（{visible.length}{grouping && active !== ALL ? ` / 全${words.length}` : ''}）</span>
+          {multi && visible.length > 0 && (
+            <label className="flex items-center gap-1 text-[10px] text-gray-400 cursor-pointer select-none">
+              <input type="checkbox" checked={allVisSelected} onChange={selectAllVisible} className="accent-fuchsia-500" />
+              表示中を全選択
+            </label>
+          )}
+        </div>
+
+        {/* 一括操作バー（1件以上選択時）：テーマへ移動／削除 */}
+        {multi && selected.size > 0 && (
+          <div className="flex items-center gap-1.5 mb-2 bg-fuchsia-950/40 border border-fuchsia-700/40 rounded-lg px-2 py-1.5">
+            <span className="text-[11px] text-fuchsia-200 font-bold shrink-0">{selected.size}件</span>
+            <select
+              value={moveTarget}
+              onChange={(e) => setMoveTarget(e.target.value)}
+              className="bg-neutral-800 border border-white/10 rounded px-1 py-0.5 text-[10px] text-gray-200 outline-none focus:border-fuchsia-500 min-w-0 flex-1"
+            >
+              <option value="">未分類</option>
+              {groupList.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
+            </select>
+            <button onClick={() => moveSelected(moveTarget)} className="bg-fuchsia-600 hover:bg-fuchsia-500 rounded px-2 py-0.5 text-[10px] font-bold flex items-center gap-0.5 shrink-0">
+              <FolderInput className="w-3 h-3" />移動
+            </button>
+            <button onClick={deleteSelected} className="text-gray-400 hover:text-red-400 shrink-0" title="選択した語句を削除">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => setSelected(new Set())} className="text-[10px] text-gray-500 hover:text-gray-300 underline shrink-0">解除</button>
+          </div>
+        )}
+
         {visible.length === 0 ? (
           <p className="text-[11px] text-gray-600 py-4 text-center">まだ追加された語句はありません</p>
         ) : (
+          <>
+          {multi && <p className="text-[9px] text-gray-600 mb-1">チェック または 行をドラッグでまとめて選択 → 上のバーでテーマ移動</p>}
           <div className="bg-neutral-950/40 rounded-xl divide-y divide-white/5 max-h-64 overflow-y-auto">
-            {visible.map((w, i) => (
-              <div key={`${w.display}|${w.reading}|${i}`} className="flex items-center justify-between gap-2 px-3 py-2">
-                <span className="min-w-0">
-                  <span className="text-sm text-white font-bold">{w.display}</span>
-                  <span className="text-[11px] text-gray-500 ml-2">{w.reading}</span>
-                </span>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {grouping && !readOnly && (
-                    <select
-                      value={w.group ?? ''}
-                      onChange={(e) => reassign(w, e.target.value)}
-                      className="bg-neutral-800 border border-white/10 rounded px-1 py-0.5 text-[10px] text-gray-300 outline-none focus:border-fuchsia-500 max-w-[6rem]"
-                    >
-                      <option value="">未分類</option>
-                      {groupList.map((g) => (
-                        <option key={g} value={g}>{g}</option>
-                      ))}
-                    </select>
+            {visible.map((w, i) => {
+              const sel = selected.has(keyOf(w));
+              return (
+              <div
+                key={`${w.display}|${w.reading}|${i}`}
+                className={`flex items-center justify-between gap-2 px-3 py-2 select-none ${sel ? 'bg-fuchsia-600/20' : ''}`}
+                onPointerDown={() => multi && startDrag(w)}
+                onPointerEnter={() => multi && dragOver(w)}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  {multi && (
+                    <input
+                      type="checkbox"
+                      checked={sel}
+                      onChange={() => toggleOne(w)}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      className="accent-fuchsia-500 shrink-0"
+                    />
                   )}
-                  {!readOnly && (
-                    <button onClick={() => remove(w)} className="text-gray-500 hover:text-red-400">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  <span className="min-w-0">
+                    <span className="text-sm text-white font-bold">{w.display}</span>
+                    <span className="text-[11px] text-gray-500 ml-2">{w.reading}</span>
+                    {grouping && w.group && <span className="text-[9px] text-fuchsia-300/70 ml-2">🗂{w.group}</span>}
+                  </span>
                 </div>
+                {!readOnly && (
+                  <button onPointerDown={(e) => e.stopPropagation()} onClick={() => remove(w)} className="text-gray-500 hover:text-red-400 shrink-0">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-            ))}
+              );
+            })}
           </div>
+          </>
         )}
 
         <div className="flex justify-end mt-4">
