@@ -216,6 +216,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
   const [score, setScore] = useState(0);
+  const [wordsCleared, setWordsCleared] = useState(0); // タイムアタックのクリア語数
   const [keysTyped, setKeysTyped] = useState(0);
   const [missCount, setMissCount] = useState(0); // ミスタイプ数（リザルト用）
   const [startTime, setStartTime] = useState<number | null>(null);
@@ -348,8 +349,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const cpuStrengthRef = useRef(initialCfg.cpuStr / 10); // 0..1 の目標強さ
   const treasureRateRef = useRef(initialCfg.treasureRate / 100); // お宝の基本出現率（0..1）
   useEffect(() => { treasureRateRef.current = cfgTreasureRate / 100; }, [cfgTreasureRate]);
-  const itemsOnRef = useRef(initialCfg.itemsOn); // アイテムON/OFF（OFFならお宝もアイテムも出さない）
-  useEffect(() => { itemsOnRef.current = cfgItemsOn; }, [cfgItemsOn]);
+  // アイテムON/OFF（OFFならお宝もアイテムも出さない）。タイムアタックは寿司打式で常にOFF。
+  const itemsOnRef = useRef(initialCfg.itemsOn && initialCfg.soloMode !== 'timeattack');
+  useEffect(() => { itemsOnRef.current = cfgItemsOn && soloMode !== 'timeattack'; }, [cfgItemsOn, soloMode]);
   // ゲーム中に参照するための ref（設定はスタート画面で変える想定）。
   const autoFullRef = useRef(cfgAutoFull);
   const useModeRef = useRef(cfgUse);
@@ -781,6 +783,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setCombo(0);
     setMaxCombo(0);
     setScore(0);
+    setWordsCleared(0);
     setKeysTyped(0);
     setMissCount(0);
     setPlayerKOs(0);
@@ -883,7 +886,16 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setTimeout(() => setMissFlash(false), 150);
       } else if (result.wordCleared && result.nextState) {
         const newCombo = result.nextState.combo;
-        setBacklog(result.nextState.backlog);
+        // 寿司打式タイムアタックは時限供給を使わないので、クリアごとに山を3件へ補充して
+        // 「次々お題が流れてくる」状態を保つ（プレビュー込みで途切れない）。
+        if (soloModeRef.current === 'timeattack') {
+          const next = [...result.nextState.backlog];
+          while (next.length < 3 && wordRngRef.current) next.push(nextWord());
+          setBacklog(next);
+          setWordsCleared((n) => n + 1);
+        } else {
+          setBacklog(result.nextState.backlog);
+        }
         setTokenIndex(0);
         setCurrentTyping('');
         setTypedRomaji([]); // 次のワードへ：実打綴りをリセット
@@ -1108,8 +1120,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   }, [dummies, gameState]);
 
   // --- ベース供給＆加速ループ ---
+  // タイムアタックは時限供給・加速を使わず、クリアごとの補充だけで流す（山が積み上がらない）。
   useEffect(() => {
-    if (gameState !== 'playing') return;
+    if (gameState !== 'playing' || soloMode === 'timeattack') return;
     let timerId: ReturnType<typeof setTimeout>;
     const loop = () => {
       const now = Date.now();
@@ -1136,7 +1149,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     };
     timerId = setTimeout(loop, spawnInterval);
     return () => clearTimeout(timerId);
-  }, [gameState, spawnInterval, gameOver, overflowProtect, nextWord]);
+  }, [gameState, soloMode, spawnInterval, gameOver, overflowProtect, nextWord]);
 
   // --- カウントダウン描画用の時刻ティック ---
   useEffect(() => {
@@ -1541,7 +1554,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <div className="shrink-0 w-full flex flex-col items-center">
               {/* アイテムスロット（攻撃/防御/妨害）。入力方式に応じて選択強調 or 割当キーを表示。
                   アイテムOFFのときはスロットを表示しない。 */}
-              {gameState === 'playing' && cfgItemsOn && (
+              {gameState === 'playing' && cfgItemsOn && soloMode !== 'timeattack' && (
                 <div className="flex flex-col items-center gap-1">
                   <div className="flex justify-center gap-2">
                     {CAT_META.map((c) => {
@@ -1610,7 +1623,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               </div>
             )}
 
-            {/* 自分のバックログ（処理待ち）。満タンでトップアウト＝敗北。 */}
+            {/* 自分のバックログ（処理待ち）。満タンでトップアウト＝敗北。タイムアタックでは非表示。 */}
+            {soloMode !== 'timeattack' && (
             <div className="w-full max-w-lg mt-4">
               <div className="text-[10px] text-gray-500 mb-0.5">自分のバックログ（満タンで脱落）</div>
               <div className="flex gap-1">
@@ -1624,6 +1638,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 ))}
               </div>
             </div>
+            )}
 
             {soloMode !== 'timeattack' && (
             <div className="mt-3">
@@ -1673,7 +1688,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 )}
               </div>
 
-              {/* カスタム設定（ソロは常に設定変更可能） */}
+              {/* カスタム設定（戦闘チューニング）。タイムアタックは寿司打式なので非表示。 */}
+              {soloMode !== 'timeattack' && (
               <div className="mb-6 w-full max-w-sm bg-neutral-900/60 border border-amber-700/40 rounded-xl p-4">
                   <div className="text-xs text-amber-300 font-bold mb-3 flex items-center gap-1">
                     <Zap className="w-3.5 h-3.5" /> カスタム設定
@@ -1959,6 +1975,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                     )}
                   </div>
                 </div>
+              )}
 
               {/* 出題テーマ選択（複数選択可。「すべて」を選ぶと全語彙） */}
               <div className="mb-6 w-full max-w-sm">
@@ -2124,11 +2141,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               <p className="text-indigo-200 mb-8">{cfgTaSeconds}秒タイムアタック終了！</p>
               <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-8 border border-indigo-500/30">
                 <Stat label="SCORE" value={score} />
+                <Stat label="語数" value={wordsCleared} />
                 <Stat label="MAX COMBO" value={maxCombo} />
                 <Stat label="KPM" value={calculateKPM()} />
-                <Stat label="正タイプ" value={keysTyped} />
-                <Stat label="ミス" value={missCount} />
                 <Stat label="正確率" value={keysTyped + missCount > 0 ? Math.round((keysTyped / (keysTyped + missCount)) * 100) : 100} suffix="%" />
+                <Stat label="ミス" value={missCount} />
               </div>
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
               <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
