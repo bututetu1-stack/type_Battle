@@ -34,8 +34,12 @@ const CFG_KEY = 'typeRoyale.custom'; // カスタム設定の保存キー
 
 const FREEZE_DURATION = 5000; // フリーズ（着弾予告と自動供給を停止）の効果時間
 const DAZZLE_DURATION = 8000; // 視認性低下（お題パネルをゲーミング化）の効果時間
-const TIME_GAUGE_FULL = 30; // タイムアタック: 時間延長ゲージ満タンに必要な「ノーミスでクリアした読み文字数」
-const TIME_BONUS_SEC = 5; // タイムアタック: ゲージ満タンで追加される秒数
+// タイムアタックの「連打メーター」: ノーミス打鍵数で貯まり、区切りごとに時間追加。
+// ミス または 満タン(=最後の区切り到達)でメーターはリセット。
+const TA_STREAK_MAX = 120; // 連打メーター満タンに必要なノーミス打鍵数
+const TA_MILESTONES: { at: number; sec: number }[] = [
+  { at: 30, sec: 1 }, { at: 60, sec: 1 }, { at: 90, sec: 2 }, { at: 120, sec: 3 },
+]; // 30打ごとに区切り。到達でその秒数を追加（1/1/2/3秒）。
 
 // 時間制限つきアイテムの効果時間（カウントダウンゲージ用）。
 const ITEM_DURATION: Partial<Record<ItemType, number>> = {
@@ -316,10 +320,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const soloModeRef = useRef(soloMode);
   useEffect(() => { soloModeRef.current = soloMode; }, [soloMode]);
   const [timeLeft, setTimeLeft] = useState(0); // タイムアタック残り秒
-  // タイムアタックのノーミス時間延長ゲージ。クリアした読み文字数を貯め、満タンで時間ボーナス。
-  const timeGaugeRef = useRef(0);
+  // タイムアタックの連打メーター。連続ノーミス打鍵数を貯め、区切りごとに時間追加。
+  const timeStreakRef = useRef(0); // 連続ノーミス打鍵数（0..TA_STREAK_MAX）
   const [timeGauge, setTimeGauge] = useState(0); // 0..1 描画用
-  const [timeBonusFlash, setTimeBonusFlash] = useState(0); // ボーナス演出（+5s）の表示終了時刻
+  const [timeBonusFlash, setTimeBonusFlash] = useState(0); // ボーナス演出の表示終了時刻
+  const [timeBonusAmt, setTimeBonusAmt] = useState(0); // 直近に追加された秒数（演出用）
   // 自作テーマ（語句のグループ）。出題テーマとして個別に選べるようにする。
   const [customGroups, setCustomGroups] = useState<string[]>(() => loadCustomGroups());
   // 結果画面などタイトル以外からカスタム設定オーバーレイを開くためのフラグ。
@@ -388,6 +393,24 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const w = generateWord(rng, themeRef.current, bagRef.current, false, itemsOnRef.current ? treasureRateRef.current : 0, treasureBoostRef.current);
     // タイムアタックは寿司打式：お宝もおじゃまも無し、全て通常単語にする。
     return soloModeRef.current === 'timeattack' ? { ...w, type: 'normal' } : w;
+  }, []);
+
+  // タイムアタック: ノーミス打鍵1回ぶん連打メーターを進める。区切り到達で時間追加、
+  // 満タン(最後の区切り)でメーターをリセット。
+  const taType = useCallback(() => {
+    if (soloModeRef.current !== 'timeattack') return;
+    const prev = timeStreakRef.current;
+    const cur = prev + 1;
+    let bonus = 0;
+    for (const m of TA_MILESTONES) if (prev < m.at && cur >= m.at) bonus += m.sec;
+    if (bonus > 0) {
+      setTimeLeft((t) => t + bonus);
+      setTimeBonusAmt(bonus);
+      setTimeBonusFlash(Date.now() + 1100);
+      sfx.clear();
+    }
+    if (cur >= TA_STREAK_MAX) { timeStreakRef.current = 0; setTimeGauge(0); }
+    else { timeStreakRef.current = cur; setTimeGauge(cur / TA_STREAK_MAX); }
   }, []);
   const pendingRef = useRef<Telegraph[]>([]);
   const updatePending = useCallback((next: Telegraph[]) => {
@@ -792,7 +815,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setMaxCombo(0);
     setScore(0);
     setWordsCleared(0);
-    timeGaugeRef.current = 0;
+    timeStreakRef.current = 0;
     setTimeGauge(0);
     setTimeBonusFlash(0);
     setKeysTyped(0);
@@ -895,8 +918,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setRomajiHint(true); // ミスしたらこのワードはローマ字を表示（次のワードで消える）
         sfx.miss();
         setTimeout(() => setMissFlash(false), 150);
-        // タイムアタック: ノーミス連続でないと時間が伸びない。ミスでゲージをリセット。
-        if (soloModeRef.current === 'timeattack') { timeGaugeRef.current = 0; setTimeGauge(0); }
+        // タイムアタック: ノーミス連続でないと時間が伸びない。ミスで連打メーターをリセット。
+        if (soloModeRef.current === 'timeattack') { timeStreakRef.current = 0; setTimeGauge(0); }
       } else if (result.wordCleared && result.nextState) {
         const newCombo = result.nextState.combo;
         // 寿司打式タイムアタックは時限供給を使わないので、クリアごとに山を3件へ補充して
@@ -906,16 +929,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           while (next.length < 3 && wordRngRef.current) next.push(nextWord());
           setBacklog(next);
           setWordsCleared((n) => n + 1);
-          // ノーミス時間延長ゲージ: クリアした読み文字数を貯め、満タンで時間ボーナス＋リセット。
-          const chars = stateRef.current.backlog[0]?.reading.length || 1;
-          timeGaugeRef.current += chars;
-          if (timeGaugeRef.current >= TIME_GAUGE_FULL) {
-            timeGaugeRef.current -= TIME_GAUGE_FULL; // 余りは次へ持ち越し
-            setTimeLeft((t) => t + TIME_BONUS_SEC);
-            setTimeBonusFlash(Date.now() + 1000);
-            sfx.clear();
-          }
-          setTimeGauge(Math.min(1, timeGaugeRef.current / TIME_GAUGE_FULL));
+          taType(); // この打鍵（語の最後の1打）も連打メーターに加算
         } else {
           setBacklog(result.nextState.backlog);
         }
@@ -953,6 +967,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setCurrentTyping(result.nextState.currentTyping);
         if (result.typed) setTypedRomaji((tr) => { const n = [...tr]; for (const x of result.typed!) n[x.index] = x.romaji; return n; });
         setKeysTyped((prev) => prev + 1);
+        taType(); // ノーミス打鍵を連打メーターへ加算
         sfx.type();
       }
     };
@@ -1454,7 +1469,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             )}
 
             {/* ログ（ALIVEの下・入力の右側の空白を使用）。上＝アイテム使用 / 下＝攻撃・撃破 */}
-            {gameState === 'playing' && (
+            {gameState === 'playing' && soloMode !== 'timeattack' && (
               <div className="absolute top-16 right-0 w-40 z-20 flex flex-col gap-2 pointer-events-none">
                 <div>
                   <div className="text-[9px] font-bold text-yellow-300/80 mb-0.5 text-right">アイテム使用</div>
@@ -1525,6 +1540,38 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             {/* お題エリア（固定高さ）。お題の有無・長短や効果ゲージ増減でレイアウトが動かない。 */}
             <div className="shrink-0 h-2" />
 
+            {/* タイムアタック: 残り時間（大）＋連打メーター。予告お題の上に配置。 */}
+            {gameState === 'playing' && soloMode === 'timeattack' && (
+              <div className="shrink-0 w-full max-w-lg mb-3 flex items-center gap-4">
+                <div className="shrink-0 flex items-baseline gap-1">
+                  <span className="text-sm text-gray-400">残り</span>
+                  <span className={`font-mono font-black leading-none ${timeLeft <= 10 ? 'text-red-400 animate-pulse' : 'text-cyan-300'} text-5xl drop-shadow-[0_0_12px_rgba(34,211,238,0.5)]`}>{timeLeft}</span>
+                  <span className="text-lg text-gray-500">秒</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 text-[11px] text-amber-300 font-bold mb-0.5">
+                    連打メーター
+                    {timeBonusFlash > nowTick && <span className="text-amber-300 animate-bounce">+{timeBonusAmt}秒！</span>}
+                  </div>
+                  {/* バー本体（ノーミス打鍵で伸びる）＋区切り線 */}
+                  <div className="relative h-4 w-full rounded bg-neutral-800 border border-white/10 overflow-hidden">
+                    <div className="h-full rounded bg-gradient-to-r from-cyan-500 via-emerald-400 to-amber-400 transition-[width] duration-100" style={{ width: `${Math.round(timeGauge * 100)}%` }} />
+                    {TA_MILESTONES.slice(0, -1).map((m) => (
+                      <div key={m.at} className="absolute top-0 bottom-0 w-px bg-neutral-900/70" style={{ left: `${(m.at / TA_STREAK_MAX) * 100}%` }} />
+                    ))}
+                  </div>
+                  {/* 区切りごとの追加秒ラベル（画像の 1秒追加/1秒追加/2秒追加/3秒追加） */}
+                  <div className="relative h-3.5">
+                    {TA_MILESTONES.map((m) => (
+                      <span key={m.at} className="absolute text-[9px] font-bold text-red-400 whitespace-nowrap" style={{ left: `${(m.at / TA_STREAK_MAX) * 100}%`, transform: 'translateX(-90%)' }}>
+                        {m.sec}秒追加↑
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 次のお題プレビュー（固定高さ）。直近の次のお題を常にお題カード直上（下端）に表示。 */}
             <div className="shrink-0 w-full max-w-lg h-14 flex flex-col justify-end gap-1 overflow-hidden mb-2">
               {backlog
@@ -1548,25 +1595,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 ))}
             </div>
 
-            {/* タイムアタック: 残り時間を大きく表示＋ノーミス時間延長ゲージ（寿司打式）。 */}
-            {gameState === 'playing' && soloMode === 'timeattack' && (
-              <div className="shrink-0 w-full max-w-lg mb-2">
-                <div className="flex items-end justify-center gap-3">
-                  <div className={`font-mono font-black leading-none ${timeLeft <= 10 ? 'text-red-400 animate-pulse' : 'text-cyan-300'} text-6xl drop-shadow-[0_0_12px_rgba(34,211,238,0.5)]`}>
-                    {timeLeft}
-                    <span className="text-2xl text-gray-500 ml-1">秒</span>
-                  </div>
-                  {timeBonusFlash > nowTick && (
-                    <div className="text-2xl font-black text-amber-300 animate-bounce mb-1">+{TIME_BONUS_SEC}s</div>
-                  )}
-                </div>
-                {/* 時間延長ゲージ（ノーミスで貯まる。満タンで +{TIME_BONUS_SEC}s） */}
-                <div className="mt-1 h-3 w-full rounded-full bg-neutral-800 overflow-hidden border border-white/10">
-                  <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-amber-400 transition-[width] duration-150" style={{ width: `${Math.round(timeGauge * 100)}%` }} />
-                </div>
-                <div className="text-[10px] text-gray-500 text-center mt-0.5">ノーミスで打つほど時間延長ゲージUP（満タンで +{TIME_BONUS_SEC}秒）</div>
-              </div>
-            )}
 
             {/* お題カード（固定高さ・中央寄せ）。プレビューと同じ max-w-lg 中央寄せで横位置を揃える。
                 着弾予告ゲージはカードの左隣に絶対配置し、カードの中央位置に影響させない。 */}
