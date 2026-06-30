@@ -54,6 +54,26 @@ export default function CurrentWord({ word, tokenIndex, currentTyping, accent = 
       </div>
       )}
 
+      {/* 漢字のみ(none)モード: 読みは隠したまま、何文字打ったかだけ●で示す進捗表示。 */}
+      {readingMode === 'none' && (
+        <div className="flex flex-wrap justify-center items-center gap-1.5 mb-3 min-h-[1.6em]">
+          {word.tokens.map((_, i) => (
+            <span
+              key={i}
+              className={`text-base leading-none ${
+                i < tokenIndex
+                  ? 'text-cyan-300 drop-shadow-[0_0_5px_rgba(34,211,238,0.6)]'
+                  : i === tokenIndex
+                    ? 'text-cyan-500/70'
+                    : 'text-gray-600'
+              }`}
+            >
+              {i === tokenIndex ? '◉' : '●'}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* ローマ字ガイド: 入力済みは薄く残し、次に打つ1文字だけを強調する。
           「ミス時のみ表示」モードでは romajiVisible=false の間は高さだけ確保して隠す。
           readingMode='none'（漢字のみ）の時はローマ字も隠して完全に読みを伏せる。 */}

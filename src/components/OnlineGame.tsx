@@ -1234,7 +1234,18 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               const targets = Object.entries(playersRef.current).filter(([tid, tp]) => tid !== id && isLive(tp));
               if (targets.length > 0) {
                 const t = targets[Math.floor(Math.random() * targets.length)];
-                sendAttack(roomId, t[0], id, Math.min(atkCap, 1 + Math.floor(s.combo / cStep)));
+                const amt = Math.min(atkCap, 1 + Math.floor(s.combo / cStep));
+                // アイテムON時は低確率でCPUもアイテムを使用（無効化アイテムは送らない）。
+                const canDazzle = itemsOnRef.current && !disabledItemsRef.current.has('dazzle');
+                const canLong = itemsOnRef.current && !disabledItemsRef.current.has('longbomb');
+                const roll = Math.random();
+                if (canDazzle && roll < 0.06) {
+                  sendAttack(roomId, t[0], id, 0, undefined, 'dazzle'); // 視認性低下
+                } else if (canLong && roll < 0.10) {
+                  sendAttack(roomId, t[0], id, 1, randomLongWord()); // 長文おじゃま
+                } else {
+                  sendAttack(roomId, t[0], id, amt);
+                }
               }
             }
           }

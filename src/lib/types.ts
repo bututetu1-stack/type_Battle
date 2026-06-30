@@ -1,6 +1,6 @@
 // アプリ全体で共有する型定義。
 
-export type GameStatus = 'start' | 'playing' | 'gameover' | 'win';
+export type GameStatus = 'start' | 'playing' | 'gameover' | 'win' | 'timeup';
 
 export type WordType = 'normal' | 'ojama' | 'treasure';
 
