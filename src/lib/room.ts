@@ -52,6 +52,11 @@ export interface RoomPlayer {
   combo: number;
   kpm: number;
   badges: number;
+  // 総合スコア順位用の集計値（試合終了時に書き込む）。
+  score?: number; // タイピング数・正確率・KPSを合成した独自スコア
+  keys?: number; // 総打鍵（正タイプ数）
+  kps?: number; // 秒間打鍵数（小数1桁）
+  acc?: number; // 正確率（0..1）
   rank: number; // 脱落時に確定（0=未確定）
   koBy: string; // 自分にトドメを刺した相手の uid（KOクレジット用）
   lastItem: string; // 直近に使用したアイテム種別（演出用）
@@ -190,6 +195,7 @@ export function writePlayerSummary(
   uid: string,
   summary: Partial<
     Pick<RoomPlayer, 'backlog' | 'combo' | 'kpm' | 'badges' | 'alive' | 'rank' | 'koBy' | 'lastItem' | 'itemAt' | 'hasLong' | 'boardImg'
+      | 'score' | 'keys' | 'kps' | 'acc'
       | 'curDisplay' | 'curReading' | 'curIdx' | 'curTyping' | 'curRomaji' | 'curRomajiDone'>
   >,
 ): void {
