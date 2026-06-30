@@ -34,6 +34,8 @@ const CFG_KEY = 'typeRoyale.custom'; // カスタム設定の保存キー
 
 const FREEZE_DURATION = 5000; // フリーズ（着弾予告と自動供給を停止）の効果時間
 const DAZZLE_DURATION = 8000; // 視認性低下（お題パネルをゲーミング化）の効果時間
+const TIME_GAUGE_FULL = 30; // タイムアタック: 時間延長ゲージ満タンに必要な「ノーミスでクリアした読み文字数」
+const TIME_BONUS_SEC = 5; // タイムアタック: ゲージ満タンで追加される秒数
 
 // 時間制限つきアイテムの効果時間（カウントダウンゲージ用）。
 const ITEM_DURATION: Partial<Record<ItemType, number>> = {
@@ -314,6 +316,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const soloModeRef = useRef(soloMode);
   useEffect(() => { soloModeRef.current = soloMode; }, [soloMode]);
   const [timeLeft, setTimeLeft] = useState(0); // タイムアタック残り秒
+  // タイムアタックのノーミス時間延長ゲージ。クリアした読み文字数を貯め、満タンで時間ボーナス。
+  const timeGaugeRef = useRef(0);
+  const [timeGauge, setTimeGauge] = useState(0); // 0..1 描画用
+  const [timeBonusFlash, setTimeBonusFlash] = useState(0); // ボーナス演出（+5s）の表示終了時刻
   // 自作テーマ（語句のグループ）。出題テーマとして個別に選べるようにする。
   const [customGroups, setCustomGroups] = useState<string[]>(() => loadCustomGroups());
   // 結果画面などタイトル以外からカスタム設定オーバーレイを開くためのフラグ。
@@ -379,7 +385,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // 出題バッグから次の単語を生成（全語を1巡するまで重複しない）。
   const nextWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    return generateWord(rng, themeRef.current, bagRef.current, false, itemsOnRef.current ? treasureRateRef.current : 0, treasureBoostRef.current);
+    const w = generateWord(rng, themeRef.current, bagRef.current, false, itemsOnRef.current ? treasureRateRef.current : 0, treasureBoostRef.current);
+    // タイムアタックは寿司打式：お宝もおじゃまも無し、全て通常単語にする。
+    return soloModeRef.current === 'timeattack' ? { ...w, type: 'normal' } : w;
   }, []);
   const pendingRef = useRef<Telegraph[]>([]);
   const updatePending = useCallback((next: Telegraph[]) => {
@@ -784,6 +792,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setMaxCombo(0);
     setScore(0);
     setWordsCleared(0);
+    timeGaugeRef.current = 0;
+    setTimeGauge(0);
+    setTimeBonusFlash(0);
     setKeysTyped(0);
     setMissCount(0);
     setPlayerKOs(0);
@@ -884,6 +895,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setRomajiHint(true); // ミスしたらこのワードはローマ字を表示（次のワードで消える）
         sfx.miss();
         setTimeout(() => setMissFlash(false), 150);
+        // タイムアタック: ノーミス連続でないと時間が伸びない。ミスでゲージをリセット。
+        if (soloModeRef.current === 'timeattack') { timeGaugeRef.current = 0; setTimeGauge(0); }
       } else if (result.wordCleared && result.nextState) {
         const newCombo = result.nextState.combo;
         // 寿司打式タイムアタックは時限供給を使わないので、クリアごとに山を3件へ補充して
@@ -893,6 +906,16 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           while (next.length < 3 && wordRngRef.current) next.push(nextWord());
           setBacklog(next);
           setWordsCleared((n) => n + 1);
+          // ノーミス時間延長ゲージ: クリアした読み文字数を貯め、満タンで時間ボーナス＋リセット。
+          const chars = stateRef.current.backlog[0]?.reading.length || 1;
+          timeGaugeRef.current += chars;
+          if (timeGaugeRef.current >= TIME_GAUGE_FULL) {
+            timeGaugeRef.current -= TIME_GAUGE_FULL; // 余りは次へ持ち越し
+            setTimeLeft((t) => t + TIME_BONUS_SEC);
+            setTimeBonusFlash(Date.now() + 1000);
+            sfx.clear();
+          }
+          setTimeGauge(Math.min(1, timeGaugeRef.current / TIME_GAUGE_FULL));
         } else {
           setBacklog(result.nextState.backlog);
         }
@@ -1524,6 +1547,26 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   </div>
                 ))}
             </div>
+
+            {/* タイムアタック: 残り時間を大きく表示＋ノーミス時間延長ゲージ（寿司打式）。 */}
+            {gameState === 'playing' && soloMode === 'timeattack' && (
+              <div className="shrink-0 w-full max-w-lg mb-2">
+                <div className="flex items-end justify-center gap-3">
+                  <div className={`font-mono font-black leading-none ${timeLeft <= 10 ? 'text-red-400 animate-pulse' : 'text-cyan-300'} text-6xl drop-shadow-[0_0_12px_rgba(34,211,238,0.5)]`}>
+                    {timeLeft}
+                    <span className="text-2xl text-gray-500 ml-1">秒</span>
+                  </div>
+                  {timeBonusFlash > nowTick && (
+                    <div className="text-2xl font-black text-amber-300 animate-bounce mb-1">+{TIME_BONUS_SEC}s</div>
+                  )}
+                </div>
+                {/* 時間延長ゲージ（ノーミスで貯まる。満タンで +{TIME_BONUS_SEC}s） */}
+                <div className="mt-1 h-3 w-full rounded-full bg-neutral-800 overflow-hidden border border-white/10">
+                  <div className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-amber-400 transition-[width] duration-150" style={{ width: `${Math.round(timeGauge * 100)}%` }} />
+                </div>
+                <div className="text-[10px] text-gray-500 text-center mt-0.5">ノーミスで打つほど時間延長ゲージUP（満タンで +{TIME_BONUS_SEC}秒）</div>
+              </div>
+            )}
 
             {/* お題カード（固定高さ・中央寄せ）。プレビューと同じ max-w-lg 中央寄せで横位置を揃える。
                 着弾予告ゲージはカードの左隣に絶対配置し、カードの中央位置に影響させない。 */}
