@@ -46,7 +46,7 @@ export default function Lobby({ uid, name, setName, onJoined, onBack }: LobbyPro
   };
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center justify-center p-6">
+    <div className="min-h-screen bg-transparent text-white flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-md">
         <button onClick={onBack} className="mb-6 text-gray-500 hover:text-gray-300 flex items-center gap-1 text-sm">
           <ArrowLeft className="w-4 h-4" /> 戻る

@@ -8,3 +8,14 @@ body,
   height: 100%;
   margin: 0;
 }
+
+/* ライトモード: 背景が明るいので、背景に直書きされた薄い文字色を暗くして可読性を確保する。
+   パネル（独自の暗い背景を持つカード）内の文字は対象外（暗カード＋明背景のレイアウトを維持）。 */
+body.theme-light h1 { color: #0f172a; }
+body.theme-light h2 { color: #1e293b; }
+/* 大見出し・サブ見出しなど、背景直書きで白系になりがちな箇所を暗色へ寄せる */
+body.theme-light .lt-on-bg { color: #1f2937 !important; }
+body.theme-light .lt-on-bg-sub { color: #475569 !important; }
+/* 半透明の暗パネルはライト背景だと薄まり白文字が読みにくいので、不透明な暗色にして
+   「明るい背景に暗いカード」のコントラストを確保する（中の白文字が映える）。 */
+body.theme-light .lt-solid { background-color: rgba(20, 22, 30, 0.95) !important; }

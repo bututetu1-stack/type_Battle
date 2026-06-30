@@ -1,6 +1,6 @@
 // アプリ全体で共有する型定義。
 
-export type GameStatus = 'start' | 'playing' | 'gameover' | 'win';
+export type GameStatus = 'start' | 'playing' | 'gameover' | 'win' | 'timeup';
 
 export type WordType = 'normal' | 'ojama' | 'treasure';
 
@@ -18,15 +18,67 @@ export interface Word {
   tokens: Token[];
 }
 
-// ダミープレイヤー（ソロ）の盤面。
+// ダミープレイヤー（ソロ＝CPU）の盤面。
 export interface Dummy {
   id: number;
   height: number;
   isKO: boolean;
+  name?: string;
+  combo?: number; // 表示用の連鎖（演出のみ）
+  lastItem?: ItemType; // 直近に使ったアイテム（演出用）
+  itemAt?: number; // 直近にアイテムを使った時刻
+  atk?: number; // プレイヤーを攻撃した回数（strongターゲット用）
+  str?: number; // CPUの強さ（0..1）。個体ごとに独立した思考・挙動の元
 }
 
 // お宝単語クリアで獲得できるアイテム種別。
-export type ItemType = 'shield' | 'clear' | 'brake' | 'longbomb' | 'rapid';
+export type ItemType =
+  | 'shield'
+  | 'clear'
+  | 'brake'
+  | 'longbomb'
+  | 'rapid'
+  | 'keep'
+  | 'shrink' // 溜まったワードを全て短い単語に変換
+  | 'parry' // 一定時間、被攻撃を他の相手に受け流す
+  | 'gaugedown' // 攻撃ゲージの発射間隔を1減らす（一人一個・恒久）
+  | 'totem' // 一定時間ワード上限超過を無効化（不死のトーテム）
+  // --- ボスモード専用アイテム ---
+  | 'meteor' // ボス: 全挑戦者に隕石（一斉攻撃）
+  | 'quake' // ボス: 最も溜まっている挑戦者にトドメの大攻撃
+  | 'regen' // ボス: 自分のバックログ（HP）を回復
+  | 'rally' // 挑戦者: ボスへ即時の総攻撃
+  | 'focus' // 挑戦者: 次のボスへの攻撃を倍化
+  // --- 追加アイテム（防御） ---
+  | 'barrier' // 次の被弾を1回まるごと防ぐ
+  | 'freeze' // 一定時間 着弾予告の確定と自動供給を停止
+  | 'purge' // バックログのおじゃまを全消去
+  | 'guard' // 次の自動供給を複数回ぶん防ぐ
+  // --- 追加アイテム（攻撃） ---
+  | 'snipe' // 狙った相手へ即時の大攻撃
+  | 'burst' // 全ての相手へ一斉攻撃
+  | 'heavy' // 連鎖に応じた大攻撃を即送信
+  // --- 追加アイテム（妨害） ---
+  | 'flood' // 相手へ大量のおじゃまを送る
+  | 'drain' // 自分のバックログを減らしつつ相手へ送る
+  | 'mirror' // 自分が不利なほど強い反撃を送る
+  // --- 追加アイテム（お宝/HP） ---
+  | 'goldify' // 溜まっているワードを全てお宝に変える
+  | 'luck' // お宝の出現率が上がる（永続）
+  | 'maxhp' // HP(積載上限)が増える（永続・上限+3）
+  // --- オンライン専用アイテム ---
+  | 'reflect' // 一定時間 受けた攻撃を送り主へ跳ね返す
+  | 'overcharge' // 一定時間 アタックゲージが倍速で溜まる
+  | 'thunder' // 首位（最多連鎖）の相手へ落雷の大ダメージ
+  | 'jammer' // 全相手へ長文おじゃまを送りつけて手を止める
+  | 'siphon' // 一定時間 攻撃が着弾するたび自分のバックログが1減る
+  | 'dazzle'; // 視認性低下: 一定時間 ターゲットの画面をゲーミング(虹色)に光らせる
+
+// アイテムの大分類（演出/説明用）。
+export type ItemCategory = 'defense' | 'attack' | 'timed' | 'boss';
+
+// ゲームモード。royale=バトルロワイヤル（全員対全員）, boss=多対一（挑戦者 対 ボス）。
+export type GameMode = 'royale' | 'boss';
 
 // 攻撃ターゲティング（仕様 §3.4）。
 export type TargetMode = 'random' | 'finish' | 'counter' | 'strong';

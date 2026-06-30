@@ -1,16 +1,22 @@
 import { Swords } from 'lucide-react';
 
 interface AttackGaugeProps {
-  combo: number;
+  progress: number; // 次の攻撃までのゲージ進捗（クリア数ベース / ミスでリセットされない）
+  combo: number; // 連鎖（＝アタック数の元。ミスでリセットされる）
   pinch?: boolean; // ピンチ倍率の対象か
   badges?: number; // バッジ倍率
+  threshold?: number; // 何クリアごとに発射するか（ゲージ減少アイテムで 5→4 になる）
+  unit?: string; // しきい値の単位表記（'クリア' or '文字'）
 }
 
-// 次のマイルストーン（5連鎖ごと）までの進捗と、その瞬間に送れる攻撃量を表示。
-export default function AttackGauge({ combo, pinch, badges = 0 }: AttackGaugeProps) {
-  const seg = combo % 5; // 0..4 現在の進捗
-  const nextMilestone = (Math.floor(combo / 5) + 1) * 5;
-  let amount = Math.floor(nextMilestone / 5);
+// 進捗（threshold クリアごと発射）とその時送れる攻撃量を表示。
+// ミスをしても進捗は減らず、攻撃量(=連鎖)だけがリセットされる。
+export default function AttackGauge({ progress, combo, pinch, badges = 0, threshold = 5, unit = 'クリア' }: AttackGaugeProps) {
+  const seg = ((progress % threshold) + threshold) % threshold; // 0..threshold-1 現在の進捗
+  // ブロック数が多すぎる（文字数方式）と細かすぎるので表示上は最大12分割に丸める。
+  const segCount = Math.min(threshold, 12);
+  const segFilled = Math.round((seg / threshold) * segCount);
+  let amount = Math.max(1, Math.floor(combo / 5)); // 連鎖が低くても最低1は撃てる
   if (pinch) amount = Math.round(amount * 1.5);
   amount = Math.round(amount * (1 + 0.25 * Math.min(badges, 4)));
   amount = Math.min(amount, 5); // ATTACK_CAP と一致
@@ -18,18 +24,25 @@ export default function AttackGauge({ combo, pinch, badges = 0 }: AttackGaugePro
   return (
     <div className="w-full max-w-lg">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[10px] text-gray-500 tracking-wider">次の攻撃チャージ</span>
-        <span className={`text-xs font-bold flex items-center gap-1 ${pinch ? 'text-red-400' : 'text-orange-300'}`}>
-          <Swords className="w-3 h-3" /> +{amount}
-          {pinch && <span className="text-[9px] text-red-400">ピンチ×1.5</span>}
+        <span className="text-xs text-gray-400 tracking-wide flex items-center gap-1">
+          <Swords className="w-3.5 h-3.5 text-orange-400" /> 攻撃チャージ
+          <span className="text-[10px] text-gray-600">（{threshold}{unit}ごとに発射）</span>
+        </span>
+        <span className={`text-sm font-black flex items-center gap-1 ${pinch ? 'text-red-400' : 'text-orange-300'}`}>
+          次の攻撃 +{amount}
+          {pinch && <span className="text-[10px] text-red-400">ピンチ×1.5</span>}
         </span>
       </div>
-      <div className="flex gap-1">
-        {Array.from({ length: 5 }).map((_, i) => (
+      <div className="flex gap-1.5">
+        {Array.from({ length: segCount }).map((_, i) => (
           <div
             key={i}
-            className={`h-1.5 flex-1 rounded-sm transition-colors ${
-              i < seg ? (pinch ? 'bg-red-500' : 'bg-orange-400') : 'bg-neutral-800'
+            className={`h-3.5 flex-1 rounded transition-colors ${
+              i < segFilled
+                ? pinch
+                  ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'
+                  : 'bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.5)]'
+                : 'bg-neutral-800 border border-neutral-700'
             }`}
           />
         ))}
