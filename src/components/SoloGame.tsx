@@ -17,6 +17,7 @@ import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
 import RecordsBoard from './RecordsBoard';
 import { computeScore, accuracyOf, addScore, loadPlayerName, savePlayerName, type ScoreRecord } from '../lib/scores';
+import { submitGlobalScore } from '../lib/leaderboard';
 
 // --- 定数 ---
 const MAX_BACKLOG = 12;
@@ -234,6 +235,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [savedRank, setSavedRank] = useState<number | null>(null); // 保存後の順位（モード内）
   const [hasSaved, setHasSaved] = useState(false); // 二重保存ガード
   const [showRecords, setShowRecords] = useState(false); // 記録一覧モーダル
+  const [recordsView, setRecordsView] = useState<'local' | 'online'>('local'); // 記録一覧の初期ビュー
+  // グローバル（オンライン）ランキングへの送信状態。
+  const [globalState, setGlobalState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
+  const [globalRank, setGlobalRank] = useState<number | null>(null);
   const [spawnInterval, setSpawnInterval] = useState(INITIAL_SPAWN_INTERVAL);
   const [seed, setSeed] = useState(0);
   // カスタム: HP（積載限界）と敵数。
@@ -829,6 +834,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setMissCount(0);
     setHasSaved(false);
     setSavedRank(null);
+    setGlobalState('idle');
+    setGlobalRank(null);
     setPlayerKOs(0);
     setSelfLog([]);
     setToasts([]);
@@ -1262,6 +1269,27 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     savePlayerName(name);
     setSavedRank(addScore(rec));
     setHasSaved(true);
+
+    // タイムアタックはグローバル・オンラインランキングへ自己ベストを自動送信。
+    if (rec.mode === 'timeattack') {
+      setGlobalState('sending');
+      submitGlobalScore({
+        name,
+        score: rec.score,
+        keys: rec.keys,
+        kps: rec.kps,
+        acc: rec.acc,
+        words: rec.words,
+        maxCombo: rec.maxCombo,
+        theme: rec.theme,
+        taSeconds: cfgTaSeconds,
+      })
+        .then((res) => {
+          setGlobalRank(res.rank);
+          setGlobalState('done');
+        })
+        .catch(() => setGlobalState('error'));
+    }
   };
 
   // 結果画面に共通で出す「総合スコア＋記録保存」UI。
@@ -1272,10 +1300,26 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         <div className="font-mono text-4xl font-black text-amber-300 drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]">{currentScore()}</div>
       </div>
       {hasSaved ? (
-        <div className="text-center text-sm flex items-center justify-center gap-3 flex-wrap">
-          <span className="text-emerald-300 font-bold">記録を保存しました</span>
-          {savedRank != null && <span className="text-yellow-300 font-bold">🏅 {savedRank}位</span>}
-          <button onClick={() => setShowRecords(true)} className="underline text-cyan-300">記録一覧</button>
+        <div className="flex flex-col items-center gap-1.5 text-sm">
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <span className="text-emerald-300 font-bold">記録を保存しました</span>
+            {savedRank != null && <span className="text-yellow-300 font-bold">🏅 端末内 {savedRank}位</span>}
+          </div>
+          {soloMode === 'timeattack' && (
+            <div className="flex items-center justify-center gap-2 flex-wrap text-xs">
+              {globalState === 'sending' && <span className="text-cyan-300 animate-pulse">🌐 オンライン登録中…</span>}
+              {globalState === 'done' && (
+                <span className="text-cyan-300 font-bold">🌐 オンライン{globalRank != null ? ` ${globalRank}位` : '登録済み'}（{cfgTaSeconds}秒）</span>
+              )}
+              {globalState === 'error' && <span className="text-red-300">🌐 オンライン登録失敗（記録画面から確認できます）</span>}
+            </div>
+          )}
+          <button
+            onClick={() => { setRecordsView(soloMode === 'timeattack' ? 'online' : 'local'); setShowRecords(true); }}
+            className="underline text-cyan-300 mt-0.5"
+          >
+            ランキングを見る
+          </button>
         </div>
       ) : (
         <div className="flex items-center gap-2 w-full">
@@ -1287,7 +1331,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             className="flex-1 bg-neutral-800 border border-white/15 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
           />
           <button onClick={handleSaveRecord} className="bg-amber-500/90 hover:bg-amber-500 text-black font-bold rounded-lg px-4 py-2 text-sm whitespace-nowrap">記録を保存</button>
-          <button onClick={() => setShowRecords(true)} className="bg-neutral-800 hover:bg-neutral-700 border border-white/10 text-cyan-200 rounded-lg px-3 py-2 text-sm whitespace-nowrap">記録</button>
+          <button onClick={() => { setRecordsView('local'); setShowRecords(true); }} className="bg-neutral-800 hover:bg-neutral-700 border border-white/10 text-cyan-200 rounded-lg px-3 py-2 text-sm whitespace-nowrap">記録</button>
         </div>
       )}
     </div>
@@ -2325,7 +2369,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       )}
 
       {showRecords && (
-        <RecordsBoard initialMode={soloMode === 'timeattack' ? 'timeattack' : 'royale'} onClose={() => setShowRecords(false)} />
+        <RecordsBoard
+          initialMode={soloMode === 'timeattack' ? 'timeattack' : 'royale'}
+          initialView={recordsView}
+          onClose={() => setShowRecords(false)}
+        />
       )}
 
       <style
