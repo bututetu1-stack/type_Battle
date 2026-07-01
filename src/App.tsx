@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Swords, User, Globe, Loader2, Settings, BookPlus } from 'lucide-react';
+import { Swords, User, Globe, Loader2, Settings, BookPlus, Trophy } from 'lucide-react';
 import { ensureSignedIn } from './lib/firebase';
 import SoloGame from './components/SoloGame';
 import Lobby from './components/Lobby';
 import OnlineRoom from './components/OnlineRoom';
 import PlayerSettings from './components/PlayerSettings';
 import WordEditor from './components/WordEditor';
+import RecordsBoard from './components/RecordsBoard';
 import { applyColorTheme, loadThemeId } from './lib/theme';
 import { loadCustomWords, saveCustomWords, loadCustomGroups, saveCustomGroups, type CustomWord } from './lib/customwords';
 import { setExtraWords } from './lib/words';
@@ -20,6 +21,7 @@ export default function App() {
   const [roomId, setRoomId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showWords, setShowWords] = useState(false);
+  const [showRecords, setShowRecords] = useState(false);
   const [customWords, setCustomWords] = useState<CustomWord[]>(() => loadCustomWords());
   const [customGroups, setCustomGroups] = useState<string[]>(() => loadCustomGroups());
 
@@ -104,10 +106,17 @@ export default function App() {
         >
           <BookPlus className="w-5 h-5" /> 語句を追加 <span className="text-xs text-gray-500">({customWords.length})</span>
         </button>
+        <button
+          onClick={() => setShowRecords(true)}
+          className="bg-neutral-800/70 hover:bg-neutral-700 rounded-xl px-6 py-3 font-bold flex items-center justify-center gap-2 transition-colors text-gray-300"
+        >
+          <Trophy className="w-5 h-5 text-yellow-400" /> 記録
+        </button>
       </div>
 
       {authError && <p className="text-red-400 text-sm mt-6">{authError}</p>}
       {showSettings && <PlayerSettings onClose={() => setShowSettings(false)} />}
+      {showRecords && <RecordsBoard onClose={() => setShowRecords(false)} />}
       {showWords && (
         <WordEditor
           words={customWords}

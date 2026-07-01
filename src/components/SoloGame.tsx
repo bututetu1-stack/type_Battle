@@ -15,6 +15,9 @@ import type { Dummy, GameStatus, ItemType, TargetMode, Word } from '../lib/types
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
+import RecordsBoard from './RecordsBoard';
+import { computeScore, accuracyOf, addScore, loadPlayerName, savePlayerName, type ScoreRecord } from '../lib/scores';
+import { submitGlobalScore } from '../lib/leaderboard';
 
 // --- 定数 ---
 const MAX_BACKLOG = 12;
@@ -221,12 +224,21 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [typedRomaji, setTypedRomaji] = useState<string[]>([]); // 現在ワードで実際に打った綴り（確定表示の保持）
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
-  const [score, setScore] = useState(0);
+  const [, setScore] = useState(0); // 内部スコア（演出/攻撃判定用。表示は総打鍵・総合スコアに移行）
   const [wordsCleared, setWordsCleared] = useState(0); // タイムアタックのクリア語数
   const [keysTyped, setKeysTyped] = useState(0);
   const [missCount, setMissCount] = useState(0); // ミスタイプ数（リザルト用）
   const [startTime, setStartTime] = useState<number | null>(null);
-  const [endTime, setEndTime] = useState<number | null>(null); // ゲーム終了時刻（KPM固定用）
+  const [endTime, setEndTime] = useState<number | null>(null); // ゲーム終了時刻（KPS固定用）
+  // ローカルのハイスコア記録（端末内・名前入力）。
+  const [playerName, setPlayerName] = useState<string>(() => loadPlayerName());
+  const [savedRank, setSavedRank] = useState<number | null>(null); // 保存後の順位（モード内）
+  const [hasSaved, setHasSaved] = useState(false); // 二重保存ガード
+  const [showRecords, setShowRecords] = useState(false); // 記録一覧モーダル
+  const [recordsView, setRecordsView] = useState<'local' | 'online'>('local'); // 記録一覧の初期ビュー
+  // グローバル（オンライン）ランキングへの送信状態。
+  const [globalState, setGlobalState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
+  const [globalRank, setGlobalRank] = useState<number | null>(null);
   const [spawnInterval, setSpawnInterval] = useState(INITIAL_SPAWN_INTERVAL);
   const [seed, setSeed] = useState(0);
   // カスタム: HP（積載限界）と敵数。
@@ -820,6 +832,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setTimeBonusFlash(0);
     setKeysTyped(0);
     setMissCount(0);
+    setHasSaved(false);
+    setSavedRank(null);
+    setGlobalState('idle');
+    setGlobalRank(null);
     setPlayerKOs(0);
     setSelfLog([]);
     setToasts([]);
@@ -882,6 +898,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (settingsOpenRef.current) return; // 設定モーダル表示中はゲーム操作を受け付けない
+      // 名前入力など、テキスト入力中はゲーム操作（スペースでのリトライ等）を無効化。
+      const tgt = e.target as HTMLElement | null;
+      if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA')) return;
       const { gameState } = stateRef.current;
       resumeAudio();
       if ((gameState === 'start' || gameState === 'gameover' || gameState === 'win' || gameState === 'timeup') && e.key === ' ') {
@@ -1213,13 +1232,110 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     return () => clearInterval(id);
   }, [gameState, soloMode]);
 
-  const calculateKPM = () => {
-    if (!startTime || keysTyped === 0) return 0;
-    // ゲーム終了後は終了時刻で固定（裏で時間が進んで KPM が下がるのを防ぐ）。
+  // 経過秒（終了後は終了時刻で固定）。
+  const elapsedSeconds = () => {
+    if (!startTime) return 0.1;
     const end = endTime ?? Date.now();
-    const minutes = Math.max(1 / 600, (end - startTime) / 60000); // 0除算回避
-    return Math.floor(keysTyped / minutes);
+    return Math.max(0.1, (end - startTime) / 1000);
   };
+
+  // 秒間打鍵数（KPS, 小数1桁）。
+  const calculateKPS = () => {
+    if (!startTime || keysTyped === 0) return 0;
+    return Math.round((keysTyped / elapsedSeconds()) * 10) / 10;
+  };
+
+  // この試合の総合スコア（タイピング数・正確率・KPSの合成）。
+  const currentScore = () =>
+    computeScore({ keys: keysTyped, miss: missCount, seconds: elapsedSeconds(), words: wordsCleared, maxCombo });
+
+  // 結果を端末ローカルのハイスコア表に保存（リトライ時の二重保存はガード）。
+  const handleSaveRecord = () => {
+    if (hasSaved) return;
+    const name = playerName.trim() || 'プレイヤー';
+    const rec: ScoreRecord = {
+      name,
+      mode: soloMode === 'timeattack' ? 'timeattack' : 'royale',
+      theme,
+      taSeconds: soloMode === 'timeattack' ? cfgTaSeconds : undefined,
+      keys: keysTyped,
+      kps: calculateKPS(),
+      acc: accuracyOf(keysTyped, missCount),
+      words: wordsCleared,
+      maxCombo,
+      score: currentScore(),
+      ts: Date.now(),
+    };
+    savePlayerName(name);
+    setSavedRank(addScore(rec));
+    setHasSaved(true);
+
+    // タイムアタックはグローバル・オンラインランキングへ自己ベストを自動送信。
+    if (rec.mode === 'timeattack') {
+      setGlobalState('sending');
+      submitGlobalScore({
+        name,
+        score: rec.score,
+        keys: rec.keys,
+        kps: rec.kps,
+        acc: rec.acc,
+        words: rec.words,
+        maxCombo: rec.maxCombo,
+        theme: rec.theme,
+        taSeconds: cfgTaSeconds,
+      })
+        .then((res) => {
+          setGlobalRank(res.rank);
+          setGlobalState('done');
+        })
+        .catch(() => setGlobalState('error'));
+    }
+  };
+
+  // 結果画面に共通で出す「総合スコア＋記録保存」UI。
+  const renderResultExtras = () => (
+    <div className="flex flex-col items-center gap-3 mb-6 w-full max-w-sm">
+      <div className="text-center">
+        <div className="text-xs text-amber-300/80">総合スコア</div>
+        <div className="font-mono text-4xl font-black text-amber-300 drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]">{currentScore()}</div>
+      </div>
+      {hasSaved ? (
+        <div className="flex flex-col items-center gap-1.5 text-sm">
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <span className="text-emerald-300 font-bold">記録を保存しました</span>
+            {savedRank != null && <span className="text-yellow-300 font-bold">🏅 端末内 {savedRank}位</span>}
+          </div>
+          {soloMode === 'timeattack' && (
+            <div className="flex items-center justify-center gap-2 flex-wrap text-xs">
+              {globalState === 'sending' && <span className="text-cyan-300 animate-pulse">🌐 オンライン登録中…</span>}
+              {globalState === 'done' && (
+                <span className="text-cyan-300 font-bold">🌐 オンライン{globalRank != null ? ` ${globalRank}位` : '登録済み'}（{cfgTaSeconds}秒）</span>
+              )}
+              {globalState === 'error' && <span className="text-red-300">🌐 オンライン登録失敗（記録画面から確認できます）</span>}
+            </div>
+          )}
+          <button
+            onClick={() => { setRecordsView(soloMode === 'timeattack' ? 'online' : 'local'); setShowRecords(true); }}
+            className="underline text-cyan-300 mt-0.5"
+          >
+            ランキングを見る
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 w-full">
+          <input
+            value={playerName}
+            onChange={(e) => setPlayerName(e.target.value)}
+            maxLength={16}
+            placeholder="名前"
+            className="flex-1 bg-neutral-800 border border-white/15 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
+          />
+          <button onClick={handleSaveRecord} className="bg-amber-500/90 hover:bg-amber-500 text-black font-bold rounded-lg px-4 py-2 text-sm whitespace-nowrap">記録を保存</button>
+          <button onClick={() => { setRecordsView('local'); setShowRecords(true); }} className="bg-neutral-800 hover:bg-neutral-700 border border-white/10 text-cyan-200 rounded-lg px-3 py-2 text-sm whitespace-nowrap">記録</button>
+        </div>
+      )}
+    </div>
+  );
 
   const renderCurrentWord = () => {
     if (backlog.length === 0) return null;
@@ -1393,8 +1509,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           </h1>
         </div>
         <div className="flex gap-6 md:gap-8">
-          <Hud label="SCORE" value={score} className="text-cyan-300" />
-          <Hud label="KPM" value={calculateKPM()} />
+          <Hud label="総打鍵" value={keysTyped} className="text-cyan-300" />
+          <Hud label="KPS" value={calculateKPS()} />
           {soloMode === 'timeattack' ? (
             <Hud label="TIME" value={timeLeft} className={timeLeft <= 10 ? 'text-red-400' : 'text-cyan-300'} icon={<Timer className="w-4 h-4 text-cyan-300" />} />
           ) : (
@@ -2168,15 +2284,16 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <div className="absolute inset-0 bg-red-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
               <h2 className="text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">TOP OUT</h2>
               <p className="text-red-300 mb-8">おじゃまブロックがあふれました</p>
-              <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-8 border border-red-500/30">
-                <Stat label="SCORE" value={score} />
+              <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-red-500/30">
+                <Stat label="総打鍵" value={keysTyped} />
                 <Stat label="MAX COMBO" value={maxCombo} />
                 <Stat label="K.O." value={playerKOs} />
-                <Stat label="KPM" value={calculateKPM()} />
-                <Stat label="正タイプ" value={keysTyped} />
+                <Stat label="KPS" value={calculateKPS()} />
+                <Stat label="正確率" value={keysTyped + missCount > 0 ? Math.round((keysTyped / (keysTyped + missCount)) * 100) : 100} suffix="%" />
                 <Stat label="ミス" value={missCount} />
                 <Stat label="SEED" value={seed} small />
               </div>
+              {renderResultExtras()}
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
               <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-amber-300" /> カスタム設定を変更
@@ -2189,15 +2306,16 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               <Crown className="w-16 h-16 text-yellow-400 mb-3" />
               <h2 className="text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]">YOU WIN!</h2>
               <p className="text-emerald-300 mb-8">全ての敵を倒した！</p>
-              <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-8 border border-emerald-500/30">
-                <Stat label="SCORE" value={score} />
+              <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-emerald-500/30">
+                <Stat label="総打鍵" value={keysTyped} />
                 <Stat label="MAX COMBO" value={maxCombo} />
                 <Stat label="K.O." value={playerKOs} />
-                <Stat label="KPM" value={calculateKPM()} />
-                <Stat label="正タイプ" value={keysTyped} />
+                <Stat label="KPS" value={calculateKPS()} />
+                <Stat label="正確率" value={keysTyped + missCount > 0 ? Math.round((keysTyped / (keysTyped + missCount)) * 100) : 100} suffix="%" />
                 <Stat label="ミス" value={missCount} />
                 <Stat label="SEED" value={seed} small />
               </div>
+              {renderResultExtras()}
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
               <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-amber-300" /> カスタム設定を変更
@@ -2210,14 +2328,15 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               <Timer className="w-16 h-16 text-cyan-300 mb-3" />
               <h2 className="text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(99,102,241,0.8)]">TIME UP</h2>
               <p className="text-indigo-200 mb-8">{cfgTaSeconds}秒タイムアタック終了！</p>
-              <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-8 border border-indigo-500/30">
-                <Stat label="SCORE" value={score} />
+              <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-indigo-500/30">
+                <Stat label="総打鍵" value={keysTyped} />
                 <Stat label="語数" value={wordsCleared} />
                 <Stat label="MAX COMBO" value={maxCombo} />
-                <Stat label="KPM" value={calculateKPM()} />
+                <Stat label="KPS" value={calculateKPS()} />
                 <Stat label="正確率" value={keysTyped + missCount > 0 ? Math.round((keysTyped / (keysTyped + missCount)) * 100) : 100} suffix="%" />
                 <Stat label="ミス" value={missCount} />
               </div>
+              {renderResultExtras()}
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
               <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-amber-300" /> カスタム設定を変更
@@ -2247,6 +2366,14 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
       {showSettings && (
         <PlayerSettings onClose={() => { setShowSettings(false); setKeyCfg(loadKeyConfig()); }} />
+      )}
+
+      {showRecords && (
+        <RecordsBoard
+          initialMode={soloMode === 'timeattack' ? 'timeattack' : 'royale'}
+          initialView={recordsView}
+          onClose={() => setShowRecords(false)}
+        />
       )}
 
       <style

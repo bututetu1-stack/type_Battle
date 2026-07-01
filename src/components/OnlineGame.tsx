@@ -19,6 +19,7 @@ import type { GameMode, ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
+import { computeScore, accuracyOf } from '../lib/scores';
 
 const MAX_BACKLOG = 12;
 const INITIAL_SPAWN_INTERVAL = 4000;
@@ -218,7 +219,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [attackProgress, setAttackProgress] = useState(0); // 次の攻撃までのゲージ（ミスで減らない）
   const [nowTick, setNowTick] = useState(0); // カウントダウン描画用の時刻
   const [dazzleUntil, setDazzleUntil] = useState(0); // 視認性低下を食らっている終了時刻（自分の画面をゲーミング化）
-  const [resultTab, setResultTab] = useState<'rank' | 'ko' | 'kpm'>('rank'); // 結果画面の表示切替
+  const [resultTab, setResultTab] = useState<'rank' | 'score' | 'ko' | 'kpm'>('score'); // 結果画面の表示切替
   // エフェクト用
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
   const [hitId, setHitId] = useState<string | null>(null); // 自分が攻撃した相手
@@ -250,6 +251,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const itemRngRef = useRef<RNG | null>(null);
   const stateRef = useRef<PlayerState>({ backlog, tokenIndex, currentTyping, combo, gameState: 'playing' });
   const selfAliveRef = useRef(true);
+  const scoreWrittenRef = useRef(false); // 総合スコアの二重書込ガード（1試合1回）
   const playersRef = useRef(players);
   // CPU（擬似プレイヤー）のシミュレーション状態（ホストのみ使用）。
   const cpuSimRef = useRef<Record<string, { backlog: number; combo: number; alive: boolean; rank: number; progress: number; koBy: string }>>({});
@@ -368,6 +370,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     return Math.floor(keysTyped / minutes);
   }, [keysTyped]);
 
+  // 秒間打鍵数（KPS, 小数1桁）。
+  const calculateKPS = useCallback(() => {
+    if (!startTimeRef.current || keysTyped === 0) return 0;
+    const end = endTimeRef.current || Date.now();
+    const seconds = Math.max(0.1, (end - startTimeRef.current) / 1000);
+    return Math.round((keysTyped / seconds) * 10) / 10;
+  }, [keysTyped]);
+
   // 自分が稼いだバッジ数（自分にトドメ＝koBy===uid のプレイヤー数）。
   const myBadges = Object.values(players).filter((p) => p.koBy === uid).length;
 
@@ -402,6 +412,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     barrierRef.current = false;
     guardCountRef.current = 0;
     endTimeRef.current = 0;
+    scoreWrittenRef.current = false;
     setKeysTyped(0);
     setMissCount(0);
     setSlots({ attack: null, defense: null, timed: null });
@@ -443,10 +454,26 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     return () => clearInterval(id);
   }, [startAt, started]);
 
-  // 決着時、まだ脱落していない（勝者）なら KPM をこの時点で固定する。
+  // 決着時、まだ脱落していない（勝者）なら KPS をこの時点で固定する。
   useEffect(() => {
     if (status === 'finished' && endTimeRef.current === 0) endTimeRef.current = Date.now();
   }, [status]);
+
+  // 試合終了（決着 or 自分の脱落）時、総合スコアをランキング用に書き込む（1試合1回）。
+  useEffect(() => {
+    if (!started || scoreWrittenRef.current) return;
+    if (status !== 'finished' && selfAlive) return; // まだ終わっていない
+    scoreWrittenRef.current = true;
+    const end = endTimeRef.current || Date.now();
+    const seconds = Math.max(0.1, (end - startTimeRef.current) / 1000);
+    const kps = Math.round((keysTyped / seconds) * 10) / 10;
+    writePlayerSummary(roomId, uid, {
+      score: computeScore({ keys: keysTyped, miss: missCount, seconds, maxCombo }),
+      keys: keysTyped,
+      kps,
+      acc: accuracyOf(keysTyped, missCount),
+    });
+  }, [status, selfAlive, started, keysTyped, missCount, maxCombo, roomId, uid]);
 
   // 自分が脱落。順位と KO クレジット（koBy）を確定。
   const topOut = useCallback(() => {
@@ -1152,7 +1179,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     const curRomaji = parts.join('');
     const curRomajiDone = parts.slice(0, tokenIndex).reduce((s, r) => s + r.length, 0) + currentTyping.length;
     summaryRef.current = {
-      backlog: backlog.length, combo, kpm: calculateKPM(), badges: myBadges,
+      backlog: backlog.length, combo, kpm: calculateKPM(), kps: calculateKPS(), keys: keysTyped, badges: myBadges,
       // 山または着弾予告に長文(相殺不可)を抱えているか → 長文の重ねがけ防止に使う
       hasLong: backlog.some((w) => w.type === 'ojama' && w.reading.length >= 10)
         || pendingRef.current.some((e) => !!e.word),
@@ -1251,17 +1278,26 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           }
           chances -= 1;
         }
+        // CPU の表示用 KPS / 総打鍵 / 総合スコア（強さから合成。ランキング表示用）。
+        const cpuKps = Math.round((0.7 + str * 2.4) * 10) / 10;
+        const cpuKeys = Math.round(cpuKps * Math.max(1, elapsedSec));
+        const cpuAcc = Math.min(1, 0.9 + str * 0.08);
+        const cpuScore = Math.round(cpuKeys * cpuAcc * cpuAcc * cpuKps);
         // 撃破判定。
         if (s.backlog >= cpuMax) {
           s.alive = false;
           const aliveCount = Object.values(playersRef.current).filter(isLive).length;
           s.rank = Math.max(1, aliveCount);
-          writePlayerSummary(roomId, id, { alive: false, rank: s.rank, backlog: cpuMax, combo: 0, koBy: s.koBy });
+          writePlayerSummary(roomId, id, {
+            alive: false, rank: s.rank, backlog: cpuMax, combo: 0, koBy: s.koBy,
+            kpm: Math.round(cpuKps * 60), kps: cpuKps, keys: cpuKeys, acc: cpuAcc, score: cpuScore,
+          });
           continue;
         }
         writePlayerSummary(roomId, id, {
           alive: true, backlog: s.backlog, combo: s.combo,
-          kpm: Math.round((0.7 + str * 2.4) * 60), curDisplay: '🤖', curReading: '', curIdx: 0, curTyping: '',
+          kpm: Math.round(cpuKps * 60), kps: cpuKps, keys: cpuKeys, acc: cpuAcc, score: cpuScore,
+          curDisplay: '🤖', curReading: '', curIdx: 0, curTyping: '',
         });
       }
     };
@@ -1376,9 +1412,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         <Crown className={`w-16 h-16 mb-4 ${bossMode && !bossWon ? 'text-emerald-400' : 'text-yellow-400'}`} />
         <h2 className="text-3xl font-black tracking-widest mb-1">{bossTitle}</h2>
         <p className="text-yellow-300 mb-6 text-lg text-center">{bossLine}</p>
-        {/* 表示切替: 順位 / KO数ランキング / KPMランキング */}
+        {/* 表示切替: 順位 / 総合スコア / KO数 / KPS ランキング */}
         <div className="flex gap-1 mb-2">
-          {([['rank', '順位'], ['ko', 'KO数'], ['kpm', 'KPM']] as const).map(([k, lbl]) => (
+          {([['rank', '順位'], ['score', '総合スコア'], ['ko', 'KO数'], ['kpm', 'KPS']] as const).map(([k, lbl]) => (
             <button
               key={k}
               onClick={() => setResultTab(k)}
@@ -1391,11 +1427,15 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           ))}
         </div>
         {(() => {
+          // 総合スコア順位用の表示値（kps はフォールバックで kpm を使う）。
+          const kpsOf = (p: RoomPlayer) => p.kps ?? p.kpm ?? 0;
           const list = resultTab === 'ko'
-            ? Object.values(players).slice().sort((a, b) => (b.badges || 0) - (a.badges || 0) || (b.kpm || 0) - (a.kpm || 0))
+            ? Object.values(players).slice().sort((a, b) => (b.badges || 0) - (a.badges || 0) || kpsOf(b) - kpsOf(a))
             : resultTab === 'kpm'
-              ? Object.values(players).slice().sort((a, b) => (b.kpm || 0) - (a.kpm || 0) || (b.badges || 0) - (a.badges || 0))
-              : ranked;
+              ? Object.values(players).slice().sort((a, b) => kpsOf(b) - kpsOf(a) || (b.badges || 0) - (a.badges || 0))
+              : resultTab === 'score'
+                ? Object.values(players).slice().sort((a, b) => (b.score || 0) - (a.score || 0) || kpsOf(b) - kpsOf(a))
+                : ranked;
           return (
             <div className="bg-neutral-900/70 rounded-xl border border-white/10 w-full max-w-md mb-6 divide-y divide-white/5">
               {list.map((p, i) => (
@@ -1406,11 +1446,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   </span>
                   <span className="text-xs font-mono">
                     {resultTab === 'ko' ? (
-                      <><span className="text-orange-300 font-bold">{p.badges} KO</span><span className="text-gray-600"> · {p.kpm} kpm</span></>
+                      <><span className="text-orange-300 font-bold">{p.badges} KO</span><span className="text-gray-600"> · {kpsOf(p)} KPS</span></>
                     ) : resultTab === 'kpm' ? (
-                      <><span className="text-cyan-300 font-bold">{p.kpm} kpm</span><span className="text-gray-600"> · {p.badges} KO</span></>
+                      <><span className="text-cyan-300 font-bold">{kpsOf(p)} KPS</span><span className="text-gray-600"> · {p.badges} KO</span></>
+                    ) : resultTab === 'score' ? (
+                      <><span className="text-amber-300 font-bold">{p.score ?? 0} 点</span><span className="text-gray-600"> · {p.keys ?? 0} 打 · {kpsOf(p)} KPS</span></>
                     ) : (
-                      <span className="text-gray-500">{p.kpm} kpm · {p.badges} KO</span>
+                      <span className="text-gray-500">{p.score ?? 0} 点 · {p.badges} KO</span>
                     )}
                   </span>
                 </div>
@@ -1418,11 +1460,11 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             </div>
           );
         })()}
-        <p className="text-gray-400 mb-4 font-mono">
-          あなたの順位: {myRank} 位 / 最高連鎖 {maxCombo} / KPM {calculateKPM()}
+        <p className="text-gray-400 mb-2 font-mono">
+          あなたの順位: {myRank} 位 / 総合スコア {computeScore({ keys: keysTyped, miss: missCount, seconds: Math.max(0.1, ((endTimeRef.current || Date.now()) - startTimeRef.current) / 1000), maxCombo })} 点
         </p>
         <p className="text-gray-500 mb-4 font-mono text-sm">
-          正タイプ {keysTyped} · ミス {missCount}
+          総打鍵 {keysTyped} · KPS {calculateKPS()} · 最高連鎖 {maxCombo} · ミス {missCount}
         </p>
         <div className="flex gap-3">
           <button onClick={onExit} className="bg-neutral-800 hover:bg-neutral-700 rounded-lg px-5 py-2 font-bold flex items-center gap-2">
@@ -1565,8 +1607,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </div>
         <div className="flex gap-6 items-center">
           <div className="flex flex-col items-center">
-            <span className="text-xs text-gray-500">KPM</span>
-            <span className="font-mono text-xl font-bold">{calculateKPM()}</span>
+            <span className="text-xs text-gray-500">総打鍵</span>
+            <span className="font-mono text-xl font-bold text-cyan-300">{keysTyped}</span>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="text-xs text-gray-500">KPS</span>
+            <span className="font-mono text-xl font-bold">{calculateKPS()}</span>
           </div>
           <div className="flex flex-col items-center">
             <span className="text-xs text-gray-500">BADGE</span>
@@ -1631,7 +1677,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                 <div className="w-full max-w-xs">
                   <div className="flex justify-between text-[11px] text-gray-500 mb-0.5">
                     <span>残り {wp.backlog} / {wpMax}</span>
-                    <span>{wp.combo ?? 0} 連鎖 · {wp.kpm ?? 0} KPM</span>
+                    <span>{wp.combo ?? 0} 連鎖 · {wp.kps ?? wp.kpm ?? 0} KPS</span>
                   </div>
                   <div className="w-full h-2.5 rounded-full bg-neutral-800 overflow-hidden border border-neutral-700">
                     <div
