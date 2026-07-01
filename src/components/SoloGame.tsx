@@ -1337,6 +1337,45 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     </div>
   );
 
+  // バトル（royale）の戦績サマリ: 負けた瞬間の生存人数から順位・優勝までの残り・生存時間・
+  // 進捗（最下位→優勝）を出し、「どこまで行けたか」を可視化する。
+  const renderBattleStanding = () => {
+    const totalEnemies = dummies.length;
+    const totalPlayers = totalEnemies + 1;
+    const aliveEnemies = dummies.filter((d) => !d.isKO).length;
+    const myRank = aliveEnemies + 1;
+    const survivedSec = startTime ? Math.max(0, Math.round(((endTime ?? Date.now()) - startTime) / 1000)) : 0;
+    const mmss = `${Math.floor(survivedSec / 60)}:${String(survivedSec % 60).padStart(2, '0')}`;
+    const progressPct = totalPlayers > 1 ? Math.round(((totalPlayers - myRank) / (totalPlayers - 1)) * 100) : 100;
+    return (
+      <div className="w-full max-w-sm mb-6 flex flex-col items-center gap-2">
+        <div className="text-center leading-none">
+          <span className="text-6xl font-black text-amber-300 drop-shadow-[0_0_12px_rgba(251,191,36,0.6)]">{myRank}</span>
+          <span className="text-2xl font-bold text-amber-200/80"> 位</span>
+          <span className="text-base text-gray-400"> / 全{totalPlayers}人中</span>
+        </div>
+        <div className="text-sm text-gray-300 flex items-center gap-3 flex-wrap justify-center">
+          <span>優勝まであと <span className="text-white font-bold">{aliveEnemies}</span> 体</span>
+          <span className="text-gray-600">|</span>
+          <span>生存 <span className="text-white font-bold font-mono">{mmss}</span></span>
+        </div>
+        <div className="w-full">
+          <div className="flex justify-between text-[10px] text-gray-500 mb-0.5">
+            <span>スタート</span>
+            <span>優勝 🏆</span>
+          </div>
+          <div className="w-full h-3 rounded-full bg-neutral-800 overflow-hidden border border-white/10">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-red-500 via-amber-400 to-emerald-400 transition-all duration-500"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <div className="text-center text-[11px] text-gray-400 mt-1">優勝への到達度 {progressPct}%</div>
+        </div>
+      </div>
+    );
+  };
+
   const renderCurrentWord = () => {
     if (backlog.length === 0) return null;
     const word = backlog[0];
@@ -2283,7 +2322,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           {gameState === 'gameover' && (
             <div className="absolute inset-0 bg-red-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
               <h2 className="text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">TOP OUT</h2>
-              <p className="text-red-300 mb-8">おじゃまブロックがあふれました</p>
+              <p className="text-red-300 mb-6">おじゃまブロックがあふれました</p>
+              {renderBattleStanding()}
               <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-red-500/30">
                 <Stat label="総打鍵" value={keysTyped} />
                 <Stat label="MAX COMBO" value={maxCombo} />
@@ -2305,7 +2345,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <div className="absolute inset-0 bg-emerald-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
               <Crown className="w-16 h-16 text-yellow-400 mb-3" />
               <h2 className="text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]">YOU WIN!</h2>
-              <p className="text-emerald-300 mb-8">全ての敵を倒した！</p>
+              <p className="text-emerald-300 mb-3">全ての敵を倒した！</p>
+              <p className="mb-6 text-lg font-bold text-yellow-300">🏆 1 位 / 全{dummies.length + 1}人中</p>
               <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-emerald-500/30">
                 <Stat label="総打鍵" value={keysTyped} />
                 <Stat label="MAX COMBO" value={maxCombo} />
