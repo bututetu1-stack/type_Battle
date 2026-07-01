@@ -1348,6 +1348,11 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   }, [started, status, uid, addBeam, bossMode, bossUid]);
 
   const others = Object.entries(players).filter(([id]) => id !== uid);
+  // 両隣の相手グリッド: 各列で生存者を上（先頭）に詰め、脱落者を後ろへ送る（安定ソート）。
+  const othersHalf = Math.ceil(others.length / 2);
+  const packAliveEntries = (arr: [string, RoomPlayer][]) => [...arr].sort((a, b) => Number(!isLive(a[1])) - Number(!isLive(b[1])));
+  const othersLeft = packAliveEntries(others.slice(0, othersHalf));
+  const othersRight = packAliveEntries(others.slice(othersHalf));
   const aliveCount = Object.values(players).filter(isLive).length;
   const totalCount = Object.keys(players).length;
   const isDanger = backlog.length >= selfMax - 3;
@@ -1632,7 +1637,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
       <main className="flex-1 min-h-0 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]">
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
-          {others.slice(0, Math.ceil(others.length / 2)).map(([id, p]) => (
+          {othersLeft.map(([id, p]) => (
             <div
               key={id}
               ref={(el) => { boardRefs.current[id] = el; }}
@@ -1989,7 +1994,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
-          {others.slice(Math.ceil(others.length / 2)).map(([id, p]) => (
+          {othersRight.map(([id, p]) => (
             <div
               key={id}
               ref={(el) => { boardRefs.current[id] = el; }}
