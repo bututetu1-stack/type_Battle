@@ -19,6 +19,7 @@ import type { GameMode, ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
+import TrCorners from './TrCorners';
 import { computeScore, accuracyOf } from '../lib/scores';
 
 const MAX_BACKLOG = 12;
@@ -1860,27 +1861,26 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                 </div>
               )}
 
-              {/* お題カードの固定高さスロット（中央寄せ）。お題の有無や行数が変わっても高さ一定。 */}
-              <div className="h-52 flex items-center justify-center">
+              {/* お題カードの固定高さスロット（中央寄せ）。お題の有無や行数が変わっても高さ一定。
+                  overflow-hidden で、万一カードが伸びても隣（次のお題・アイテムスロット）に被らせない。 */}
+              <div className="h-56 flex items-stretch justify-center overflow-hidden">
                 {word && (
                   <div
-                    className={`lt-solid w-full p-6 rounded-xl border-2 shadow-2xl ${
-                      word.type === 'ojama'
-                        ? 'border-red-500/50 bg-red-950/30'
-                        : word.type === 'treasure'
-                          ? 'border-yellow-400/50 bg-yellow-900/30'
-                          : 'border-blue-500/30 bg-gray-800/80'
-                    }`}
+                    className="tr-card w-full h-full px-5 py-4 overflow-hidden flex flex-col justify-center"
+                    style={{ borderColor: word.type === 'ojama' ? 'var(--incoming)' : word.type === 'treasure' ? 'var(--charge)' : undefined }}
                   >
-                    <CurrentWord
-                      word={word}
-                      tokenIndex={tokenIndex}
-                      currentTyping={currentTyping}
-                      accent={word.type === 'ojama' ? 'text-red-400' : word.type === 'treasure' ? 'text-yellow-400' : 'text-cyan-400'}
-                      typedRomaji={typedRomaji}
-                      romajiVisible={keyCfg.romajiMode === 'always' || romajiHint}
-                      readingMode={keyCfg.readingMode}
-                    />
+                    <TrCorners color={word.type === 'ojama' ? 'var(--incoming)' : word.type === 'treasure' ? 'var(--charge)' : 'var(--primary)'} />
+                    <div className="relative z-[2]">
+                      <CurrentWord
+                        word={word}
+                        tokenIndex={tokenIndex}
+                        currentTyping={currentTyping}
+                        accent={word.type === 'ojama' ? 'text-incoming' : word.type === 'treasure' ? 'text-charge' : 'text-primary'}
+                        typedRomaji={typedRomaji}
+                        romajiVisible={keyCfg.romajiMode === 'always' || romajiHint}
+                        readingMode={keyCfg.readingMode}
+                      />
+                    </div>
                   </div>
                 )}
               </div>

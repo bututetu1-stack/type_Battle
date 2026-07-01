@@ -16,6 +16,7 @@ import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
 import RecordsBoard from './RecordsBoard';
+import TrCorners from './TrCorners';
 import { computeScore, accuracyOf, addScore, renameScore, loadPlayerName, savePlayerName, type ScoreRecord } from '../lib/scores';
 import { submitGlobalScore } from '../lib/leaderboard';
 
@@ -1415,7 +1416,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const isTreasure = word.type === 'treasure';
     return (
       <div
-        className={`tr-card w-full px-8 py-7 mb-4 overflow-hidden transition-all duration-200 ${
+        className={`tr-card w-full h-full px-5 py-4 overflow-hidden flex flex-col justify-center transition-all duration-200 ${
           dazzleUntilRef.current > nowTick ? 'dazzle-fx' : ''
         }`}
         style={{ borderColor: isOjama ? 'var(--incoming)' : isTreasure ? 'var(--charge)' : undefined }}
@@ -1799,8 +1800,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 </div>
               )}
 
-              {/* お題カードの固定高さスロット（中央寄せ）。お題の有無や行数が変わっても高さ一定。 */}
-              <div className="h-52 flex items-center justify-center">
+              {/* お題カードの固定高さスロット（中央寄せ）。お題の有無や行数が変わっても高さ一定。
+                  overflow-hidden で、万一カードが伸びても隣（次のお題・アイテムスロット）に被らせない。 */}
+              <div className="h-56 flex items-stretch justify-center overflow-hidden">
                 {renderCurrentWord()}
               </div>
             </div>
@@ -2491,16 +2493,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     </div>
   );
 }
-
-// 計器HUDカードの四隅ブラケット装飾。
-const TrCorners = ({ color = 'var(--primary)' }: { color?: string }) => (
-  <>
-    <span className="absolute pointer-events-none" style={{ top: 12, left: 12, width: 16, height: 16, borderTop: `2px solid ${color}`, borderLeft: `2px solid ${color}`, opacity: 0.55 }} />
-    <span className="absolute pointer-events-none" style={{ top: 12, right: 12, width: 16, height: 16, borderTop: `2px solid ${color}`, borderRight: `2px solid ${color}`, opacity: 0.55 }} />
-    <span className="absolute pointer-events-none" style={{ bottom: 12, left: 12, width: 16, height: 16, borderBottom: `2px solid ${color}`, borderLeft: `2px solid ${color}`, opacity: 0.55 }} />
-    <span className="absolute pointer-events-none" style={{ bottom: 12, right: 12, width: 16, height: 16, borderBottom: `2px solid ${color}`, borderRight: `2px solid ${color}`, opacity: 0.55 }} />
-  </>
-);
 
 const Hud = ({ label, value, icon, className }: { label: string; value: number; icon?: React.ReactNode; className?: string }) => (
   <div className="tr-tile px-3 py-1.5 flex flex-col items-center justify-center min-w-[60px]">
