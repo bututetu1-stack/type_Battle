@@ -1788,16 +1788,24 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <div className="shrink-0 w-full max-w-lg relative">
               {gameState === 'playing' && soloMode !== 'timeattack' && (
                 <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 w-12 flex flex-col items-center gap-1 pointer-events-none">
-                  <div className={`text-sm font-bold text-red-400 mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
+                  <div className={`text-sm font-bold text-incoming mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
                   <div className="w-6 flex flex-col-reverse gap-[3px]">
                     {Array.from({ length: Math.min(maxBacklog, 12) }).map((_, i) => {
                       const filled = i < Math.min(totalIncoming, 12);
                       return (
-                        <div key={i} className={`w-full h-[13px] rounded ${filled ? 'bg-red-500 border border-red-300/50 shadow-[0_0_7px_rgba(239,68,68,0.65)]' : 'bg-neutral-800/50 border border-neutral-700/40'}`} />
+                        <div
+                          key={i}
+                          className="w-full h-[13px] rounded"
+                          style={{
+                            background: filled ? 'var(--incoming)' : 'var(--surface2)',
+                            border: filled ? '1px solid var(--incoming)' : '1px solid var(--line)',
+                            boxShadow: filled ? '0 0 7px var(--incoming)' : 'none',
+                          }}
+                        />
                       );
                     })}
                   </div>
-                  <div className="text-[10px] text-gray-400 text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
+                  <div className="text-[10px] text-muted text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
                 </div>
               )}
 
@@ -1885,16 +1893,22 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             {/* 自分のバックログ（処理待ち）。満タンでトップアウト＝敗北。タイムアタックでは非表示。 */}
             {soloMode !== 'timeattack' && (
             <div className="w-full max-w-lg mt-4">
-              <div className="text-[10px] text-gray-500 mb-0.5">自分のバックログ（満タンで脱落）</div>
+              <div className="text-[10px] text-muted mb-0.5">自分のバックログ（満タンで脱落）</div>
               <div className="flex gap-1">
-                {Array.from({ length: maxBacklog }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-2 flex-1 rounded-sm ${
-                      i < backlog.length ? (i >= maxBacklog - 3 ? 'bg-red-500' : 'bg-cyan-500') : 'bg-neutral-800'
-                    }`}
-                  />
-                ))}
+                {Array.from({ length: maxBacklog }).map((_, i) => {
+                  const filled = i < backlog.length;
+                  const danger = i >= maxBacklog - 3;
+                  return (
+                    <div
+                      key={i}
+                      className="h-2 flex-1 rounded-sm"
+                      style={{
+                        background: filled ? (danger ? 'var(--incoming)' : 'var(--backload)') : 'var(--surface2)',
+                        boxShadow: filled ? `0 0 6px ${danger ? 'var(--incoming)' : 'var(--backload)'}` : 'none',
+                      }}
+                    />
+                  );
+                })}
               </div>
             </div>
             )}
