@@ -4,7 +4,7 @@ import {
   Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine, Settings, RotateCcw, Timer,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
-import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
+import { generateWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
 import { loadCustomWords, loadCustomGroups } from '../lib/customwords';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
@@ -407,6 +407,14 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const w = generateWord(rng, themeRef.current, bagRef.current, false, itemsOnRef.current ? treasureRateRef.current : 0, treasureBoostRef.current);
     // タイムアタックは寿司打式：お宝もおじゃまも無し、全て通常単語にする。
     return soloModeRef.current === 'timeattack' ? { ...w, type: 'normal' } : w;
+  }, []);
+
+  // 被弾（CPUの攻撃）で挿入するおじゃま語も、同じ出題バッグから引いて
+  // 「全語1巡するまで同じ語句を出さない」を通常供給と一括で守る。
+  const nextOjamaWord = useCallback((): Word => {
+    const rng = wordRngRef.current!;
+    const w = generateWord(rng, themeRef.current, bagRef.current, false, 0, 0);
+    return { ...w, type: 'ojama' };
   }, []);
 
   // タイムアタック: ノーミス打鍵1回ぶん連打メーターを進める。区切り到達で時間追加、
@@ -1143,7 +1151,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       const words: Word[] = [];
       for (const e of due) {
         if (e.word) words.push(makeOjamaWordFrom(e.word.display, e.word.reading));
-        else for (let i = 0; i < e.amount; i++) words.push(makeOjamaWord(themeRef.current));
+        else for (let i = 0; i < e.amount; i++) words.push(nextOjamaWord());
       }
       if (words.length === 0) return;
       sfx.damage(); // 被弾SE（おじゃまが実際にバックログへ入った瞬間）
