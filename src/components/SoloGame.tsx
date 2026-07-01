@@ -16,7 +16,8 @@ import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
 import RecordsBoard from './RecordsBoard';
-import { computeScore, accuracyOf, addScore, loadPlayerName, savePlayerName, type ScoreRecord } from '../lib/scores';
+import TrCorners from './TrCorners';
+import { computeScore, accuracyOf, addScore, renameScore, loadPlayerName, savePlayerName, type ScoreRecord } from '../lib/scores';
 import { submitGlobalScore } from '../lib/leaderboard';
 
 // --- 定数 ---
@@ -234,6 +235,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [playerName, setPlayerName] = useState<string>(() => loadPlayerName());
   const [savedRank, setSavedRank] = useState<number | null>(null); // 保存後の順位（モード内）
   const [hasSaved, setHasSaved] = useState(false); // 二重保存ガード
+  const savedTsRef = useRef<number | null>(null); // 自動保存した記録の識別子（改名で在place更新）
   const [showRecords, setShowRecords] = useState(false); // 記録一覧モーダル
   const [recordsView, setRecordsView] = useState<'local' | 'online'>('local'); // 記録一覧の初期ビュー
   // グローバル（オンライン）ランキングへの送信状態。
@@ -833,6 +835,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setKeysTyped(0);
     setMissCount(0);
     setHasSaved(false);
+    savedTsRef.current = null;
     setSavedRank(null);
     setGlobalState('idle');
     setGlobalRank(null);
@@ -1249,7 +1252,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const currentScore = () =>
     computeScore({ keys: keysTyped, miss: missCount, seconds: elapsedSeconds(), words: wordsCleared, maxCombo });
 
-  // 結果を端末ローカルのハイスコア表に保存（リトライ時の二重保存はガード）。
+  // 結果を端末ローカルのハイスコア表に自動保存（1試合1回）。タイムアタックはグローバルにも送信。
   const handleSaveRecord = () => {
     if (hasSaved) return;
     const name = playerName.trim() || 'プレイヤー';
@@ -1267,6 +1270,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       ts: Date.now(),
     };
     savePlayerName(name);
+    savedTsRef.current = rec.ts;
     setSavedRank(addScore(rec));
     setHasSaved(true);
 
@@ -1292,50 +1296,119 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     }
   };
 
+  // 結果画面に入ったら記録を自動保存（名前は端末に記憶した表示名を使用）。
+  useEffect(() => {
+    if ((gameState === 'gameover' || gameState === 'win' || gameState === 'timeup') && !hasSaved && startTime) {
+      handleSaveRecord();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState]);
+
+  // 自動保存後の表示名の変更: 端末の記録名（在place）と記憶名を更新。
+  const handleRenameChange = (v: string) => {
+    setPlayerName(v);
+    const nm = v.trim() || 'プレイヤー';
+    savePlayerName(nm);
+    if (savedTsRef.current != null) renameScore(savedTsRef.current, nm);
+  };
+  // 入力確定時にオンライン（タイムアタック）の表示名も最新へ。
+  const handleRenameBlur = () => {
+    if (soloMode !== 'timeattack' || !hasSaved) return;
+    const nm = playerName.trim() || 'プレイヤー';
+    submitGlobalScore({
+      name: nm,
+      score: currentScore(),
+      keys: keysTyped,
+      kps: calculateKPS(),
+      acc: accuracyOf(keysTyped, missCount),
+      words: wordsCleared,
+      maxCombo,
+      theme,
+      taSeconds: cfgTaSeconds,
+    })
+      .then((res) => setGlobalRank(res.rank))
+      .catch(() => {});
+  };
+
   // 結果画面に共通で出す「総合スコア＋記録保存」UI。
   const renderResultExtras = () => (
     <div className="flex flex-col items-center gap-3 mb-6 w-full max-w-sm">
       <div className="text-center">
-        <div className="text-xs text-amber-300/80">総合スコア</div>
-        <div className="font-mono text-4xl font-black text-amber-300 drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]">{currentScore()}</div>
+        <div className="font-tech text-charge" style={{ fontSize: 10, letterSpacing: '0.14em', opacity: 0.85 }}>総合スコア</div>
+        <div className="font-tech text-4xl font-black text-charge" style={{ textShadow: '0 0 12px var(--charge)' }}>{currentScore()}</div>
       </div>
-      {hasSaved ? (
-        <div className="flex flex-col items-center gap-1.5 text-sm">
-          <div className="flex items-center justify-center gap-3 flex-wrap">
-            <span className="text-emerald-300 font-bold">記録を保存しました</span>
-            {savedRank != null && <span className="text-yellow-300 font-bold">🏅 端末内 {savedRank}位</span>}
-          </div>
-          {soloMode === 'timeattack' && (
-            <div className="flex items-center justify-center gap-2 flex-wrap text-xs">
-              {globalState === 'sending' && <span className="text-cyan-300 animate-pulse">🌐 オンライン登録中…</span>}
-              {globalState === 'done' && (
-                <span className="text-cyan-300 font-bold">🌐 オンライン{globalRank != null ? ` ${globalRank}位` : '登録済み'}（{cfgTaSeconds}秒）</span>
-              )}
-              {globalState === 'error' && <span className="text-red-300">🌐 オンライン登録失敗（記録画面から確認できます）</span>}
-            </div>
+      <div className="flex items-center justify-center gap-3 flex-wrap text-sm">
+        <span className="text-success font-bold">{hasSaved ? '記録を自動保存しました' : '記録を保存中…'}</span>
+        {savedRank != null && <span className="text-warning font-bold">🏅 端末内 {savedRank}位</span>}
+      </div>
+      {soloMode === 'timeattack' && (
+        <div className="flex items-center justify-center gap-2 flex-wrap text-xs">
+          {globalState === 'sending' && <span className="text-primary animate-pulse">🌐 オンライン登録中…</span>}
+          {globalState === 'done' && (
+            <span className="text-primary font-bold">🌐 オンライン{globalRank != null ? ` ${globalRank}位` : '登録済み'}（{cfgTaSeconds}秒）</span>
           )}
-          <button
-            onClick={() => { setRecordsView(soloMode === 'timeattack' ? 'online' : 'local'); setShowRecords(true); }}
-            className="underline text-cyan-300 mt-0.5"
-          >
-            ランキングを見る
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 w-full">
-          <input
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            maxLength={16}
-            placeholder="名前"
-            className="flex-1 bg-neutral-800 border border-white/15 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
-          />
-          <button onClick={handleSaveRecord} className="bg-amber-500/90 hover:bg-amber-500 text-black font-bold rounded-lg px-4 py-2 text-sm whitespace-nowrap">記録を保存</button>
-          <button onClick={() => { setRecordsView('local'); setShowRecords(true); }} className="bg-neutral-800 hover:bg-neutral-700 border border-white/10 text-cyan-200 rounded-lg px-3 py-2 text-sm whitespace-nowrap">記録</button>
+          {globalState === 'error' && <span className="text-incoming">🌐 オンライン登録失敗（記録画面から確認できます）</span>}
         </div>
       )}
+      <div className="flex items-center gap-2 w-full mt-1">
+        <span className="text-xs text-muted whitespace-nowrap">名前</span>
+        <input
+          value={playerName}
+          onChange={(e) => handleRenameChange(e.target.value)}
+          onBlur={handleRenameBlur}
+          maxLength={16}
+          placeholder="名前"
+          className="flex-1 rounded-lg px-3 py-2 text-sm text-text outline-none"
+          style={{ background: 'var(--bg2)', border: '1px solid var(--line)' }}
+        />
+        <button
+          onClick={() => { setRecordsView(soloMode === 'timeattack' ? 'online' : 'local'); setShowRecords(true); }}
+          className="tr-btn-ghost text-primary px-3 py-2 text-sm whitespace-nowrap"
+        >
+          ランキング
+        </button>
+      </div>
     </div>
   );
+
+  // バトル（royale）の戦績サマリ: 負けた瞬間の生存人数から順位・優勝までの残り・生存時間・
+  // 進捗（最下位→優勝）を出し、「どこまで行けたか」を可視化する。
+  const renderBattleStanding = () => {
+    const totalEnemies = dummies.length;
+    const totalPlayers = totalEnemies + 1;
+    const aliveEnemies = dummies.filter((d) => !d.isKO).length;
+    const myRank = aliveEnemies + 1;
+    const survivedSec = startTime ? Math.max(0, Math.round(((endTime ?? Date.now()) - startTime) / 1000)) : 0;
+    const mmss = `${Math.floor(survivedSec / 60)}:${String(survivedSec % 60).padStart(2, '0')}`;
+    const progressPct = totalPlayers > 1 ? Math.round(((totalPlayers - myRank) / (totalPlayers - 1)) * 100) : 100;
+    return (
+      <div className="w-full max-w-sm mb-6 flex flex-col items-center gap-2">
+        <div className="text-center leading-none">
+          <span className="font-tech text-6xl font-black text-charge" style={{ textShadow: '0 0 12px var(--charge)' }}>{myRank}</span>
+          <span className="text-2xl font-bold text-charge"> 位</span>
+          <span className="text-base text-muted"> / 全{totalPlayers}人中</span>
+        </div>
+        <div className="text-sm text-text flex items-center gap-3 flex-wrap justify-center">
+          <span>優勝まであと <span className="text-text font-bold font-tech">{aliveEnemies}</span> 体</span>
+          <span className="text-muted">|</span>
+          <span>生存 <span className="text-text font-bold font-tech">{mmss}</span></span>
+        </div>
+        <div className="w-full">
+          <div className="flex justify-between text-[10px] text-muted mb-0.5">
+            <span>スタート</span>
+            <span>優勝 🏆</span>
+          </div>
+          <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: 'var(--surface2)', border: '1px solid var(--line)' }}>
+            <div
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg, var(--incoming), var(--charge), var(--success))', boxShadow: '0 0 14px var(--glow)' }}
+            />
+          </div>
+          <div className="text-center text-[11px] text-muted mt-1">優勝への到達度 {progressPct}%</div>
+        </div>
+      </div>
+    );
+  };
 
   const renderCurrentWord = () => {
     if (backlog.length === 0) return null;
@@ -1344,25 +1417,23 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const isTreasure = word.type === 'treasure';
     return (
       <div
-        className={`lt-solid w-full p-6 rounded-xl border-2 shadow-2xl mb-4 transition-all duration-200 ${
+        className={`tr-card w-full h-full px-5 py-4 overflow-hidden flex flex-col justify-center transition-all duration-200 ${
           dazzleUntilRef.current > nowTick ? 'dazzle-fx' : ''
-        } ${
-          isOjama
-            ? 'border-red-500/50 bg-red-950/30'
-            : isTreasure
-              ? 'border-yellow-400/50 bg-yellow-900/30 shadow-yellow-500/20'
-              : 'border-blue-500/30 bg-gray-800/80'
         }`}
+        style={{ borderColor: isOjama ? 'var(--incoming)' : isTreasure ? 'var(--charge)' : undefined }}
       >
-        <CurrentWord
-          word={word}
-          tokenIndex={tokenIndex}
-          currentTyping={currentTyping}
-          accent={isOjama ? 'text-red-400' : isTreasure ? 'text-yellow-400' : 'text-cyan-400'}
-          typedRomaji={typedRomaji}
-          romajiVisible={keyCfg.romajiMode === 'always' || romajiHint}
-          readingMode={keyCfg.readingMode}
-        />
+        <TrCorners color={isOjama ? 'var(--incoming)' : isTreasure ? 'var(--charge)' : 'var(--primary)'} />
+        <div className="relative z-[2]">
+          <CurrentWord
+            word={word}
+            tokenIndex={tokenIndex}
+            currentTyping={currentTyping}
+            accent={isOjama ? 'text-incoming' : isTreasure ? 'text-charge' : 'text-primary'}
+            typedRomaji={typedRomaji}
+            romajiVisible={keyCfg.romajiMode === 'always' || romajiHint}
+            readingMode={keyCfg.readingMode}
+          />
+        </div>
       </div>
     );
   };
@@ -1393,7 +1464,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   ).filter((e) => nowTick > 0 && e.until > nowTick);
 
   return (
-    <div className={`h-screen bg-transparent text-white font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
+    <div className={`h-screen bg-transparent text-text font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
       {/* 被弾時の赤フラッシュ */}
       <div
@@ -1717,21 +1788,30 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <div className="shrink-0 w-full max-w-lg relative">
               {gameState === 'playing' && soloMode !== 'timeattack' && (
                 <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 w-12 flex flex-col items-center gap-1 pointer-events-none">
-                  <div className={`text-sm font-bold text-red-400 mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
+                  <div className={`text-sm font-bold text-incoming mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
                   <div className="w-6 flex flex-col-reverse gap-[3px]">
                     {Array.from({ length: Math.min(maxBacklog, 12) }).map((_, i) => {
                       const filled = i < Math.min(totalIncoming, 12);
                       return (
-                        <div key={i} className={`w-full h-[13px] rounded ${filled ? 'bg-red-500 border border-red-300/50 shadow-[0_0_7px_rgba(239,68,68,0.65)]' : 'bg-neutral-800/50 border border-neutral-700/40'}`} />
+                        <div
+                          key={i}
+                          className="w-full h-[13px] rounded"
+                          style={{
+                            background: filled ? 'var(--incoming)' : 'var(--surface2)',
+                            border: filled ? '1px solid var(--incoming)' : '1px solid var(--line)',
+                            boxShadow: filled ? '0 0 7px var(--incoming)' : 'none',
+                          }}
+                        />
                       );
                     })}
                   </div>
-                  <div className="text-[10px] text-gray-400 text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
+                  <div className="text-[10px] text-muted text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
                 </div>
               )}
 
-              {/* お題カードの固定高さスロット（中央寄せ）。お題の有無や行数が変わっても高さ一定。 */}
-              <div className="h-52 flex items-center justify-center">
+              {/* お題カードの固定高さスロット（中央寄せ）。お題の有無や行数が変わっても高さ一定。
+                  overflow-hidden で、万一カードが伸びても隣（次のお題・アイテムスロット）に被らせない。 */}
+              <div className="h-56 flex items-stretch justify-center overflow-hidden">
                 {renderCurrentWord()}
               </div>
             </div>
@@ -1813,16 +1893,22 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             {/* 自分のバックログ（処理待ち）。満タンでトップアウト＝敗北。タイムアタックでは非表示。 */}
             {soloMode !== 'timeattack' && (
             <div className="w-full max-w-lg mt-4">
-              <div className="text-[10px] text-gray-500 mb-0.5">自分のバックログ（満タンで脱落）</div>
+              <div className="text-[10px] text-muted mb-0.5">自分のバックログ（満タンで脱落）</div>
               <div className="flex gap-1">
-                {Array.from({ length: maxBacklog }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-2 flex-1 rounded-sm ${
-                      i < backlog.length ? (i >= maxBacklog - 3 ? 'bg-red-500' : 'bg-cyan-500') : 'bg-neutral-800'
-                    }`}
-                  />
-                ))}
+                {Array.from({ length: maxBacklog }).map((_, i) => {
+                  const filled = i < backlog.length;
+                  const danger = i >= maxBacklog - 3;
+                  return (
+                    <div
+                      key={i}
+                      className="h-2 flex-1 rounded-sm"
+                      style={{
+                        background: filled ? (danger ? 'var(--incoming)' : 'var(--backload)') : 'var(--surface2)',
+                        boxShadow: filled ? `0 0 6px ${danger ? 'var(--incoming)' : 'var(--backload)'}` : 'none',
+                      }}
+                    />
+                  );
+                })}
               </div>
             </div>
             )}
@@ -2282,8 +2368,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
           {gameState === 'gameover' && (
             <div className="absolute inset-0 bg-red-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
-              <h2 className="text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">TOP OUT</h2>
-              <p className="text-red-300 mb-8">おじゃまブロックがあふれました</p>
+              <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">TOP OUT</h2>
+              <p className="text-red-300 mb-6">おじゃまブロックがあふれました</p>
+              {renderBattleStanding()}
               <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-red-500/30">
                 <Stat label="総打鍵" value={keysTyped} />
                 <Stat label="MAX COMBO" value={maxCombo} />
@@ -2304,8 +2391,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           {gameState === 'win' && (
             <div className="absolute inset-0 bg-emerald-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
               <Crown className="w-16 h-16 text-yellow-400 mb-3" />
-              <h2 className="text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]">YOU WIN!</h2>
-              <p className="text-emerald-300 mb-8">全ての敵を倒した！</p>
+              <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]">YOU WIN!</h2>
+              <p className="text-emerald-300 mb-3">全ての敵を倒した！</p>
+              <p className="mb-6 text-lg font-bold text-yellow-300">🏆 1 位 / 全{dummies.length + 1}人中</p>
               <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-emerald-500/30">
                 <Stat label="総打鍵" value={keysTyped} />
                 <Stat label="MAX COMBO" value={maxCombo} />
@@ -2326,7 +2414,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           {gameState === 'timeup' && (
             <div className="absolute inset-0 bg-indigo-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
               <Timer className="w-16 h-16 text-cyan-300 mb-3" />
-              <h2 className="text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(99,102,241,0.8)]">TIME UP</h2>
+              <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(99,102,241,0.8)]">TIME UP</h2>
               <p className="text-indigo-200 mb-8">{cfgTaSeconds}秒タイムアタック終了！</p>
               <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-indigo-500/30">
                 <Stat label="総打鍵" value={keysTyped} />
@@ -2422,9 +2510,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 }
 
 const Hud = ({ label, value, icon, className }: { label: string; value: number; icon?: React.ReactNode; className?: string }) => (
-  <div className="flex flex-col items-center">
-    <span className="text-xs text-gray-500">{label}</span>
-    <span className={`font-mono text-xl font-bold flex items-center gap-1 ${className ?? ''}`}>
+  <div className="tr-tile px-3 py-1.5 flex flex-col items-center justify-center min-w-[60px]">
+    <span className="font-tech text-muted" style={{ fontSize: 8, letterSpacing: '0.12em' }}>{label}</span>
+    <span className={`font-tech text-lg font-bold leading-tight flex items-center gap-1 ${className ?? 'text-text'}`}>
       {icon} {value}
     </span>
   </div>
@@ -2432,8 +2520,8 @@ const Hud = ({ label, value, icon, className }: { label: string; value: number; 
 
 const Stat = ({ label, value, small, suffix }: { label: string; value: number; small?: boolean; suffix?: string }) => (
   <div className="text-center">
-    <div className="text-xs text-red-400/80">{label}</div>
-    <div className={`font-mono ${small ? 'text-lg' : 'text-3xl'}`}>{value}{suffix ?? ''}</div>
+    <div className="font-tech text-muted" style={{ fontSize: 10, letterSpacing: '0.12em' }}>{label}</div>
+    <div className={`font-tech font-bold text-text ${small ? 'text-lg' : 'text-3xl'}`}>{value}{suffix ?? ''}</div>
   </div>
 );
 

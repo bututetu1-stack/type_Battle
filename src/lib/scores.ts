@@ -83,6 +83,17 @@ export function addScore(rec: ScoreRecord): number | null {
   return idx >= 0 ? idx + 1 : null;
 }
 
+// 保存済みの記録（ts で特定）の名前を後から更新する（自動保存後の改名用）。
+export function renameScore(ts: number, name: string): void {
+  const all = loadScores();
+  let changed = false;
+  const nm = name.trim().slice(0, 16) || 'プレイヤー';
+  for (const r of all) {
+    if (r.ts === ts) { r.name = nm; changed = true; }
+  }
+  if (changed) saveAll(all);
+}
+
 // モード別の記録（スコア降順）。
 export function topScores(mode: ScoreMode): ScoreRecord[] {
   return loadScores()

@@ -24,28 +24,31 @@ export default function AttackGauge({ progress, combo, pinch, badges = 0, thresh
   return (
     <div className="w-full max-w-lg">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-gray-400 tracking-wide flex items-center gap-1">
-          <Swords className="w-3.5 h-3.5 text-orange-400" /> 攻撃チャージ
-          <span className="text-[10px] text-gray-600">（{threshold}{unit}ごとに発射）</span>
+        <span className="text-xs text-muted tracking-wide flex items-center gap-1">
+          <Swords className="w-3.5 h-3.5 text-charge" /> 攻撃チャージ
+          <span className="text-[10px] text-muted">（{threshold}{unit}ごとに発射）</span>
         </span>
-        <span className={`text-sm font-black flex items-center gap-1 ${pinch ? 'text-red-400' : 'text-orange-300'}`}>
+        <span className={`text-sm font-black font-tech flex items-center gap-1 ${pinch ? 'text-incoming' : 'text-charge'}`}>
           次の攻撃 +{amount}
-          {pinch && <span className="text-[10px] text-red-400">ピンチ×1.5</span>}
+          {pinch && <span className="text-[10px] text-incoming">ピンチ×1.5</span>}
         </span>
       </div>
       <div className="flex gap-1.5">
-        {Array.from({ length: segCount }).map((_, i) => (
-          <div
-            key={i}
-            className={`h-3.5 flex-1 rounded transition-colors ${
-              i < segFilled
-                ? pinch
-                  ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'
-                  : 'bg-orange-400 shadow-[0_0_8px_rgba(251,146,60,0.5)]'
-                : 'bg-neutral-800 border border-neutral-700'
-            }`}
-          />
-        ))}
+        {Array.from({ length: segCount }).map((_, i) => {
+          const on = i < segFilled;
+          const col = pinch ? 'var(--incoming)' : 'var(--charge)';
+          return (
+            <div
+              key={i}
+              className="h-3.5 flex-1 rounded transition-colors"
+              style={{
+                background: on ? col : 'var(--surface2)',
+                border: on ? 'none' : '1px solid var(--line)',
+                boxShadow: on ? `0 0 8px ${col}` : 'none',
+              }}
+            />
+          );
+        })}
       </div>
     </div>
   );
