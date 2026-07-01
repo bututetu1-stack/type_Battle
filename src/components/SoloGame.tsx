@@ -1451,6 +1451,12 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const survivors = dummyCount + 1 - eliminatedCount;
   const totalIncoming = pending.reduce((s, e) => s + e.amount, 0);
 
+  // 両隣の敵グリッド: 各列で生存者を上（先頭）に詰め、脱落者を後ろへ送る（安定ソート）。
+  const half = Math.ceil(dummies.length / 2);
+  const packAlive = (arr: Dummy[]) => [...arr].sort((a, b) => Number(!!a.isKO) - Number(!!b.isKO));
+  const leftDummies = packAlive(dummies.slice(0, half));
+  const rightDummies = packAlive(dummies.slice(half));
+
   // 発動中の時間制限アイテム（残り時間カウントダウン表示用）。
   const activeEffects: { type: ItemType; until: number; color: string }[] = (
     [
@@ -1622,7 +1628,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
       <main className="flex-1 min-h-0 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]">
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
-          {dummies.slice(0, Math.ceil(dummies.length / 2)).map((d) => (
+          {leftDummies.map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
               <MiniBoard
                 height={d.height}
@@ -2434,7 +2440,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
-          {dummies.slice(Math.ceil(dummies.length / 2)).map((d) => (
+          {rightDummies.map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
               <MiniBoard
                 height={d.height}
