@@ -1415,25 +1415,23 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const isTreasure = word.type === 'treasure';
     return (
       <div
-        className={`lt-solid w-full p-6 rounded-xl border-2 shadow-2xl mb-4 transition-all duration-200 ${
+        className={`tr-card w-full px-8 py-7 mb-4 overflow-hidden transition-all duration-200 ${
           dazzleUntilRef.current > nowTick ? 'dazzle-fx' : ''
-        } ${
-          isOjama
-            ? 'border-red-500/50 bg-red-950/30'
-            : isTreasure
-              ? 'border-yellow-400/50 bg-yellow-900/30 shadow-yellow-500/20'
-              : 'border-blue-500/30 bg-gray-800/80'
         }`}
+        style={{ borderColor: isOjama ? 'var(--incoming)' : isTreasure ? 'var(--charge)' : undefined }}
       >
-        <CurrentWord
-          word={word}
-          tokenIndex={tokenIndex}
-          currentTyping={currentTyping}
-          accent={isOjama ? 'text-red-400' : isTreasure ? 'text-yellow-400' : 'text-cyan-400'}
-          typedRomaji={typedRomaji}
-          romajiVisible={keyCfg.romajiMode === 'always' || romajiHint}
-          readingMode={keyCfg.readingMode}
-        />
+        <TrCorners color={isOjama ? 'var(--incoming)' : isTreasure ? 'var(--charge)' : 'var(--primary)'} />
+        <div className="relative z-[2]">
+          <CurrentWord
+            word={word}
+            tokenIndex={tokenIndex}
+            currentTyping={currentTyping}
+            accent={isOjama ? 'text-incoming' : isTreasure ? 'text-charge' : 'text-primary'}
+            typedRomaji={typedRomaji}
+            romajiVisible={keyCfg.romajiMode === 'always' || romajiHint}
+            readingMode={keyCfg.readingMode}
+          />
+        </div>
       </div>
     );
   };
@@ -1464,7 +1462,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   ).filter((e) => nowTick > 0 && e.until > nowTick);
 
   return (
-    <div className={`h-screen bg-transparent text-white font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
+    <div className={`h-screen bg-transparent text-text font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
       {/* 被弾時の赤フラッシュ */}
       <div
@@ -2494,10 +2492,20 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   );
 }
 
+// 計器HUDカードの四隅ブラケット装飾。
+const TrCorners = ({ color = 'var(--primary)' }: { color?: string }) => (
+  <>
+    <span className="absolute pointer-events-none" style={{ top: 12, left: 12, width: 16, height: 16, borderTop: `2px solid ${color}`, borderLeft: `2px solid ${color}`, opacity: 0.55 }} />
+    <span className="absolute pointer-events-none" style={{ top: 12, right: 12, width: 16, height: 16, borderTop: `2px solid ${color}`, borderRight: `2px solid ${color}`, opacity: 0.55 }} />
+    <span className="absolute pointer-events-none" style={{ bottom: 12, left: 12, width: 16, height: 16, borderBottom: `2px solid ${color}`, borderLeft: `2px solid ${color}`, opacity: 0.55 }} />
+    <span className="absolute pointer-events-none" style={{ bottom: 12, right: 12, width: 16, height: 16, borderBottom: `2px solid ${color}`, borderRight: `2px solid ${color}`, opacity: 0.55 }} />
+  </>
+);
+
 const Hud = ({ label, value, icon, className }: { label: string; value: number; icon?: React.ReactNode; className?: string }) => (
-  <div className="flex flex-col items-center">
-    <span className="text-xs text-gray-500">{label}</span>
-    <span className={`font-mono text-xl font-bold flex items-center gap-1 ${className ?? ''}`}>
+  <div className="tr-tile px-3 py-1.5 flex flex-col items-center justify-center min-w-[60px]">
+    <span className="font-tech text-muted" style={{ fontSize: 8, letterSpacing: '0.12em' }}>{label}</span>
+    <span className={`font-tech text-lg font-bold leading-tight flex items-center gap-1 ${className ?? 'text-text'}`}>
       {icon} {value}
     </span>
   </div>
@@ -2505,8 +2513,8 @@ const Hud = ({ label, value, icon, className }: { label: string; value: number; 
 
 const Stat = ({ label, value, small, suffix }: { label: string; value: number; small?: boolean; suffix?: string }) => (
   <div className="text-center">
-    <div className="text-xs text-red-400/80">{label}</div>
-    <div className={`font-mono ${small ? 'text-lg' : 'text-3xl'}`}>{value}{suffix ?? ''}</div>
+    <div className="font-tech text-muted" style={{ fontSize: 10, letterSpacing: '0.12em' }}>{label}</div>
+    <div className={`font-tech font-bold text-text ${small ? 'text-lg' : 'text-3xl'}`}>{value}{suffix ?? ''}</div>
   </div>
 );
 
