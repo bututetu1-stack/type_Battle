@@ -1,7 +1,7 @@
 // グローバル・オンラインランキング（ソロ タイムアタックの総合スコア）。
 // Firebase Realtime Database の leaderboard/timeattack/{bucket}/{uid} に
 // 各プレイヤーの自己ベストを保存し、制限時間ごとに全プレイヤーで競う。
-import { ref, get, set, query, orderByChild, limitToLast } from 'firebase/database';
+import { ref, get, set, update, query, orderByChild, limitToLast } from 'firebase/database';
 import { db, ensureSignedIn } from './firebase';
 
 // 集計バケット = タイムアタックの制限時間（秒）。SoloGame の制限時間プリセットと一致させる。
@@ -71,6 +71,9 @@ export async function submitGlobalScore(
       theme: inp.theme,
       ts: Date.now(),
     });
+  } else if (prev) {
+    // スコアは自己ベストを維持しつつ、表示名だけは最新に更新する（自動保存後の改名対応）。
+    await update(entryRef, { name: inp.name.slice(0, 16) });
   }
 
   // 送信後の順位（このバケット内・スコア降順）を計算して返す。
