@@ -1599,26 +1599,26 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </div>
       )}
 
-      <header className="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-neutral-900/50 z-10">
+      <header className="h-16 border-b flex items-center justify-between px-8 z-10" style={{ borderColor: 'var(--line)', background: 'linear-gradient(180deg, var(--surface2), transparent)' }}>
         <div className="flex items-center gap-3">
-          <Swords className="text-cyan-400" />
-          <h1 className="text-xl font-bold tracking-widest text-gray-200">
-            TYPE ROYALE<span className="text-xs ml-2 text-gray-500">ROOM {roomId}</span>
+          <Swords className="text-primary" />
+          <h1 className="font-tech text-xl font-bold tracking-[0.18em] text-text">
+            TYPE ROYALE<span className="text-xs ml-2 text-muted">ROOM {roomId}</span>
           </h1>
         </div>
-        <div className="flex gap-6 items-center">
-          <div className="flex flex-col items-center">
-            <span className="text-xs text-gray-500">総打鍵</span>
-            <span className="font-mono text-xl font-bold text-cyan-300">{keysTyped}</span>
+        <div className="flex gap-2.5 items-center">
+          <div className="tr-tile px-3 py-1.5 flex flex-col items-center justify-center min-w-[60px]">
+            <span className="font-tech text-muted" style={{ fontSize: 8, letterSpacing: '0.12em' }}>総打鍵</span>
+            <span className="font-tech text-lg font-bold leading-tight text-primary">{keysTyped}</span>
           </div>
-          <div className="flex flex-col items-center">
-            <span className="text-xs text-gray-500">KPS</span>
-            <span className="font-mono text-xl font-bold">{calculateKPS()}</span>
+          <div className="tr-tile px-3 py-1.5 flex flex-col items-center justify-center min-w-[60px]">
+            <span className="font-tech text-muted" style={{ fontSize: 8, letterSpacing: '0.12em' }}>KPS</span>
+            <span className="font-tech text-lg font-bold leading-tight text-text">{calculateKPS()}</span>
           </div>
-          <div className="flex flex-col items-center">
-            <span className="text-xs text-gray-500">BADGE</span>
-            <span className="font-mono text-xl font-bold flex items-center gap-1">
-              <Shield className="w-4 h-4 text-blue-400" /> {myBadges}
+          <div className="tr-tile px-3 py-1.5 flex flex-col items-center justify-center min-w-[60px]">
+            <span className="font-tech text-muted" style={{ fontSize: 8, letterSpacing: '0.12em' }}>BADGE</span>
+            <span className="font-tech text-lg font-bold leading-tight flex items-center gap-1 text-text">
+              <Shield className="w-4 h-4 text-backload" /> {myBadges}
             </span>
           </div>
           <button onClick={toggleMute} className="text-gray-500 hover:text-gray-300" title={muted ? '効果音オン' : '効果音オフ'}>

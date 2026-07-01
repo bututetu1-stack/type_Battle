@@ -1334,35 +1334,36 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const renderResultExtras = () => (
     <div className="flex flex-col items-center gap-3 mb-6 w-full max-w-sm">
       <div className="text-center">
-        <div className="text-xs text-amber-300/80">総合スコア</div>
-        <div className="font-mono text-4xl font-black text-amber-300 drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]">{currentScore()}</div>
+        <div className="font-tech text-charge" style={{ fontSize: 10, letterSpacing: '0.14em', opacity: 0.85 }}>総合スコア</div>
+        <div className="font-tech text-4xl font-black text-charge" style={{ textShadow: '0 0 12px var(--charge)' }}>{currentScore()}</div>
       </div>
       <div className="flex items-center justify-center gap-3 flex-wrap text-sm">
-        <span className="text-emerald-300 font-bold">{hasSaved ? '記録を自動保存しました' : '記録を保存中…'}</span>
-        {savedRank != null && <span className="text-yellow-300 font-bold">🏅 端末内 {savedRank}位</span>}
+        <span className="text-success font-bold">{hasSaved ? '記録を自動保存しました' : '記録を保存中…'}</span>
+        {savedRank != null && <span className="text-warning font-bold">🏅 端末内 {savedRank}位</span>}
       </div>
       {soloMode === 'timeattack' && (
         <div className="flex items-center justify-center gap-2 flex-wrap text-xs">
-          {globalState === 'sending' && <span className="text-cyan-300 animate-pulse">🌐 オンライン登録中…</span>}
+          {globalState === 'sending' && <span className="text-primary animate-pulse">🌐 オンライン登録中…</span>}
           {globalState === 'done' && (
-            <span className="text-cyan-300 font-bold">🌐 オンライン{globalRank != null ? ` ${globalRank}位` : '登録済み'}（{cfgTaSeconds}秒）</span>
+            <span className="text-primary font-bold">🌐 オンライン{globalRank != null ? ` ${globalRank}位` : '登録済み'}（{cfgTaSeconds}秒）</span>
           )}
-          {globalState === 'error' && <span className="text-red-300">🌐 オンライン登録失敗（記録画面から確認できます）</span>}
+          {globalState === 'error' && <span className="text-incoming">🌐 オンライン登録失敗（記録画面から確認できます）</span>}
         </div>
       )}
       <div className="flex items-center gap-2 w-full mt-1">
-        <span className="text-xs text-gray-400 whitespace-nowrap">名前</span>
+        <span className="text-xs text-muted whitespace-nowrap">名前</span>
         <input
           value={playerName}
           onChange={(e) => handleRenameChange(e.target.value)}
           onBlur={handleRenameBlur}
           maxLength={16}
           placeholder="名前"
-          className="flex-1 bg-neutral-800 border border-white/15 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-amber-400"
+          className="flex-1 rounded-lg px-3 py-2 text-sm text-text outline-none"
+          style={{ background: 'var(--bg2)', border: '1px solid var(--line)' }}
         />
         <button
           onClick={() => { setRecordsView(soloMode === 'timeattack' ? 'online' : 'local'); setShowRecords(true); }}
-          className="bg-neutral-800 hover:bg-neutral-700 border border-white/10 text-cyan-200 rounded-lg px-3 py-2 text-sm whitespace-nowrap"
+          className="tr-btn-ghost text-primary px-3 py-2 text-sm whitespace-nowrap"
         >
           ランキング
         </button>
@@ -1383,27 +1384,27 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     return (
       <div className="w-full max-w-sm mb-6 flex flex-col items-center gap-2">
         <div className="text-center leading-none">
-          <span className="text-6xl font-black text-amber-300 drop-shadow-[0_0_12px_rgba(251,191,36,0.6)]">{myRank}</span>
-          <span className="text-2xl font-bold text-amber-200/80"> 位</span>
-          <span className="text-base text-gray-400"> / 全{totalPlayers}人中</span>
+          <span className="font-tech text-6xl font-black text-charge" style={{ textShadow: '0 0 12px var(--charge)' }}>{myRank}</span>
+          <span className="text-2xl font-bold text-charge"> 位</span>
+          <span className="text-base text-muted"> / 全{totalPlayers}人中</span>
         </div>
-        <div className="text-sm text-gray-300 flex items-center gap-3 flex-wrap justify-center">
-          <span>優勝まであと <span className="text-white font-bold">{aliveEnemies}</span> 体</span>
-          <span className="text-gray-600">|</span>
-          <span>生存 <span className="text-white font-bold font-mono">{mmss}</span></span>
+        <div className="text-sm text-text flex items-center gap-3 flex-wrap justify-center">
+          <span>優勝まであと <span className="text-text font-bold font-tech">{aliveEnemies}</span> 体</span>
+          <span className="text-muted">|</span>
+          <span>生存 <span className="text-text font-bold font-tech">{mmss}</span></span>
         </div>
         <div className="w-full">
-          <div className="flex justify-between text-[10px] text-gray-500 mb-0.5">
+          <div className="flex justify-between text-[10px] text-muted mb-0.5">
             <span>スタート</span>
             <span>優勝 🏆</span>
           </div>
-          <div className="w-full h-3 rounded-full bg-neutral-800 overflow-hidden border border-white/10">
+          <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: 'var(--surface2)', border: '1px solid var(--line)' }}>
             <div
-              className="h-full rounded-full bg-gradient-to-r from-red-500 via-amber-400 to-emerald-400 transition-all duration-500"
-              style={{ width: `${progressPct}%` }}
+              className="h-full rounded-full transition-all duration-500"
+              style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg, var(--incoming), var(--charge), var(--success))', boxShadow: '0 0 14px var(--glow)' }}
             />
           </div>
-          <div className="text-center text-[11px] text-gray-400 mt-1">優勝への到達度 {progressPct}%</div>
+          <div className="text-center text-[11px] text-muted mt-1">優勝への到達度 {progressPct}%</div>
         </div>
       </div>
     );
@@ -2353,7 +2354,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
           {gameState === 'gameover' && (
             <div className="absolute inset-0 bg-red-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
-              <h2 className="text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">TOP OUT</h2>
+              <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">TOP OUT</h2>
               <p className="text-red-300 mb-6">おじゃまブロックがあふれました</p>
               {renderBattleStanding()}
               <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-red-500/30">
@@ -2376,7 +2377,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           {gameState === 'win' && (
             <div className="absolute inset-0 bg-emerald-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
               <Crown className="w-16 h-16 text-yellow-400 mb-3" />
-              <h2 className="text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]">YOU WIN!</h2>
+              <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]">YOU WIN!</h2>
               <p className="text-emerald-300 mb-3">全ての敵を倒した！</p>
               <p className="mb-6 text-lg font-bold text-yellow-300">🏆 1 位 / 全{dummies.length + 1}人中</p>
               <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-emerald-500/30">
@@ -2399,7 +2400,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           {gameState === 'timeup' && (
             <div className="absolute inset-0 bg-indigo-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
               <Timer className="w-16 h-16 text-cyan-300 mb-3" />
-              <h2 className="text-5xl font-black text-white mb-2 tracking-widest drop-shadow-[0_0_15px_rgba(99,102,241,0.8)]">TIME UP</h2>
+              <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(99,102,241,0.8)]">TIME UP</h2>
               <p className="text-indigo-200 mb-8">{cfgTaSeconds}秒タイムアタック終了！</p>
               <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-indigo-500/30">
                 <Stat label="総打鍵" value={keysTyped} />

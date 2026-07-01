@@ -12,7 +12,7 @@ interface MiniBoardProps {
   bgImage?: string; // そのプレイヤーが設定した背景画像（共有）。あれば盤面背景にして棒グラフは透過。
 }
 
-// 周囲プレイヤー（または solo のダミー）を表す小さな盤面ゲージ。
+// 周囲プレイヤー（または solo のダミー）を表す小さな盤面ゲージ。計器HUDのトークン色を使用。
 export default function MiniBoard({
   height,
   max,
@@ -28,29 +28,30 @@ export default function MiniBoard({
 }: MiniBoardProps) {
   if (isKO) {
     return (
-      <div className="aspect-[3/4] bg-neutral-900/40 rounded-md border border-neutral-800 flex flex-col items-center justify-center relative overflow-hidden">
-        <div className="text-neutral-700 font-black text-2xl rotate-[-15deg]">K.O.</div>
-        <div className="absolute inset-0 bg-red-950/20 mix-blend-overlay" />
-        {name && <div className="absolute bottom-0.5 inset-x-0 text-center text-[8px] text-neutral-600 truncate px-1">{name}</div>}
+      <div
+        className="aspect-[3/4] rounded-md border flex flex-col items-center justify-center relative overflow-hidden"
+        style={{ background: 'var(--surface)', borderColor: 'var(--line)' }}
+      >
+        <div className="font-black text-2xl rotate-[-15deg]" style={{ color: 'var(--muted)', opacity: 0.5 }}>K.O.</div>
+        {name && <div className="absolute bottom-0.5 inset-x-0 text-center text-[8px] truncate px-1" style={{ color: 'var(--muted)' }}>{name}</div>}
       </div>
     );
   }
 
   const dangerLevel = height / max;
+  // 縁の強調色: 攻撃対象=charge / 被攻撃=incoming / 自分=primary / 危険=incoming。
+  const accent = hit ? 'var(--charge)' : incoming ? 'var(--incoming)' : highlight ? 'var(--primary)' : dangerLevel > 0.7 ? 'var(--incoming)' : null;
+  const barColor = dangerLevel > 0.7 ? 'var(--incoming)' : highlight ? 'var(--primary)' : 'var(--muted)';
 
   return (
     <div
-      className={`aspect-[3/4] rounded-md border p-1 flex flex-col justify-end transition-all duration-200 relative ${
-        hit
-          ? 'border-orange-400 ring-2 ring-orange-400/80 bg-orange-950/30 scale-105 shadow-lg shadow-orange-500/30'
-          : incoming
-            ? 'border-red-500 ring-2 ring-red-500/80 bg-red-950/40 scale-105 shadow-lg shadow-red-500/40'
-            : highlight
-              ? 'border-cyan-500/70 bg-cyan-950/20'
-              : dangerLevel > 0.7
-                ? 'bg-red-950/20 border-red-900/50'
-                : 'bg-neutral-900/50 border-neutral-800'
-      }`}
+      className="aspect-[3/4] rounded-md border p-1 flex flex-col justify-end transition-all duration-200 relative"
+      style={{
+        background: accent ? 'var(--surface2)' : 'var(--surface)',
+        borderColor: accent ?? 'var(--line)',
+        boxShadow: accent ? `0 0 10px ${accent}` : 'none',
+        transform: hit || incoming ? 'scale(1.05)' : undefined,
+      }}
     >
       {/* プレイヤー設定の背景画像（共有）。あれば盤面の背景にする。 */}
       {bgImage && (
@@ -59,27 +60,21 @@ export default function MiniBoard({
           style={{ backgroundImage: `url("${bgImage}")` }}
         />
       )}
-      <div className={`relative w-full flex gap-[1px] h-full items-end ${bgImage ? 'opacity-40' : 'opacity-60'}`}>
+      <div className={`relative w-full flex gap-[1px] h-full items-end ${bgImage ? 'opacity-40' : 'opacity-70'}`}>
         {Array.from({ length: max }).map((_, i) => (
           <div
             key={i}
-            className={`flex-1 transition-all duration-300 ${
-              max - i <= height ? (dangerLevel > 0.7 ? 'bg-red-500' : highlight ? 'bg-cyan-400' : 'bg-gray-400') : 'bg-transparent'
-            }`}
-            style={{ height: `${((max - i) / max) * 100}%` }}
+            className="flex-1 transition-all duration-300"
+            style={{ height: `${((max - i) / max) * 100}%`, background: max - i <= height ? barColor : 'transparent' }}
           />
         ))}
       </div>
       {combo !== undefined && combo > 2 && (
-        <div className="absolute top-0.5 right-0.5 text-[9px] font-bold text-cyan-300">{combo}c</div>
+        <div className="absolute top-0.5 right-0.5 text-[9px] font-bold" style={{ color: 'var(--primary)' }}>{combo}c</div>
       )}
       {str !== undefined && (
         // 強さを★1〜3で表示（強いほど赤寄り）。
-        <div
-          className={`absolute top-0.5 left-0.5 text-[8px] font-bold ${
-            str >= 0.66 ? 'text-red-400' : str >= 0.33 ? 'text-yellow-400' : 'text-gray-500'
-          }`}
-        >
+        <div className="absolute top-0.5 left-0.5 text-[8px] font-bold" style={{ color: str >= 0.66 ? 'var(--incoming)' : str >= 0.33 ? 'var(--charge)' : 'var(--muted)' }}>
           {'★'.repeat(str >= 0.66 ? 3 : str >= 0.33 ? 2 : 1)}
         </div>
       )}
@@ -87,7 +82,7 @@ export default function MiniBoard({
         <div className="absolute top-0.5 left-0.5 text-sm animate-in zoom-in duration-200 drop-shadow">{itemEmoji}</div>
       )}
       {name && (
-        <div className="absolute bottom-0.5 inset-x-0 text-center text-[8px] text-gray-400 truncate px-1">{name}</div>
+        <div className="absolute bottom-0.5 inset-x-0 text-center text-[8px] truncate px-1" style={{ color: 'var(--muted)' }}>{name}</div>
       )}
     </div>
   );
