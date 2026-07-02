@@ -1548,7 +1548,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const word = backlog[0];
 
   return (
-    <div className={`h-screen bg-transparent text-white font-sans overflow-hidden flex flex-col ${shake ? 'screen-shake' : ''}`}>
+    <div className={`h-screen bg-transparent text-white font-sans overflow-hidden flex flex-col ${shake && keyCfg.screenShake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
       {/* 視認性低下: 食らっている間は、お題パネルやゲージなど“実際の要素”を
           虹色＋ブレで歪ませて読みにくくする（フィルタは centerRef 等に適用）。 */}
@@ -1713,7 +1713,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
       <main
         className="flex-1 min-h-0 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]"
-        style={{ transform: hitStop ? 'scale(1.015)' : 'scale(1)', transition: 'transform 90ms ease-out' }}
+        style={{ transform: hitStop && keyCfg.screenShake ? 'scale(1.015)' : 'scale(1)', transition: 'transform 90ms ease-out' }}
       >
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {othersLeft.map(([id, p]) => (
