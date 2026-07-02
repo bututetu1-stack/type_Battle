@@ -223,6 +223,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const [resultTab, setResultTab] = useState<'rank' | 'score' | 'ko' | 'kpm'>('score'); // 結果画面の表示切替
   // エフェクト用
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
+  // 撃破パーティクル（画面座標に散る破片）／衝撃波リング／ヒットストップ。
+  const [bursts, setBursts] = useState<{ id: number; x: number; y: number; color: string; parts: { dx: number; dy: number; s: number }[] }[]>([]);
+  const burstIdRef = useRef(0);
+  const [rings, setRings] = useState<{ id: number; x: number; y: number; color: string; size: number }[]>([]);
+  const ringIdRef = useRef(0);
+  const [hitStop, setHitStop] = useState(false);
   const [hitId, setHitId] = useState<string | null>(null); // 自分が攻撃した相手
   const [incomingId, setIncomingId] = useState<string | null>(null); // 自分を攻撃してきた相手
   const [toasts, setToasts] = useState<{ id: number; text: string; kind: 'ko' | 'in' | 'item'; at: number }[]>([]);
@@ -319,6 +325,42 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     setBeams((b) => [...b, { id, x1, y1, x2, y2, color }]);
     setTimeout(() => setBeams((b) => b.filter((x) => x.id !== id)), 700);
   }, []);
+
+  // パーティクルを発火（画面座標中心に破片を放射）。big=撃破用に多く・大きく・重力落下。
+  const addBurst = useCallback((x: number, y: number, color: string, big = false) => {
+    const id = burstIdRef.current++;
+    const n = big ? 26 : 12;
+    const parts = Array.from({ length: n }).map(() => {
+      const a = Math.random() * Math.PI * 2;
+      const r = (big ? 60 : 30) + Math.random() * (big ? 150 : 70);
+      return { dx: Math.cos(a) * r, dy: Math.sin(a) * r - (big ? 30 : 15) + 40, s: (big ? 4 : 2.5) + Math.random() * (big ? 7 : 4) };
+    });
+    setBursts((b) => [...b, { id, x, y, color, parts }]);
+    setTimeout(() => setBursts((b) => b.filter((z) => z.id !== id)), 800);
+  }, []);
+
+  // 衝撃波リングを発火。
+  const addRing = useCallback((x: number, y: number, color: string, size = 120) => {
+    const id = ringIdRef.current++;
+    setRings((r) => [...r, { id, x, y, color, size }]);
+    setTimeout(() => setRings((r) => r.filter((z) => z.id !== id)), 620);
+  }, []);
+
+  // 撃破: 相手ボード中心に大爆発（破片＋リング＋シェイク＋ヒットストップ＋SE）。
+  const koFx = useCallback((targetId: string, color = 'var(--charge)') => {
+    const r = boardRefs.current[targetId]?.getBoundingClientRect();
+    if (r) {
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      addBurst(cx, cy, color, true);
+      addRing(cx, cy, color, 150);
+    }
+    sfx.explode();
+    setShake(true);
+    setTimeout(() => setShake(false), 400);
+    setHitStop(true);
+    setTimeout(() => setHitStop(false), 90);
+  }, [addBurst, addRing]);
 
   // 自分のボード → 対象ミニボードへ攻撃ビーム（オレンジ）。
   const fireBeam = useCallback(
@@ -506,7 +548,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       if (wasLive && !isLive(p)) {
         if (p.koBy === uid) {
           pushToast(`${p.name} を撃破！`, 'ko');
-          sfx.ko();
+          koFx(id);
         } else {
           pushToast(`${p.name} 脱落`, 'in');
           sfx.eliminate();
@@ -519,7 +561,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       }
     }
     prevPlayersRef.current = players;
-  }, [players, uid, pushToast]);
+  }, [players, uid, pushToast, koFx]);
 
   // ターゲット選択（4モード / 仕様 §3.4）。
   const pickTarget = useCallback(() => {
@@ -1106,7 +1148,19 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         setCombo(newCombo);
         setMaxCombo((m) => Math.max(m, newCombo));
         setKeysTyped((k) => k + 1);
-        sfx.clear();
+        if (result.clearedType === 'treasure') sfx.treasure(); else sfx.clear();
+        // クリア演出: お題カード中心からリング／お宝は金スパーク／連鎖節目はバースト＋リング＋上昇音。
+        const cardR = centerRef.current?.getBoundingClientRect();
+        const cx = cardR ? cardR.left + cardR.width / 2 : window.innerWidth / 2;
+        const cy = cardR ? cardR.top + cardR.height * 0.42 : window.innerHeight / 2;
+        if (result.clearedType === 'treasure') addBurst(cx, cy, 'var(--charge)');
+        else addRing(cx, cy, 'var(--primary)', 70);
+        if (newCombo > 0 && newCombo % cStep === 0) {
+          const tier = Math.floor(newCombo / cStep) - 1;
+          sfx.combo(tier);
+          addBurst(cx, cy, 'var(--charge)', tier >= 2);
+          addRing(cx, cy, 'var(--charge)', 120 + tier * 24);
+        }
         // 1単語クリアごとに、来ている着弾予告を1つ相殺（タイピング＝防御）。
         offsetIncoming(1);
         // ゲージはミスでは減らない。加算方式は「ワード数」=1 /「文字数」=クリア語の読み文字数。
@@ -1133,7 +1187,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [started, launchAttack, sendAmount, fireSelected, cycleSlot, fireSlot, grantItem, cycleTargetMode, offsetIncoming]);
+  }, [started, launchAttack, sendAmount, fireSelected, cycleSlot, fireSlot, grantItem, cycleTargetMode, offsetIncoming, addBurst, addRing]);
 
   // ベース供給＆加速ループ（シールド/ブレーキ対応）。
   useEffect(() => {
@@ -1542,6 +1596,28 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </svg>
       )}
 
+      {/* 撃破パーティクル（相手ボード中心から破片が放射） */}
+      {bursts.map((bz) => (
+        <div key={bz.id} className="fixed z-40 pointer-events-none tr-anim" style={{ left: bz.x, top: bz.y }}>
+          {bz.parts.map((p, i) => (
+            <span
+              key={i}
+              className="tr-burst absolute rounded-full"
+              style={{ width: p.s, height: p.s, marginLeft: -p.s / 2, marginTop: -p.s / 2, background: bz.color, boxShadow: `0 0 6px ${bz.color}`, ['--dx']: `${p.dx}px`, ['--dy']: `${p.dy}px` } as React.CSSProperties}
+            />
+          ))}
+        </div>
+      ))}
+
+      {/* 衝撃波リング */}
+      {rings.map((rg) => (
+        <div
+          key={rg.id}
+          className="fixed z-40 pointer-events-none tr-anim tr-ring rounded-full"
+          style={{ left: rg.x, top: rg.y, width: rg.size, height: rg.size, marginLeft: -rg.size / 2, marginTop: -rg.size / 2, border: `3px solid ${rg.color}`, boxShadow: `0 0 16px ${rg.color}` }}
+        />
+      ))}
+
       {/* 自分のアイテム発動演出（名前＋ざっくり効果説明） */}
       {useFlash && (
         <div className="fixed top-[8.5rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in zoom-in duration-200 flex flex-col items-center gap-1">
@@ -1635,7 +1711,10 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]">
+      <main
+        className="flex-1 min-h-0 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]"
+        style={{ transform: hitStop ? 'scale(1.015)' : 'scale(1)', transition: 'transform 90ms ease-out' }}
+      >
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {othersLeft.map(([id, p]) => (
             <div
@@ -1663,6 +1742,17 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         <div ref={centerRef} className={`w-2/4 flex flex-col h-full min-h-0 relative ${dazzleUntil > nowTick ? 'dazzle-fx' : ''}`}>
           {isDanger && selfAlive && started && (
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
+          )}
+          {/* コンボ強度ビネット: 連鎖が伸びるほど内側発光が濃く・熱くなる（4連鎖以上で点灯） */}
+          {selfAlive && started && combo >= 4 && (
+            <div
+              className="absolute inset-0 rounded-2xl pointer-events-none z-0 transition-[box-shadow] duration-200"
+              style={{
+                boxShadow: `inset 0 0 ${Math.min(30 + combo * 6, 130)}px ${Math.min(6 + combo * 1.4, 34)}px ${
+                  combo >= 10 ? 'rgba(255,171,46,0.16)' : 'rgba(34,211,238,0.13)'
+                }`,
+              }}
+            />
           )}
 
           {/* 観戦オーバーレイ: 脱落したら中央の自分の入力画面を観戦相手の入力画面に置き換える。 */}
@@ -1816,8 +1906,16 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
             <div className="shrink-0 mb-3 text-center h-16 flex items-end justify-center">
               {combo > 2 && (
-                <div className="text-3xl font-black italic text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.6)] flex items-center gap-2">
-                  <Zap className="w-8 h-8 fill-cyan-400" /> {combo} COMBO!
+                <div
+                  key={combo}
+                  className="tr-combo-punch font-black italic flex items-center gap-2"
+                  style={{
+                    fontSize: `${Math.min(1.875 + (combo - 3) * 0.09, 3.4)}rem`,
+                    color: combo >= 10 ? 'var(--charge)' : combo >= 6 ? '#ffd23e' : '#22d3ee',
+                    textShadow: `0 0 ${Math.min(10 + combo * 2, 44)}px ${combo >= 10 ? 'rgba(255,171,46,0.8)' : 'rgba(34,211,238,0.7)'}`,
+                  }}
+                >
+                  <Zap className="w-8 h-8" style={{ fill: 'currentColor' }} /> {combo} COMBO!
                 </div>
               )}
             </div>

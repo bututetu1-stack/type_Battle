@@ -285,6 +285,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // 撃破パーティクル（画面座標に散る破片）。
   const [bursts, setBursts] = useState<{ id: number; x: number; y: number; color: string; parts: { dx: number; dy: number; s: number }[] }[]>([]);
   const burstIdRef = useRef(0);
+  // 衝撃波リング（拡大して消える円）。
+  const [rings, setRings] = useState<{ id: number; x: number; y: number; color: string; size: number }[]>([]);
+  const ringIdRef = useRef(0);
+  const [hitStop, setHitStop] = useState(false); // 撃破時の視覚ヒットストップ（入力は止めない）
   const [shake, setShake] = useState(false);
   const [useFlash, setUseFlash] = useState<ItemType | null>(null);
   const [boardFx, setBoardFx] = useState<ItemType | null>(null); // 盤面変化系の強調演出
@@ -307,24 +311,42 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setTimeout(() => setBeams((b) => b.filter((x) => x.id !== id)), 700);
   }, []);
 
-  // 撃破パーティクルを発火（画面座標中心に破片を放射）。
-  const addBurst = useCallback((x: number, y: number, color: string) => {
+  // パーティクルを発火（画面座標中心に破片を放射）。big=撃破用に多く・大きく・重力落下。
+  const addBurst = useCallback((x: number, y: number, color: string, big = false) => {
     const id = burstIdRef.current++;
-    const parts = Array.from({ length: 14 }).map(() => {
+    const n = big ? 26 : 12;
+    const parts = Array.from({ length: n }).map(() => {
       const a = Math.random() * Math.PI * 2;
-      const r = 40 + Math.random() * 90;
-      return { dx: Math.cos(a) * r, dy: Math.sin(a) * r - 20, s: 3 + Math.random() * 5 };
+      const r = (big ? 60 : 30) + Math.random() * (big ? 150 : 70);
+      // 上向き初速＋重力っぽい落下（dy に +40 の重力オフセット）。
+      return { dx: Math.cos(a) * r, dy: Math.sin(a) * r - (big ? 30 : 15) + 40, s: (big ? 4 : 2.5) + Math.random() * (big ? 7 : 4) };
     });
     setBursts((b) => [...b, { id, x, y, color, parts }]);
-    setTimeout(() => setBursts((b) => b.filter((z) => z.id !== id)), 750);
+    setTimeout(() => setBursts((b) => b.filter((z) => z.id !== id)), 800);
   }, []);
 
-  // 相手ボードの中心座標に撃破エフェクト＋SEを出す。
+  // 衝撃波リングを発火。
+  const addRing = useCallback((x: number, y: number, color: string, size = 120) => {
+    const id = ringIdRef.current++;
+    setRings((r) => [...r, { id, x, y, color, size }]);
+    setTimeout(() => setRings((r) => r.filter((z) => z.id !== id)), 620);
+  }, []);
+
+  // 撃破: 相手ボード中心に大爆発（破片＋リング＋シェイク＋ヒットストップ＋SE）。
   const koFx = useCallback((dummyId: number, color = 'var(--charge)') => {
     const r = dummyRefs.current[dummyId]?.getBoundingClientRect();
-    if (r) addBurst(r.left + r.width / 2, r.top + r.height / 2, color);
+    if (r) {
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      addBurst(cx, cy, color, true);
+      addRing(cx, cy, color, 150);
+    }
     sfx.explode();
-  }, [addBurst]);
+    setShake(true);
+    setTimeout(() => setShake(false), 400);
+    setHitStop(true);
+    setTimeout(() => setHitStop(false), 90);
+  }, [addBurst, addRing]);
 
   const pushToast = useCallback((text: string, kind: 'ko' | 'in' | 'item') => {
     const id = toastIdRef.current++;
@@ -580,10 +602,17 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const to = dummyRefs.current[target.id]?.getBoundingClientRect();
     if (from && to) {
       addBeam(from.left + from.width / 2, from.top + from.height * 0.35, to.left + to.width / 2, to.top + to.height / 2, '#fb923c');
+      // 非撃破の着弾にも小スパーク＋小リングで手応えを出す（撃破は koFx 側で大きく処理）。
+      if (!willKO) {
+        const tx = to.left + to.width / 2;
+        const ty = to.top + to.height / 2;
+        addBurst(tx, ty, '#fb923c');
+        addRing(tx, ty, '#fb923c', 60);
+      }
     }
     setTimeout(() => setAttackFlash(null), 600);
     setTimeout(() => setHitDummy((cur) => (cur === target.id ? null : cur)), 600);
-  }, [addBeam, pickTarget, pushToast, updatePending, koFx]);
+  }, [addBeam, addBurst, addRing, pickTarget, pushToast, updatePending, koFx]);
 
   // アイテムの効果を適用（所持状態のクリアは行わない）。
   const applyItem = useCallback(
@@ -1005,8 +1034,20 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setKeysTyped((prev) => prev + 1);
         setScore((s) => s + 100 + newCombo * 10);
         if (result.clearedType === 'treasure') sfx.treasure(); else sfx.clear();
-        // 連鎖マイルストーン（comboStep ごと）で上昇音。
-        if (newCombo > 0 && newCombo % comboStepRef.current === 0) sfx.combo(Math.floor(newCombo / comboStepRef.current) - 1);
+        // お題カード中心の座標（クリア/コンボ演出の発生源）。
+        const cardR = centerRef.current?.getBoundingClientRect();
+        const cx = cardR ? cardR.left + cardR.width / 2 : window.innerWidth / 2;
+        const cy = cardR ? cardR.top + cardR.height * 0.42 : window.innerHeight / 2;
+        // クリアの触感: カードから小さな相殺リング。お宝は金色スパークル。
+        if (result.clearedType === 'treasure') addBurst(cx, cy, 'var(--charge)');
+        else addRing(cx, cy, 'var(--primary)', 70);
+        // 連鎖マイルストーン（comboStep ごと）: 上昇音＋バースト＋リング＋フラッシュ。
+        if (newCombo > 0 && newCombo % comboStepRef.current === 0) {
+          const tier = Math.floor(newCombo / comboStepRef.current) - 1;
+          sfx.combo(tier);
+          addBurst(cx, cy, 'var(--charge)', tier >= 2);
+          addRing(cx, cy, 'var(--charge)', 120 + tier * 24);
+        }
         // 1単語クリアごとに、来ている着弾予告を1つ相殺（タイピング＝防御）。
         offsetIncoming(1);
         // ゲージはミスでは減らない。加算方式は「ワード数」=1 /「文字数」=クリアした語の読み文字数。
@@ -1218,7 +1259,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     if (dummies.length > 0 && dummies.every((d) => d.isKO)) {
       setGameState('win');
       setEndTime(Date.now()); // KPM をこの時点で固定
-      sfx.start();
+      sfx.win();
     }
   }, [dummies, gameState]);
 
@@ -1588,6 +1629,15 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         </div>
       ))}
 
+      {/* 衝撃波リング */}
+      {rings.map((rg) => (
+        <div
+          key={rg.id}
+          className="fixed z-40 pointer-events-none tr-anim tr-ring rounded-full"
+          style={{ left: rg.x, top: rg.y, width: rg.size, height: rg.size, marginLeft: -rg.size / 2, marginTop: -rg.size / 2, border: `3px solid ${rg.color}`, boxShadow: `0 0 16px ${rg.color}` }}
+        />
+      ))}
+
       {/* アイテム発動演出（名前＋ざっくり効果説明） */}
       {useFlash && (
         <div className="fixed top-[8rem] left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in zoom-in duration-200 flex flex-col items-center gap-1">
@@ -1686,7 +1736,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         </div>
       </header>
 
-      <main className="flex-1 min-h-0 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]">
+      <main
+        className="flex-1 min-h-0 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]"
+        style={{ transform: hitStop ? 'scale(1.015)' : 'scale(1)', transition: 'transform 90ms ease-out' }}
+      >
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {leftDummies.map((d) => (
             <div key={d.id} ref={(el) => { dummyRefs.current[d.id] = el; }}>
@@ -1708,6 +1761,17 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         <div ref={centerRef} className="w-2/4 flex flex-col h-full min-h-0 relative">
           {isDanger && gameState === 'playing' && (
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
+          )}
+          {/* コンボ強度ビネット: 連鎖が伸びるほど内側発光が濃く・熱くなる（4連鎖以上で点灯） */}
+          {gameState === 'playing' && combo >= 4 && (
+            <div
+              className="absolute inset-0 rounded-2xl pointer-events-none z-0 transition-[box-shadow] duration-200"
+              style={{
+                boxShadow: `inset 0 0 ${Math.min(30 + combo * 6, 130)}px ${Math.min(6 + combo * 1.4, 34)}px ${
+                  combo >= 10 ? 'rgba(255,171,46,0.16)' : 'rgba(34,211,238,0.13)'
+                }`,
+              }}
+            />
           )}
 
           <div className="flex-1 min-h-0 flex flex-col items-center pt-4 relative z-10">
@@ -1783,8 +1847,17 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
             <div className="shrink-0 mb-3 text-center h-16 flex items-end justify-center">
               {combo > 2 && (
-                <div className="animate-in slide-in-from-bottom-4 text-3xl font-black italic text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.6)] flex items-center gap-2">
-                  <Zap className="w-8 h-8 fill-cyan-400" /> {combo} COMBO!
+                <div
+                  key={combo}
+                  className="tr-combo-punch font-black italic flex items-center gap-2"
+                  style={{
+                    // 連鎖が伸びるほど大きく・熱くなる（cyan→amber へ）
+                    fontSize: `${Math.min(1.875 + (combo - 3) * 0.09, 3.4)}rem`,
+                    color: combo >= 10 ? 'var(--charge)' : combo >= 6 ? '#ffd23e' : '#22d3ee',
+                    textShadow: `0 0 ${Math.min(10 + combo * 2, 44)}px ${combo >= 10 ? 'rgba(255,171,46,0.8)' : 'rgba(34,211,238,0.7)'}`,
+                  }}
+                >
+                  <Zap className="w-8 h-8" style={{ fill: 'currentColor' }} /> {combo} COMBO!
                 </div>
               )}
             </div>
