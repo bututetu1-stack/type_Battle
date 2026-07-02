@@ -1543,9 +1543,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
   // 難易度プリセット（速度・敵・CPUをまとめて設定）。細かいチューニングは各スライダーで。
   const DIFFICULTY_PRESETS = {
-    easy: { label: 'かんたん', initial: 3500, min: 1600, accelSpeed: 1, hp: 12, enemies: 5, cpuStr: 3 },
-    normal: { label: 'ふつう', initial: 2500, min: 1000, accelSpeed: 3, hp: 10, enemies: 8, cpuStr: 5 },
-    hard: { label: 'むずかしい', initial: 1600, min: 600, accelSpeed: 6, hp: 8, enemies: 12, cpuStr: 8 },
+    easy: { label: 'かんたん', initial: 3800, min: 1800, accelSpeed: 1, hp: 14, enemies: 5, cpuStr: 3 },
+    normal: { label: 'ふつう', initial: 2800, min: 1100, accelSpeed: 2, hp: 12, enemies: 10, cpuStr: 5 },
+    hard: { label: 'むずかしい', initial: 2000, min: 750, accelSpeed: 5, hp: 9, enemies: 14, cpuStr: 7 },
   } as const;
   const applyDifficulty = (p: typeof DIFFICULTY_PRESETS[keyof typeof DIFFICULTY_PRESETS]) => {
     setCfgInitial(p.initial);
