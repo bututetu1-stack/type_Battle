@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause, ArrowLeft,
   Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine, Settings, RotateCcw, Timer,
+  ChevronDown, Gauge, Gift,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
@@ -1530,6 +1531,22 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setCfgAccel(Math.round((1 - clamped / 100) * 1000) / 1000);
   };
 
+  // 難易度プリセット（速度・敵・CPUをまとめて設定）。細かいチューニングは各スライダーで。
+  const DIFFICULTY_PRESETS = {
+    easy: { label: 'かんたん', initial: 3500, min: 1600, accelSpeed: 1, hp: 12, enemies: 5, cpuStr: 3 },
+    normal: { label: 'ふつう', initial: 2500, min: 1000, accelSpeed: 3, hp: 10, enemies: 8, cpuStr: 5 },
+    hard: { label: 'むずかしい', initial: 1600, min: 600, accelSpeed: 6, hp: 8, enemies: 12, cpuStr: 8 },
+  } as const;
+  const applyDifficulty = (p: typeof DIFFICULTY_PRESETS[keyof typeof DIFFICULTY_PRESETS]) => {
+    setCfgInitial(p.initial);
+    setCfgMin(p.min);
+    setAccelFromSpeed(p.accelSpeed);
+    setCfgHp(Math.min(HP_MAX, Math.max(HP_MIN, p.hp)));
+    setCfgEnemies(Math.min(MAX_DUMMIES, p.enemies));
+    setCfgCpuStr(p.cpuStr);
+    sfx.type();
+  };
+
   const isDanger = backlog.length >= maxBacklog - 3;
   // ピンチ（積載限界間近）に入った瞬間に警告音。
   useEffect(() => {
@@ -1558,7 +1575,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   ).filter((e) => nowTick > 0 && e.until > nowTick);
 
   return (
-    <div className={`h-screen bg-transparent text-text font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake ? 'screen-shake' : ''}`}>
+    <div className={`h-screen bg-transparent text-text font-sans overflow-hidden flex flex-col selection:bg-cyan-900 ${shake && keyCfg.screenShake ? 'screen-shake' : ''}`}>
       <div className={`fixed inset-0 pointer-events-none z-50 transition-colors duration-100 ${missFlash ? 'bg-red-500/20' : 'bg-transparent'}`} />
       {/* 被弾時の赤フラッシュ */}
       <div
@@ -1738,7 +1755,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
       <main
         className="flex-1 min-h-0 flex w-full px-3 py-4 gap-3 h-[calc(100vh-4rem)]"
-        style={{ transform: hitStop ? 'scale(1.015)' : 'scale(1)', transition: 'transform 90ms ease-out' }}
+        style={{ transform: hitStop && keyCfg.screenShake ? 'scale(1.015)' : 'scale(1)', transition: 'transform 90ms ease-out' }}
       >
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
           {leftDummies.map((d) => (
@@ -2103,290 +2120,161 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
               {/* カスタム設定（戦闘チューニング）。タイムアタックは寿司打式なので非表示。 */}
               {soloMode !== 'timeattack' && (
-              <div className="mb-6 w-full max-w-sm bg-neutral-900/60 border border-amber-700/40 rounded-xl p-4">
-                  <div className="text-xs text-amber-300 font-bold mb-3 flex items-center gap-1">
+              <div className="mb-6 w-full max-w-sm bg-neutral-900/60 border border-amber-700/40 rounded-xl px-4 py-3">
+                  <div className="text-xs text-amber-300 font-black mb-2 flex items-center gap-1">
                     <Zap className="w-3.5 h-3.5" /> カスタム設定
                   </div>
-                  <div className="block text-[11px] text-gray-400 mb-3">
-                    初期供給間隔: <span className="text-cyan-300 font-mono">{(cfgInitial / 1000).toFixed(1)}秒</span>
-                    <div className="flex items-center gap-2">
-                      <StepBtn onClick={() => setCfgInitial((v) => Math.max(500, v - 100))}>−0.1</StepBtn>
-                      <input
-                        type="range"
-                        min={500}
-                        max={6000}
-                        step={100}
-                        value={cfgInitial}
-                        onChange={(e) => setCfgInitial(Number(e.target.value))}
-                        className="flex-1 accent-cyan-500"
-                      />
-                      <StepBtn onClick={() => setCfgInitial((v) => Math.min(6000, v + 100))}>＋0.1</StepBtn>
-                    </div>
-                  </div>
-                  <div className="block text-[11px] text-gray-400 mb-3">
-                    最短間隔: <span className="text-cyan-300 font-mono">{(cfgMin / 1000).toFixed(1)}秒</span>
-                    <div className="flex items-center gap-2">
-                      <StepBtn onClick={() => setCfgMin((v) => Math.max(300, v - 100))}>−0.1</StepBtn>
-                      <input
-                        type="range"
-                        min={300}
-                        max={3000}
-                        step={100}
-                        value={cfgMin}
-                        onChange={(e) => setCfgMin(Number(e.target.value))}
-                        className="flex-1 accent-cyan-500"
-                      />
-                      <StepBtn onClick={() => setCfgMin((v) => Math.min(3000, v + 100))}>＋0.1</StepBtn>
-                    </div>
-                  </div>
-                  <div className="block text-[11px] text-gray-400">
-                    加速度: <span className="text-cyan-300 font-mono">{accelSpeed.toFixed(1)}</span>
-                    <span className="text-gray-600"> （大きいほど速く加速 / 0で加速なし）</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <StepBtn onClick={() => setAccelFromSpeed(accelSpeed - 0.5)}>−</StepBtn>
-                      <input
-                        type="range"
-                        min={0}
-                        max={10}
-                        step={0.5}
-                        value={accelSpeed}
-                        onChange={(e) => setAccelFromSpeed(Number(e.target.value))}
-                        className="flex-1 accent-cyan-500"
-                      />
-                      <StepBtn onClick={() => setAccelFromSpeed(accelSpeed + 0.5)}>＋</StepBtn>
-                    </div>
-                  </div>
-                  <div className="block text-[11px] text-gray-400 mt-3">
-                    自分のHP（積載限界）: <span className="text-cyan-300 font-mono">{cfgHp}</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <StepBtn onClick={() => setCfgHp((v) => Math.max(HP_MIN, v - 1))}>−</StepBtn>
-                      <input
-                        type="range"
-                        min={HP_MIN}
-                        max={HP_MAX}
-                        step={1}
-                        value={cfgHp}
-                        onChange={(e) => setCfgHp(Number(e.target.value))}
-                        className="flex-1 accent-cyan-500"
-                      />
-                      <StepBtn onClick={() => setCfgHp((v) => Math.min(HP_MAX, v + 1))}>＋</StepBtn>
-                    </div>
-                  </div>
-                  <div className="block text-[11px] text-gray-400 mt-3">
-                    敵の数: <span className="text-cyan-300 font-mono">{cfgEnemies}</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <StepBtn onClick={() => setCfgEnemies((v) => Math.max(1, v - 1))}>−</StepBtn>
-                      <input
-                        type="range"
-                        min={1}
-                        max={MAX_DUMMIES}
-                        step={1}
-                        value={cfgEnemies}
-                        onChange={(e) => setCfgEnemies(Number(e.target.value))}
-                        className="flex-1 accent-cyan-500"
-                      />
-                      <StepBtn onClick={() => setCfgEnemies((v) => Math.min(MAX_DUMMIES, v + 1))}>＋</StepBtn>
-                    </div>
-                  </div>
-                  <div className="block text-[11px] text-gray-400 mt-3">
-                    CPUの強さ（平均）: <span className="text-cyan-300 font-mono">{cfgCpuStr}</span>
-                    <span className="text-gray-600"> （強弱が混在し平均がこの値）</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <StepBtn onClick={() => setCfgCpuStr((v) => Math.max(0, v - 1))}>−</StepBtn>
-                      <input
-                        type="range"
-                        min={0}
-                        max={10}
-                        step={1}
-                        value={cfgCpuStr}
-                        onChange={(e) => setCfgCpuStr(Number(e.target.value))}
-                        className="flex-1 accent-cyan-500"
-                      />
-                      <StepBtn onClick={() => setCfgCpuStr((v) => Math.min(10, v + 1))}>＋</StepBtn>
-                    </div>
-                  </div>
-                  <div className="block text-[11px] text-gray-400 mt-3">
-                    お宝の出現率: <span className="text-yellow-300 font-mono">{cfgTreasureRate}%</span>
-                    <span className="text-gray-600"> （お宝🟨を打つとアイテム入手）</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <StepBtn onClick={() => setCfgTreasureRate((v) => Math.max(0, v - 5))}>−</StepBtn>
-                      <input
-                        type="range"
-                        min={0}
-                        max={80}
-                        step={5}
-                        value={cfgTreasureRate}
-                        onChange={(e) => setCfgTreasureRate(Number(e.target.value))}
-                        className="flex-1 accent-yellow-500"
-                      />
-                      <StepBtn onClick={() => setCfgTreasureRate((v) => Math.min(80, v + 5))}>＋</StepBtn>
-                    </div>
-                  </div>
-                  <div className="block text-[11px] text-gray-400 mt-3">
-                    アイテム
-                    <div className="flex gap-1 mt-1">
-                      {([[true, 'あり'], [false, 'なし']] as const).map(([on, lbl]) => (
-                        <button key={String(on)} onClick={() => setCfgItemsOn(on)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgItemsOn === on ? 'bg-fuchsia-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
-                          {lbl}
+
+                  {/* 難易度プリセット: 速度・敵・CPUをまとめて設定（細部は各スライダーで微調整）。 */}
+                  <div className="mb-1">
+                    <div className="text-[10px] text-gray-500 mb-1">難易度プリセット（速度・敵・CPUをまとめて設定）</div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(['easy', 'normal', 'hard'] as const).map((k) => (
+                        <button
+                          key={k}
+                          onClick={() => applyDifficulty(DIFFICULTY_PRESETS[k])}
+                          className="px-2 py-1.5 rounded-lg text-[11px] font-bold bg-neutral-800 text-gray-300 hover:bg-neutral-700 border border-white/10 transition-colors"
+                        >
+                          {DIFFICULTY_PRESETS[k].label}
                         </button>
                       ))}
-                      <span className="text-gray-600 ml-1 self-center">（なしにするとお宝もアイテムも出ません）</span>
-                    </div>
-                  </div>
-                  {cfgItemsOn && (
-                    <div className="block text-[11px] text-gray-400 mt-3">
-                      アイテムの個別ON/OFF <span className="text-gray-600">（OFFのアイテムは出ません）</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {ALL_ITEMS.map((it) => {
-                          const off = cfgDisabledItems.includes(it);
-                          return (
-                            <button
-                              key={it}
-                              onClick={() => setCfgDisabledItems((prev) => off ? prev.filter((x) => x !== it) : [...prev, it])}
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors flex items-center gap-0.5 ${off ? 'bg-neutral-800 text-gray-600 line-through' : 'bg-fuchsia-700/70 text-white'}`}
-                              title={ITEM_META[it].desc}
-                            >
-                              <span>{ITEM_EMOJI[it]}</span>{ITEM_META[it].name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <div className="flex gap-2 mt-1">
-                        <button onClick={() => setCfgDisabledItems([])} className="text-[9px] text-cyan-400 hover:text-cyan-300 underline">全部ON</button>
-                        <button onClick={() => setCfgDisabledItems([...ALL_ITEMS])} className="text-[9px] text-gray-500 hover:text-gray-300 underline">全部OFF</button>
-                      </div>
-                    </div>
-                  )}
-                  <div className="block text-[11px] text-gray-400 mt-3">
-                    ゲージ加算方式
-                    <div className="flex gap-1 mt-1">
-                      {([['word', 'ワード数'], ['char', '文字数']] as const).map(([m, lbl]) => (
-                        <button key={m} onClick={() => setCfgGaugeMode(m)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgGaugeMode === m ? 'bg-orange-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
-                          {lbl}
-                        </button>
-                      ))}
-                      <span className="text-[9px] text-gray-600 self-center ml-1">
-                        {cfgGaugeMode === 'char' ? '長い単語ほどゲージが溜まる' : '1ワード=1ゲージ'}
-                      </span>
-                    </div>
-                  </div>
-                  {cfgGaugeMode === 'word' ? (
-                    <div className="block text-[11px] text-gray-400 mt-3">
-                      アタックゲージ（何クリアで発射）: <span className="text-orange-300 font-mono">{cfgAttackGauge}</span>
-                      <div className="flex items-center gap-2 mt-1">
-                        <StepBtn onClick={() => setCfgAttackGauge((v) => Math.max(2, v - 1))}>−</StepBtn>
-                        <input type="range" min={2} max={10} step={1} value={cfgAttackGauge}
-                          onChange={(e) => setCfgAttackGauge(Number(e.target.value))} className="flex-1 accent-orange-500" />
-                        <StepBtn onClick={() => setCfgAttackGauge((v) => Math.min(10, v + 1))}>＋</StepBtn>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="block text-[11px] text-gray-400 mt-3">
-                      アタックゲージ（何文字で発射）: <span className="text-orange-300 font-mono">{cfgGaugeChars}</span>
-                      <div className="flex items-center gap-2 mt-1">
-                        <StepBtn onClick={() => setCfgGaugeChars((v) => Math.max(6, v - 1))}>−</StepBtn>
-                        <input type="range" min={6} max={40} step={1} value={cfgGaugeChars}
-                          onChange={(e) => setCfgGaugeChars(Number(e.target.value))} className="flex-1 accent-orange-500" />
-                        <StepBtn onClick={() => setCfgGaugeChars((v) => Math.min(40, v + 1))}>＋</StepBtn>
-                      </div>
-                    </div>
-                  )}
-                  <div className="block text-[11px] text-gray-400 mt-3">
-                    アタック数の上限: <span className="text-orange-300 font-mono">{cfgAttackCap}</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <StepBtn onClick={() => setCfgAttackCap((v) => Math.max(2, v - 1))}>−</StepBtn>
-                      <input type="range" min={2} max={12} step={1} value={cfgAttackCap}
-                        onChange={(e) => setCfgAttackCap(Number(e.target.value))} className="flex-1 accent-orange-500" />
-                      <StepBtn onClick={() => setCfgAttackCap((v) => Math.min(12, v + 1))}>＋</StepBtn>
-                    </div>
-                  </div>
-                  <div className="block text-[11px] text-gray-400 mt-3">
-                    アタック数が増える連鎖数: <span className="text-orange-300 font-mono">{cfgComboStep}</span>
-                    <span className="text-gray-600"> （この連鎖ごとに攻撃量+1）</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <StepBtn onClick={() => setCfgComboStep((v) => Math.max(2, v - 1))}>−</StepBtn>
-                      <input type="range" min={2} max={15} step={1} value={cfgComboStep}
-                        onChange={(e) => setCfgComboStep(Number(e.target.value))} className="flex-1 accent-orange-500" />
-                      <StepBtn onClick={() => setCfgComboStep((v) => Math.min(15, v + 1))}>＋</StepBtn>
-                    </div>
-                  </div>
-                  <div className="block text-[11px] text-gray-400 mt-3">
-                    バッジ上限（撃破数の補正上限）: <span className="text-yellow-300 font-mono">{cfgBadgeCap}</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <StepBtn onClick={() => setCfgBadgeCap((v) => Math.max(0, v - 1))}>−</StepBtn>
-                      <input type="range" min={0} max={10} step={1} value={cfgBadgeCap}
-                        onChange={(e) => setCfgBadgeCap(Number(e.target.value))} className="flex-1 accent-yellow-500" />
-                      <StepBtn onClick={() => setCfgBadgeCap((v) => Math.min(10, v + 1))}>＋</StepBtn>
-                    </div>
-                  </div>
-                  <div className="block text-[11px] text-gray-400 mt-3">
-                    バッジ1枚の攻撃上昇率: <span className="text-yellow-300 font-mono">{cfgBadgeRate}%</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <StepBtn onClick={() => setCfgBadgeRate((v) => Math.max(0, v - 5))}>−</StepBtn>
-                      <input type="range" min={0} max={100} step={5} value={cfgBadgeRate}
-                        onChange={(e) => setCfgBadgeRate(Number(e.target.value))} className="flex-1 accent-yellow-500" />
-                      <StepBtn onClick={() => setCfgBadgeRate((v) => Math.min(100, v + 5))}>＋</StepBtn>
-                    </div>
-                  </div>
-                  <div className="block text-[11px] text-gray-400 mt-3">
-                    逆転補正（劣勢ほど防御・逆転／優勢ほど攻撃が出やすい）
-                    <div className="flex gap-1 mt-1">
-                      {([[0, 'なし'], [1, '弱'], [2, '中'], [3, '強']] as const).map(([v, lbl]) => (
-                        <button key={v} onClick={() => setCfgComeback(v)}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgComeback === v ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
-                          {lbl}
-                        </button>
-                      ))}
-                      <span className="text-[9px] text-gray-600 self-center ml-1">順位＋ピンチ度で判定</span>
                     </div>
                   </div>
 
-                  {/* アイテムの使い方 */}
-                  <div className="mt-4 border-t border-white/10 pt-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] text-amber-200 font-bold">アイテムの使い方</span>
-                      <button
-                        onClick={() => setCfgAutoFull((v) => !v)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                          cfgAutoFull ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
-                        }`}
-                      >
-                        完全オート {cfgAutoFull ? 'ON' : 'OFF'}
-                      </button>
-                    </div>
-                    {cfgAutoFull ? (
-                      <p className="text-[10px] text-emerald-300/80">
-                        有利/不利を見て、いい感じのタイミングで自動発動します（手動 [{keyLabel(keyCfg.fire)}] も可）。
-                      </p>
-                    ) : (
-                      <div className="flex flex-col gap-1.5">
-                        {CAT_META.map((c) => (
-                          <div key={c.key} className="flex items-center justify-between gap-2">
-                            <span className={`text-[11px] font-bold ${c.color} w-8 shrink-0`}>{c.label}</span>
-                            <div className="flex gap-1 flex-wrap justify-end">
-                              {USE_MODES.map((m) => (
-                                <button
-                                  key={m.key}
-                                  onClick={() => setCfgUse((u) => ({ ...u, [c.key]: m.key }))}
-                                  title={m.desc}
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                                    cfgUse[c.key] === m.key ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
-                                  }`}
-                                >
-                                  {m.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
+                  {/* ① 難易度（速度・敵）: よく触る項目なので既定で開く。 */}
+                  <CfgSection title="難易度（速度・敵）" icon={<Gauge className="w-3.5 h-3.5" />} accentText="text-cyan-300" defaultOpen>
+                    <CfgSlider label="初期供給間隔" value={cfgInitial} display={`${(cfgInitial / 1000).toFixed(1)}秒`} min={500} max={6000} step={100} onChange={setCfgInitial} />
+                    <CfgSlider label="最短間隔" value={cfgMin} display={`${(cfgMin / 1000).toFixed(1)}秒`} min={300} max={3000} step={100} onChange={setCfgMin} />
+                    <CfgSlider label="加速度" hint="大きいほど速く加速 / 0で加速なし" value={accelSpeed} display={accelSpeed.toFixed(1)} min={0} max={10} step={0.5} onChange={setAccelFromSpeed} />
+                    <CfgSlider label="自分のHP（積載限界）" value={cfgHp} display={String(cfgHp)} min={HP_MIN} max={HP_MAX} step={1} onChange={setCfgHp} />
+                    <CfgSlider label="敵の数" value={cfgEnemies} display={String(cfgEnemies)} min={1} max={MAX_DUMMIES} step={1} onChange={setCfgEnemies} />
+                    <CfgSlider label="CPUの強さ（平均）" hint="強弱が混在し平均がこの値" value={cfgCpuStr} display={String(cfgCpuStr)} min={0} max={10} step={1} onChange={setCfgCpuStr} />
+                  </CfgSection>
+
+                  {/* ② 攻撃・ゲージ */}
+                  <CfgSection title="攻撃・ゲージ" icon={<Swords className="w-3.5 h-3.5" />} accentText="text-orange-300">
+                    <div className="text-[11px] text-gray-400">
+                      ゲージ加算方式
+                      <div className="flex gap-1 mt-1 items-center flex-wrap">
+                        {([['word', 'ワード数'], ['char', '文字数']] as const).map(([m, lbl]) => (
+                          <button key={m} onClick={() => setCfgGaugeMode(m)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgGaugeMode === m ? 'bg-orange-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                            {lbl}
+                          </button>
                         ))}
-                        <p className="text-[9px] text-gray-600 leading-tight">
-                          新着=[{keyLabel(keyCfg.fire)}]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 保持=1つ保持し被ったら新しい方を発動
-                        </p>
+                        <span className="text-[9px] text-gray-600 self-center ml-1">
+                          {cfgGaugeMode === 'char' ? '長い単語ほどゲージが溜まる' : '1ワード=1ゲージ'}
+                        </span>
+                      </div>
+                    </div>
+                    {cfgGaugeMode === 'word' ? (
+                      <CfgSlider label="アタックゲージ（何クリアで発射）" accent="orange" value={cfgAttackGauge} display={String(cfgAttackGauge)} min={2} max={10} step={1} onChange={setCfgAttackGauge} />
+                    ) : (
+                      <CfgSlider label="アタックゲージ（何文字で発射）" accent="orange" value={cfgGaugeChars} display={String(cfgGaugeChars)} min={6} max={40} step={1} onChange={setCfgGaugeChars} />
+                    )}
+                    <CfgSlider label="アタック数の上限" accent="orange" value={cfgAttackCap} display={String(cfgAttackCap)} min={2} max={12} step={1} onChange={setCfgAttackCap} />
+                    <CfgSlider label="アタック数が増える連鎖数" hint="この連鎖ごとに攻撃量+1" accent="orange" value={cfgComboStep} display={String(cfgComboStep)} min={2} max={15} step={1} onChange={setCfgComboStep} />
+                    <CfgSlider label="バッジ上限（撃破数の補正上限）" accent="yellow" value={cfgBadgeCap} display={String(cfgBadgeCap)} min={0} max={10} step={1} onChange={setCfgBadgeCap} />
+                    <CfgSlider label="バッジ1枚の攻撃上昇率" accent="yellow" value={cfgBadgeRate} display={`${cfgBadgeRate}%`} min={0} max={100} step={5} onChange={setCfgBadgeRate} />
+                    <div className="text-[11px] text-gray-400">
+                      逆転補正 <span className="text-gray-600">（劣勢ほど防御・逆転／優勢ほど攻撃）</span>
+                      <div className="flex gap-1 mt-1 items-center flex-wrap">
+                        {([[0, 'なし'], [1, '弱'], [2, '中'], [3, '強']] as const).map(([v, lbl]) => (
+                          <button key={v} onClick={() => setCfgComeback(v)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgComeback === v ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                            {lbl}
+                          </button>
+                        ))}
+                        <span className="text-[9px] text-gray-600 self-center ml-1">順位＋ピンチ度で判定</span>
+                      </div>
+                    </div>
+                  </CfgSection>
+
+                  {/* ③ お宝・アイテム */}
+                  <CfgSection title="お宝・アイテム" icon={<Gift className="w-3.5 h-3.5" />} accentText="text-yellow-300">
+                    <CfgSlider label="お宝の出現率" hint="お宝🟨を打つとアイテム入手" accent="yellow" value={cfgTreasureRate} display={`${cfgTreasureRate}%`} min={0} max={80} step={5} onChange={setCfgTreasureRate} />
+                    <div className="text-[11px] text-gray-400">
+                      アイテム
+                      <div className="flex gap-1 mt-1 items-center flex-wrap">
+                        {([[true, 'あり'], [false, 'なし']] as const).map(([on, lbl]) => (
+                          <button key={String(on)} onClick={() => setCfgItemsOn(on)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgItemsOn === on ? 'bg-fuchsia-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                            {lbl}
+                          </button>
+                        ))}
+                        <span className="text-[9px] text-gray-600 self-center ml-1">なしでお宝もアイテムも出ません</span>
+                      </div>
+                    </div>
+                    {cfgItemsOn && (
+                      <div className="text-[11px] text-gray-400">
+                        アイテムの個別ON/OFF <span className="text-gray-600">（OFFは出ません）</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {ALL_ITEMS.map((it) => {
+                            const off = cfgDisabledItems.includes(it);
+                            return (
+                              <button
+                                key={it}
+                                onClick={() => setCfgDisabledItems((prev) => off ? prev.filter((x) => x !== it) : [...prev, it])}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors flex items-center gap-0.5 ${off ? 'bg-neutral-800 text-gray-600 line-through' : 'bg-fuchsia-700/70 text-white'}`}
+                                title={ITEM_META[it].desc}
+                              >
+                                <span>{ITEM_EMOJI[it]}</span>{ITEM_META[it].name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="flex gap-2 mt-1">
+                          <button onClick={() => setCfgDisabledItems([])} className="text-[9px] text-cyan-400 hover:text-cyan-300 underline">全部ON</button>
+                          <button onClick={() => setCfgDisabledItems([...ALL_ITEMS])} className="text-[9px] text-gray-500 hover:text-gray-300 underline">全部OFF</button>
+                        </div>
                       </div>
                     )}
-                  </div>
+                    {cfgItemsOn && (
+                      <div className="border-t border-white/10 pt-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[11px] text-amber-200 font-bold">アイテムの使い方</span>
+                          <button
+                            onClick={() => setCfgAutoFull((v) => !v)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                              cfgAutoFull ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                            }`}
+                          >
+                            完全オート {cfgAutoFull ? 'ON' : 'OFF'}
+                          </button>
+                        </div>
+                        {cfgAutoFull ? (
+                          <p className="text-[10px] text-emerald-300/80">
+                            有利/不利を見て、いい感じのタイミングで自動発動します（手動 [{keyLabel(keyCfg.fire)}] も可）。
+                          </p>
+                        ) : (
+                          <div className="flex flex-col gap-1.5">
+                            {CAT_META.map((c) => (
+                              <div key={c.key} className="flex items-center justify-between gap-2">
+                                <span className={`text-[11px] font-bold ${c.color} w-8 shrink-0`}>{c.label}</span>
+                                <div className="flex gap-1 flex-wrap justify-end">
+                                  {USE_MODES.map((m) => (
+                                    <button
+                                      key={m.key}
+                                      onClick={() => setCfgUse((u) => ({ ...u, [c.key]: m.key }))}
+                                      title={m.desc}
+                                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                                        cfgUse[c.key] === m.key ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                                      }`}
+                                    >
+                                      {m.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                            <p className="text-[9px] text-gray-600 leading-tight">
+                              新着=[{keyLabel(keyCfg.fire)}]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 保持=1つ保持し被ったら新しい方を発動
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CfgSection>
                 </div>
               )}
 
@@ -2688,3 +2576,61 @@ const StepBtn = ({ onClick, children }: { onClick: () => void; children: React.R
     {children}
   </button>
 );
+
+// アクセント色（Tailwind パージ対策で静的クラス文字列を用意）。
+const CFG_ACCENTS: Record<string, { range: string; val: string }> = {
+  cyan: { range: 'accent-cyan-500', val: 'text-cyan-300' },
+  orange: { range: 'accent-orange-500', val: 'text-orange-300' },
+  yellow: { range: 'accent-yellow-500', val: 'text-yellow-300' },
+};
+
+// 繰り返しの多かったスライダー行を1コンポーネントに集約（±ボタン付き）。
+const CfgSlider = ({
+  label, value, display, min, max, step, onChange, accent = 'cyan', hint,
+}: {
+  label: string; value: number; display: string; min: number; max: number; step: number;
+  onChange: (v: number) => void; accent?: 'cyan' | 'orange' | 'yellow'; hint?: string;
+}) => {
+  const a = CFG_ACCENTS[accent];
+  const round = (v: number) => Math.round(v * 1000) / 1000; // 0.5等の浮動小数を丸める
+  return (
+    <div className="text-[11px] text-gray-400">
+      <div className="flex items-baseline justify-between gap-2">
+        <span>{label}</span>
+        <span className={`font-mono font-bold ${a.val}`}>{display}</span>
+      </div>
+      {hint && <div className="text-[9px] text-gray-600 leading-tight">{hint}</div>}
+      <div className="flex items-center gap-2 mt-1">
+        <StepBtn onClick={() => onChange(round(Math.max(min, value - step)))}>−</StepBtn>
+        <input
+          type="range" min={min} max={max} step={step} value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className={`flex-1 ${a.range}`}
+        />
+        <StepBtn onClick={() => onChange(round(Math.min(max, value + step)))}>＋</StepBtn>
+      </div>
+    </div>
+  );
+};
+
+// 折りたたみできる設定セクション（見出し＋開閉）。ごちゃつきを分類して隠す。
+const CfgSection = ({
+  title, icon, accentText, defaultOpen = false, children,
+}: {
+  title: string; icon: React.ReactNode; accentText: string; defaultOpen?: boolean; children: React.ReactNode;
+}) => {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-t border-white/10 first:border-t-0">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between py-2.5"
+      >
+        <span className={`text-[11px] font-black flex items-center gap-1.5 ${accentText}`}>{icon}{title}</span>
+        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <div className="pb-3 flex flex-col gap-3">{children}</div>}
+    </div>
+  );
+};

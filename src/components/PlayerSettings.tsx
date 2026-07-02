@@ -225,6 +225,28 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
           <p className="text-[10px] text-muted mt-1">※「漢字のみ」は ふりがな・かな・ローマ字をすべて隠します（漢字を見て読みを打つ）。</p>
         </div>
 
+        {/* 演出（画面の揺れなど） */}
+        <div className="mb-4">
+          <div className="text-xs text-muted mb-1.5">演出</div>
+          <button
+            onClick={() => update({ ...cfg, screenShake: !cfg.screenShake })}
+            className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 border border-line bg-surface hover:bg-surface2 transition-colors"
+          >
+            <span className="text-left">
+              <span className="text-sm font-bold text-text block">画面の揺れ</span>
+              <span className="text-[10px] text-muted">撃破・被弾時の画面シェイクとヒットストップ</span>
+            </span>
+            {/* トグルスイッチ */}
+            <span
+              className={`shrink-0 w-11 h-6 rounded-full relative transition-colors ${cfg.screenShake ? 'bg-primary' : 'bg-surface2 border border-line'}`}
+            >
+              <span
+                className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${cfg.screenShake ? 'left-[1.375rem]' : 'left-0.5'}`}
+              />
+            </span>
+          </button>
+        </div>
+
         {/* キー割当 */}
         <div className="bg-surface rounded-xl p-3 divide-y divide-line">
           {cfg.inputMode === 'cycle' ? (

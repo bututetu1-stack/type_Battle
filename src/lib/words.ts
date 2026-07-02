@@ -1077,12 +1077,27 @@ export function toggleThemeSelection(current: string, id: string): string {
 // テーマ指定から出題プールを解決する。
 // theme は単一ID（'all'/'food' 等）またはカンマ区切りの複数指定（'food,it'）。
 // 'all' か未指定は全語彙（WORD_POOL＋全テーマプールをマージ）。
+// display|reading をキーに重複を除いて順序を保つ。出題バッグは「プールの各要素＝別の語」
+// として1巡を数えるため、同じ語が複数入っていると 1巡し切る前に同じ語が再登場して見える。
+// テーマを複数選ぶと同語が別テーマに重複し得るので、最終プールは必ず一意化する。
+const dedupEntries = (entries: WordEntry[]): WordEntry[] => {
+  const seen = new Set<string>();
+  const out: WordEntry[] = [];
+  for (const e of entries) {
+    const k = e.display + '|' + e.reading;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(e);
+  }
+  return out;
+};
+
 export function poolForThemes(theme: string = 'all'): WordEntry[] {
   const ids = (theme || 'all').split(',').map((s) => s.trim()).filter(Boolean);
   // 'all'／未指定は全語彙＋追加語句。順序を固定し、オンラインでも全員同じプール＝
   // シード同期が崩れないようにする。除外テーマ(EXCLUDED_THEMES)がある場合はそれを抜く。
   if (ids.length === 0 || ids.includes('all')) {
-    if (EXCLUDED_THEMES.size === 0) return [...ALL_POOL, ...EXTRA_WORDS];
+    if (EXCLUDED_THEMES.size === 0) return dedupEntries([...ALL_POOL, ...EXTRA_WORDS]);
     // 除外テーマに属する語のキーを集める。テーマ語は WORD_POOL にも重複し得るため、
     // テーマのプールをスキップするだけでは消えない。キー単位で最終プールから除外する。
     const exKeys = new Set<string>();
@@ -1124,7 +1139,7 @@ export function poolForThemes(theme: string = 'all'): WordEntry[] {
     const p = THEME_POOLS[id];
     if (p) merged.push(...p);
   }
-  return merged.length ? merged : [...ALL_POOL, ...EXTRA_WORDS];
+  return merged.length ? dedupEntries(merged) : dedupEntries([...ALL_POOL, ...EXTRA_WORDS]);
 }
 
 // 'all'(全語彙)出題から除外するテーマ。例: 艦これ('kancolle')を除外。

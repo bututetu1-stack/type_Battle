@@ -20,6 +20,7 @@ export interface KeyConfig {
   target: string; // ターゲット切替キー
   romajiMode: RomajiMode; // ローマ字（つづり）の表示タイミング
   readingMode: ReadingMode; // お題の読みの見せ方（ふりがな/かな/漢字のみ）
+  screenShake: boolean; // 画面の揺れ（撃破/被弾のシェイク＋ヒットストップ）のON/OFF
 }
 
 const KEY = 'typeRoyale.keys';
@@ -33,6 +34,7 @@ export function defaultKeyConfig(): KeyConfig {
     target: 'Tab',
     romajiMode: 'always',
     readingMode: 'full',
+    screenShake: true,
   };
 }
 
@@ -70,6 +72,8 @@ export function loadKeyConfig(): KeyConfig {
             : o.showRuby === false
               ? 'kana'
               : 'full',
+        // 未設定（旧データ）は既定でON。明示的に false のときだけOFF。
+        screenShake: o.screenShake === false ? false : true,
       };
     }
   } catch { /* 既定値 */ }
