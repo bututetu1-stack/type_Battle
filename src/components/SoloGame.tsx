@@ -648,7 +648,17 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       } else if (item === 'shrink') {
         // 溜まっているワード（処理待ちの山）を全て短い単語に変換して打ちやすくする。
         // いま打っている先頭(index 0)はそのまま残す。
-        setBacklog((prev) => prev.map((w, i) => (i === 0 ? w : makeShortWord(w.type, themeRef.current))));
+        // 変換後の山に同じ語が並ばないよう、既に使った読みを avoid して重複を避ける。
+        setBacklog((prev) => {
+          const used = new Set<string>();
+          if (prev[0]) used.add(prev[0].reading);
+          return prev.map((w, i) => {
+            if (i === 0) return w;
+            const sw = makeShortWord(w.type, themeRef.current, used);
+            used.add(sw.reading);
+            return sw;
+          });
+        });
       } else if (item === 'parry') {
         parryUntilRef.current = Date.now() + PARRY_DURATION;
       } else if (item === 'gaugedown') {
