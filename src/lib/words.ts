@@ -1241,11 +1241,15 @@ export const makeOjamaWord = (theme: string = 'all'): Word => {
 
 // 短い単語を生成（アイテム「短縮」でバックログを軽くするのに使う）。
 // テーマ内の短い語を優先し、無ければ全体の短い語から選ぶ。
-export const makeShortWord = (type: WordType = 'normal', theme: string = 'all'): Word => {
+// avoid: これらの読みは避ける（短縮で山を作り直すとき、同じ語が並ばないように）。
+//        候補が尽きたら avoid を無視して選ぶ（必ず1語返す）。
+export const makeShortWord = (type: WordType = 'normal', theme: string = 'all', avoid?: Set<string>): Word => {
   const pool = poolForThemes(theme);
-  const shorts = pool.filter((w) => w.reading.length >= 3 && w.reading.length <= 4);
-  const src = shorts.length ? shorts : ALL_POOL.filter((w) => w.reading.length >= 3 && w.reading.length <= 4);
-  const entry = src[Math.floor(Math.random() * src.length)];
+  const isShort = (w: WordEntry) => w.reading.length >= 3 && w.reading.length <= 4;
+  const src = pool.some(isShort) ? pool.filter(isShort) : ALL_POOL.filter(isShort);
+  const avail = avoid && avoid.size ? src.filter((w) => !avoid.has(w.reading)) : src;
+  const pick = avail.length ? avail : src;
+  const entry = pick[Math.floor(Math.random() * pick.length)];
   return buildWord(entry, type, 's');
 };
 
