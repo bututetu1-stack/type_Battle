@@ -105,12 +105,18 @@ const ITEM_EMOJI: Record<ItemType, string> = {
   goldify: '✨', luck: '🍀', maxhp: '❤️',
   reflect: '🪞', overcharge: '🔋', thunder: '⚡', jammer: '📡', siphon: '🧛', dazzle: '🌈',
 };
-// プレイ中にドロップするアイテム（統合・削除した shield/clear/heavy/mirror は除外）。
+// プレイ中にドロップするアイテム（役割が被る/強すぎ/地味なものを整理して約15種に統合）。
+// 除外: shield/clear/heavy/mirror（統合済）＋ parry/purge/guard/flood/drain（重複・強すぎ・地味）。
 const ALL_ITEMS: ItemType[] = [
-  'brake', 'longbomb', 'rapid', 'keep', 'shrink', 'parry', 'gaugedown', 'totem',
-  // 追加アイテム（防御/攻撃/妨害）
-  'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain',
-  // 追加アイテム（お宝/HP）
+  // 攻撃（相手へおじゃま）
+  'snipe', 'burst', 'longbomb',
+  // 防御（自分を守る/軽くする）
+  'barrier', 'freeze', 'shrink',
+  // 効果（一定時間／永続）
+  'brake', 'rapid', 'keep', 'gaugedown',
+  // 逆転（レア）
+  'totem',
+  // お宝 / HP
   'goldify', 'luck', 'maxhp',
 ];
 const MAX_HP_UP = 3; // HPアップの取得上限（永続）
@@ -276,6 +282,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [damageFlash, setDamageFlash] = useState(false);
   // エフェクト用
   const [beams, setBeams] = useState<{ id: number; x1: number; y1: number; x2: number; y2: number; color: string }[]>([]);
+  // 撃破パーティクル（画面座標に散る破片）。
+  const [bursts, setBursts] = useState<{ id: number; x: number; y: number; color: string; parts: { dx: number; dy: number; s: number }[] }[]>([]);
+  const burstIdRef = useRef(0);
   const [shake, setShake] = useState(false);
   const [useFlash, setUseFlash] = useState<ItemType | null>(null);
   const [boardFx, setBoardFx] = useState<ItemType | null>(null); // 盤面変化系の強調演出
@@ -297,6 +306,25 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setBeams((b) => [...b, { id, x1, y1, x2, y2, color }]);
     setTimeout(() => setBeams((b) => b.filter((x) => x.id !== id)), 700);
   }, []);
+
+  // 撃破パーティクルを発火（画面座標中心に破片を放射）。
+  const addBurst = useCallback((x: number, y: number, color: string) => {
+    const id = burstIdRef.current++;
+    const parts = Array.from({ length: 14 }).map(() => {
+      const a = Math.random() * Math.PI * 2;
+      const r = 40 + Math.random() * 90;
+      return { dx: Math.cos(a) * r, dy: Math.sin(a) * r - 20, s: 3 + Math.random() * 5 };
+    });
+    setBursts((b) => [...b, { id, x, y, color, parts }]);
+    setTimeout(() => setBursts((b) => b.filter((z) => z.id !== id)), 750);
+  }, []);
+
+  // 相手ボードの中心座標に撃破エフェクト＋SEを出す。
+  const koFx = useCallback((dummyId: number, color = 'var(--charge)') => {
+    const r = dummyRefs.current[dummyId]?.getBoundingClientRect();
+    if (r) addBurst(r.left + r.width / 2, r.top + r.height / 2, color);
+    sfx.explode();
+  }, [addBurst]);
 
   const pushToast = useCallback((text: string, kind: 'ko' | 'in' | 'item') => {
     const id = toastIdRef.current++;
@@ -544,7 +572,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     if (willKO) {
       setPlayerKOs((k) => k + 1);
       pushToast(`${target.name} を撃破！`, 'ko');
-      sfx.ko();
+      koFx(target.id);
     }
     setAttackFlash({ amount: remaining, name: target.name ?? '' });
     setHitDummy(target.id);
@@ -555,13 +583,18 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     }
     setTimeout(() => setAttackFlash(null), 600);
     setTimeout(() => setHitDummy((cur) => (cur === target.id ? null : cur)), 600);
-  }, [addBeam, pickTarget, pushToast, updatePending]);
+  }, [addBeam, pickTarget, pushToast, updatePending, koFx]);
 
   // アイテムの効果を適用（所持状態のクリアは行わない）。
   const applyItem = useCallback(
     (item: ItemType) => {
       setUseFlash(item);
       setTimeout(() => setUseFlash(null), 900);
+      // カテゴリ別の発動SE（攻撃/防御/効果）。
+      const cat = ITEM_CAT[item];
+      if (cat === 'attack') sfx.itemAtk();
+      else if (cat === 'defense') sfx.itemDef();
+      else sfx.itemTimed();
       // 自分のアイテム使用ログ（効果説明つき）。
       {
         const lid = toastIdRef.current++;
@@ -680,7 +713,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       if (willKO) {
         setPlayerKOs((k) => k + 1);
         pushToast(`${target.name} を撃破！`, 'ko');
-        sfx.ko();
+        koFx(target.id, '#a78bfa');
       }
       setHitDummy(target.id);
       setTimeout(() => setHitDummy((cur) => (cur === target.id ? null : cur)), 600);
@@ -690,7 +723,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         addBeam(from.left + from.width / 2, from.top + from.height * 0.35, to.left + to.width / 2, to.top + to.height / 2, '#a78bfa');
       }
     },
-    [addBeam, pushToast],
+    [addBeam, pushToast, koFx],
   );
 
   // 上限超過時の保護。トーテム発動中なら無効化、所持中なら自動発動、無ければ脱落。
@@ -971,7 +1004,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setMaxCombo((m) => Math.max(m, newCombo));
         setKeysTyped((prev) => prev + 1);
         setScore((s) => s + 100 + newCombo * 10);
-        sfx.clear();
+        if (result.clearedType === 'treasure') sfx.treasure(); else sfx.clear();
+        // 連鎖マイルストーン（comboStep ごと）で上昇音。
+        if (newCombo > 0 && newCombo % comboStepRef.current === 0) sfx.combo(Math.floor(newCombo / comboStepRef.current) - 1);
         // 1単語クリアごとに、来ている着弾予告を1つ相殺（タイピング＝防御）。
         offsetIncoming(1);
         // ゲージはミスでは減らない。加算方式は「ワード数」=1 /「文字数」=クリアした語の読み文字数。
@@ -1455,6 +1490,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   };
 
   const isDanger = backlog.length >= maxBacklog - 3;
+  // ピンチ（積載限界間近）に入った瞬間に警告音。
+  useEffect(() => {
+    if (isDanger && gameState === 'playing' && soloMode !== 'timeattack') sfx.warn();
+  }, [isDanger, gameState, soloMode]);
   const eliminatedCount = dummies.filter((d) => d.isKO).length;
   const survivors = dummyCount + 1 - eliminatedCount;
   const totalIncoming = pending.reduce((s, e) => s + e.amount, 0);
@@ -1535,6 +1574,19 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           ))}
         </svg>
       )}
+
+      {/* 撃破パーティクル（相手ボード中心から破片が放射） */}
+      {bursts.map((bz) => (
+        <div key={bz.id} className="fixed z-40 pointer-events-none tr-anim" style={{ left: bz.x, top: bz.y }}>
+          {bz.parts.map((p, i) => (
+            <span
+              key={i}
+              className="tr-burst absolute rounded-full"
+              style={{ width: p.s, height: p.s, marginLeft: -p.s / 2, marginTop: -p.s / 2, background: bz.color, boxShadow: `0 0 6px ${bz.color}`, ['--dx']: `${p.dx}px`, ['--dy']: `${p.dy}px` } as React.CSSProperties}
+            />
+          ))}
+        </div>
+      ))}
 
       {/* アイテム発動演出（名前＋ざっくり効果説明） */}
       {useFlash && (
@@ -1831,8 +1883,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             </div>
 
             {/* グループ3: アイテムスロット〜アタックゲージ（画面下部に固定）。
-                高さは常に一定なので、効果ゲージが何個出ても上のお題グループは動かない。 */}
-            <div className="shrink-0 w-full flex flex-col items-center">
+                高さは常に一定なので、効果ゲージが何個出ても上のお題グループは動かない。
+                お題パネルと間隔を空ける（mt-6）。 */}
+            <div className="shrink-0 w-full flex flex-col items-center mt-6">
               {/* アイテムスロット（攻撃/防御/妨害）。入力方式に応じて選択強調 or 割当キーを表示。
                   アイテムOFFのときはスロットを表示しない。 */}
               {gameState === 'playing' && cfgItemsOn && soloMode !== 'timeattack' && (
