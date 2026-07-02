@@ -8,11 +8,9 @@ on:
   # 手動実行も可能にしておく
   workflow_dispatch:
 
-# GITHUB_TOKEN に Pages デプロイ権限を付与
+# gh-pages ブランチへ push するため contents: write を付与。
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 # 同時デプロイは1つに制限（進行中のものは中断しない）
 concurrency:
@@ -20,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -48,21 +46,13 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      # dist を gh-pages ブランチへ公開（Settings → Pages → Source を
+      # 「Deploy from a branch: gh-pages / (root)」に設定して使う）。
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: ./dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          # Jekyll 処理を無効化（_ で始まるアセット等をそのまま配信）
+          enable_jekyll: false
