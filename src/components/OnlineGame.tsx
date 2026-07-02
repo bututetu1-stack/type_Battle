@@ -1892,8 +1892,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             </div>
 
             {/* グループ3: アイテムスロット〜アタックゲージ（画面下部に固定）。
-                高さは常に一定なので、効果ゲージが何個出ても上のお題グループは動かない。 */}
-            <div className="shrink-0 w-full flex flex-col items-center">
+                高さは常に一定なので、効果ゲージが何個出ても上のお題グループは動かない。
+                お題パネルと間隔を空ける（mt-6）。 */}
+            <div className="shrink-0 w-full flex flex-col items-center mt-6">
               {/* アイテムスロット（攻撃/防御/妨害）。入力方式で表示を切替。アイテムOFFなら非表示。 */}
               {itemsOn && (
               <div className="flex flex-col items-center gap-1">
