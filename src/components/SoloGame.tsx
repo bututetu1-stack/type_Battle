@@ -34,6 +34,7 @@ const KEEP_DURATION = 10000; // 連鎖キープ（ミスで連鎖が切れない
 const PARRY_DURATION = 8000; // 受け流し（被攻撃を逸らす）の効果時間
 const TOTEM_DURATION = 12000; // 不死のトーテム（上限超過無効）の効果時間
 const ATTACK_THRESHOLD = 5; // 何クリアごとに攻撃を発射するか（初期値）
+const AVOID_RECENT = 10; // 直近この数の語は再出させない（袋方式に加える近接重複ガード）
 const TELEGRAPH_DELAY = 2500; // CPU攻撃の着弾予告→確定までの猶予（相殺の反応時間を確保）
 const CFG_KEY = 'typeRoyale.custom'; // カスタム設定の保存キー
 
@@ -446,25 +447,43 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const gaugeDownObtainedRef = useRef(false); // ゲージ短縮は一人一個まで
   const attackProgressRef = useRef(0);
   const bagRef = useRef(newWordBag()); // 出題バッグ（全語を1巡するまで重複させない）
+  // 直近に出した語（display）。この数（AVOID_RECENT）以内では同じ語を出さないための保険。
+  // 袋方式に加え、テーマを絞った時・巡の境目・アイテム系のどの経路でも近接重複を防ぐ。
+  // ソロ専用のローカル処理（オンラインのシード同期には一切影響しない）。
+  const recentRef = useRef<string[]>([]);
   const themeRef = useRef(theme);
   useEffect(() => { themeRef.current = theme; }, [theme]);
   const targetModeRef = useRef(targetMode);
   useEffect(() => { targetModeRef.current = targetMode; }, [targetMode]);
   const lastAttackerRef = useRef<number | null>(null);
 
-  // 出題バッグから次の単語を生成（全語を1巡するまで重複しない）。
+  // 直近 AVOID_RECENT 語に含まれる表示なら引き直す（最大8回）。袋・テーマ・境目の
+  // どの経路でも「短い間隔での再出」を防ぐ。プールが極小の時は8回で諦めて許容する。
+  const registerRecent = (display: string) => {
+    const r = recentRef.current;
+    r.push(display);
+    if (r.length > AVOID_RECENT) r.shift();
+  };
+
+  // 出題バッグから次の単語を生成（全語を1巡するまで重複しない＋近接重複ガード）。
   const nextWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    const w = generateWord(rng, themeRef.current, bagRef.current, false, itemsOnRef.current ? treasureRateRef.current : 0, treasureBoostRef.current);
+    const draw = () => generateWord(rng, themeRef.current, bagRef.current, false, itemsOnRef.current ? treasureRateRef.current : 0, treasureBoostRef.current);
+    let w = draw();
+    for (let tries = 0; tries < 8 && recentRef.current.includes(w.display); tries++) w = draw();
+    registerRecent(w.display);
     // タイムアタックは寿司打式：お宝もおじゃまも無し、全て通常単語にする。
     return soloModeRef.current === 'timeattack' ? { ...w, type: 'normal' } : w;
   }, []);
 
-  // 被弾（CPUの攻撃）で挿入するおじゃま語も、同じ出題バッグから引いて
+  // 被弾（CPUの攻撃）で挿入するおじゃま語も、同じ出題バッグ＋近接重複ガードから引いて
   // 「全語1巡するまで同じ語句を出さない」を通常供給と一括で守る。
   const nextOjamaWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    const w = generateWord(rng, themeRef.current, bagRef.current, false, 0, 0);
+    const draw = () => generateWord(rng, themeRef.current, bagRef.current, false, 0, 0);
+    let w = draw();
+    for (let tries = 0; tries < 8 && recentRef.current.includes(w.display); tries++) w = draw();
+    registerRecent(w.display);
     return { ...w, type: 'ojama' };
   }, []);
 
@@ -900,6 +919,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     updatePending([]);
     setSeed(newSeed);
     bagRef.current = newWordBag(); // 出題バッグを新しい1巡でリセット
+    recentRef.current = []; // 近接重複ガードの直近履歴もリセット
     treasureBoostRef.current = 0;
     hpUpCountRef.current = 0;
     setBacklog([nextWord(), nextWord(), nextWord()]);
