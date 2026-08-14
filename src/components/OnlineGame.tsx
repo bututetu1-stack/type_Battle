@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Swords, Zap, AlertTriangle, Crown, Shield, Wind, Pause, Sparkles,
-  Target, RotateCcw, LogOut, Volume2, VolumeX, Bomb, Lock, Settings,
+  Swords, Zap, AlertTriangle, Crown, Shield, Wind, Sparkles,
+  Target, RotateCcw, LogOut, Volume2, VolumeX, Lock, Settings,
 } from 'lucide-react';
 import { mulberry32, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, setExtraWords, setExcludedThemes } from '../lib/words';
@@ -29,24 +29,18 @@ const WRITE_INTERVAL = 150; // サマリ書込み間隔。観戦の入力画面�
 const TELEGRAPH_DELAY = 2500; // 着弾予告→確定までの猶予（相殺の反応時間を確保）
 const PINCH_RATIO = 0.7;
 const PINCH_MULT = 1.5;
-const BRAKE_DURATION = 5000;
 const ATTACK_CAP = 5; // 1回の攻撃で送れるおじゃまの上限（即死コンボ防止）
 const BOSS_MAX_BACKLOG = 26; // ボスのバックログ上限（＝ボスのHP。多対一なので高め）
-const MAX_HP_UP = 3; // HPアップ(maxhp)の取得上限（永続）
 // ストックされている単語を変化させる系アイテム（発動を分かりやすく強調する）。
 const BOARD_CHANGE_ITEMS = new Set<ItemType>(['purge', 'shrink', 'goldify', 'clear', 'drain']);
 
 export const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   shield: { name: 'シールド', desc: '次の自動供給を1回無効化' },
   clear: { name: 'おじゃま一掃', desc: 'バックログのおじゃまを消す' },
-  brake: { name: 'ブレーキ', desc: '自動供給を5秒間ストップ' },
-  longbomb: { name: 'ロング送信', desc: '相手へ長文おじゃま(相殺不可)を送る' },
   rapid: { name: '連射', desc: '8秒間 1クリアごとにおじゃま+1' },
   keep: { name: '連鎖キープ', desc: '10秒間ミスしても連鎖が切れない' },
   shrink: { name: '短縮', desc: '溜まったワードを全て短い単語に変換' },
   parry: { name: '受け流し', desc: '一定時間 被攻撃を他の相手に逸らす' },
-  gaugedown: { name: 'ゲージ短縮', desc: '攻撃の発射間隔を1減らす(恒久)' },
-  totem: { name: '不死のトーテム', desc: '一定時間 上限超過しても脱落しない' },
   meteor: { name: 'メテオ', desc: 'ボス: 全挑戦者へ一斉攻撃' },
   quake: { name: '地割れ', desc: 'ボス: 最も危険な挑戦者へトドメ' },
   regen: { name: '再生', desc: 'ボス: 自分のHPを回復' },
@@ -63,8 +57,6 @@ export const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
   drain: { name: 'ドレイン', desc: '自分を2減らし相手へおじゃま+2' },
   mirror: { name: 'ミラー', desc: '不利なほど強いおじゃまを送る' },
   goldify: { name: 'ゴールド化', desc: '溜まっているワードを全てお宝に変える' },
-  luck: { name: '幸運', desc: 'お宝の出現率が上がる（永続）' },
-  maxhp: { name: 'HPアップ', desc: 'HP(積載上限)+1（永続・最大+3）' },
   reflect: { name: 'リフレクト', desc: '8秒間 受けた攻撃を送り主へ跳ね返す' },
   overcharge: { name: 'オーバーチャージ', desc: '8秒間 アタックゲージが倍速で溜まる' },
   thunder: { name: 'サンダーボルト', desc: '首位（最多連鎖）の相手へ落雷+5' },
@@ -75,14 +67,10 @@ export const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
 export const ITEM_EMOJI: Record<ItemType, string> = {
   shield: '🛡',
   clear: '🌀',
-  brake: '⏸',
-  longbomb: '📨',
   rapid: '⚡',
   keep: '🔒',
   shrink: '✂',
   parry: '🪃',
-  gaugedown: '⏬',
-  totem: '🗿',
   meteor: '🌠',
   quake: '🌋',
   regen: '💚',
@@ -99,8 +87,6 @@ export const ITEM_EMOJI: Record<ItemType, string> = {
   drain: '🩸',
   mirror: '🪞',
   goldify: '✨',
-  luck: '🍀',
-  maxhp: '❤️',
   reflect: '🪞',
   overcharge: '🔋',
   thunder: '⚡',
@@ -119,7 +105,6 @@ const SIPHON_DURATION = 8000; // サイフォン（攻撃命中で自分のHP回
 
 // 時間制限つきアイテムの効果時間（カウントダウンゲージ用）。
 const ITEM_DURATION: Partial<Record<ItemType, number>> = {
-  brake: BRAKE_DURATION,
   rapid: RAPID_DURATION,
   keep: KEEP_DURATION,
   parry: PARRY_DURATION,
@@ -191,8 +176,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const gMode = gaugeMode === 'char' ? 'char' : 'word'; // ゲージ加算方式
   const gChars = typeof gaugeChars === 'number' ? gaugeChars : 16; // 文字数方式のしきい値
   const comebackK = typeof comeback === 'number' ? comeback : 2; // 逆転補正の強さ（既定=中）
-  const [hpBonus, setHpBonus] = useState(0); // HPアップ(maxhp)による積載上限の増分（永続）
-  const selfMax = baseSelfMax + hpBonus; // 自分の上限
+  const selfMax = baseSelfMax; // 自分の上限
   const [started, setStarted] = useState(false);
   const [countdown, setCountdown] = useState(99);
   const [selfAlive, setSelfAlive] = useState(true);
@@ -267,7 +251,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const targetModeRef = useRef(targetMode);
   const lastAttackerRef = useRef('');
   const shieldRef = useRef(false);
-  const brakeUntilRef = useRef(0);
   const rapidUntilRef = useRef(0);
   const keepUntilRef = useRef(0);
   const parryUntilRef = useRef(0);
@@ -279,8 +262,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const overchargeUntilRef = useRef(0); // オーバーチャージ（ゲージ倍速）
   const siphonUntilRef = useRef(0); // サイフォン（攻撃命中で自分のHP回復）
   const bagRef = useRef(newWordBag()); // 出題バッグ（全語を1巡するまで重複させない・シード共有で全員同一）
-  const treasureBoostRef = useRef(0); // 幸運(luck)によるお宝出現率の永続上昇分
-  const hpUpCountRef = useRef(0); // HPアップ(maxhp)の取得回数（上限 MAX_HP_UP）
   const attackProgressRef = useRef(0);
   const categoryRef = useRef(category);
   useEffect(() => {
@@ -311,7 +292,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // 引き直しの rng 消費数も一致＝同期は崩れない。種別はローカル乱数（localType）。
   const genWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    return generateWord(rng, categoryRef.current, bagRef.current, true, itemsOnRef.current ? itemRateRef.current / 100 : 0, treasureBoostRef.current);
+    return generateWord(rng, categoryRef.current, bagRef.current, true, itemsOnRef.current ? itemRateRef.current / 100 : 0, 0);
   }, []);
 
   const pushToast = useCallback((text: string, kind: 'ko' | 'in' | 'item') => {
@@ -434,9 +415,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     itemRngRef.current = mulberry32((seed ^ 0x9e3779b9) >>> 0);
     // 種別はローカル乱数で（お宝＝アイテムが各プレイヤーに確実に出るように）。出現率はホスト設定。
     bagRef.current = newWordBag(); // 出題バッグを新しい1巡でリセット
-    treasureBoostRef.current = 0;
-    hpUpCountRef.current = 0;
-    setHpBonus(0);
     setWatchId(null);
     setSelfLog([]);
     setToasts([]);
@@ -684,29 +662,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       }
       writePlayerSummary(roomId, uid, { lastItem: item, itemAt: Date.now() });
       if (item === 'shield') shieldRef.current = true;
-      else if (item === 'brake') brakeUntilRef.current = Date.now() + BRAKE_DURATION;
       else if (item === 'clear')
         setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1).filter((w) => w.type !== 'ojama')]));
-      else if (item === 'longbomb') {
-        // ロング送信: ターゲットに長い単語を1個送りつける。
-        // 既に長文を抱えている相手には送らない（重ねがけ防止）。長文の無い相手を優先。
-        const picked = pickTarget();
-        let targetId = picked && !playersRef.current[picked]?.hasLong ? picked : null;
-        if (!targetId) {
-          const free = Object.entries(playersRef.current)
-            .filter(([id, p]) => id !== uid && isLive(p) && !p.hasLong && (!bossMode || isBoss || id === bossUid));
-          targetId = free.length ? free[Math.floor(Math.random() * free.length)][0] : null;
-        }
-        if (targetId) {
-          const lw = randomLongWord();
-          sendAttack(roomId, targetId, uid, 1, lw);
-          fireBeam(targetId);
-          const name = playersRef.current[targetId]?.name || '相手';
-          setAttackFlash({ amount: 1, name: `${name} に長文 📨` });
-          setTimeout(() => setAttackFlash(null), 800);
-          sfx.attack();
-        }
-      } else if (item === 'rapid') {
+      else if (item === 'rapid') {
         rapidUntilRef.current = Date.now() + RAPID_DURATION;
       } else if (item === 'keep') {
         keepUntilRef.current = Date.now() + KEEP_DURATION;
@@ -821,17 +779,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         // 溜まっているワードを全てお宝に変える（おじゃまは除く）。
         setBacklog((prev) => prev.map((w) => (w.type === 'ojama' ? w : { ...w, type: 'treasure' as const })));
         sfx.item();
-      } else if (item === 'luck') {
-        // お宝出現率を永続的に上昇（上限 +0.5）。
-        treasureBoostRef.current = Math.min(0.5, treasureBoostRef.current + 0.08);
-        sfx.item();
-      } else if (item === 'maxhp') {
-        // HP(積載上限)を永続的に+1（上限 MAX_HP_UP）。
-        if (hpUpCountRef.current < MAX_HP_UP) {
-          hpUpCountRef.current += 1;
-          setHpBonus((b) => b + 1);
-          sfx.item();
-        }
       }
       // --- オンライン専用 ---
       else if (item === 'reflect') {
@@ -893,17 +840,15 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     // オンライン専用 reflect/overcharge/thunder/jammer/siphon を追加。
     if (bossMode && isBoss) {
       // ボス専用＋自衛系＋全体攻撃。
-      items = ['meteor', 'quake', 'regen', 'brake', 'keep', 'barrier', 'freeze', 'guard', 'snipe', 'burst', 'flood', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon', 'dazzle'];
+      items = ['meteor', 'quake', 'regen', 'keep', 'barrier', 'freeze', 'guard', 'snipe', 'burst', 'flood', 'goldify', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon', 'dazzle'];
     } else if (bossMode) {
       // 挑戦者: 攻撃協力系を多めに＋追加アイテム。
-      items = ['brake', 'rapid', 'keep', 'parry', 'rally', 'focus', 'longbomb', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon', 'dazzle'];
+      items = ['rapid', 'keep', 'parry', 'rally', 'focus', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain', 'goldify', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon', 'dazzle'];
     } else {
-      items = ['brake', 'longbomb', 'rapid', 'keep', 'parry', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain', 'goldify', 'luck', 'maxhp', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon', 'dazzle'];
+      items = ['rapid', 'keep', 'parry', 'barrier', 'freeze', 'purge', 'guard', 'snipe', 'burst', 'flood', 'drain', 'goldify', 'reflect', 'overcharge', 'thunder', 'jammer', 'siphon', 'dazzle'];
     }
     // 個別にOFFにされたアイテムを除外。
     if (disabledItemsRef.current.size > 0) items = items.filter((it) => !disabledItemsRef.current.has(it));
-    // HPアップは上限に達したら抽選から除外する。
-    if (hpUpCountRef.current >= MAX_HP_UP) items = items.filter((it) => it !== 'maxhp');
     if (items.length === 0) return; // 候補が無ければ何も出さない
     // 有利/不利でドロップ内容を変える。基準は「自分のピンチ度（バックログ量）」と
     // 「生存者中の順位（相対的な劣勢）」を半々で合成。劣勢ほど防御/逆転、優勢ほど攻撃。
@@ -1195,8 +1140,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     let timerId: ReturnType<typeof setTimeout>;
     const loop = () => {
       const now = Date.now();
-      if (now < brakeUntilRef.current || now < freezeUntilRef.current) {
-        /* ブレーキ / フリーズ中は供給停止 */
+      if (now < freezeUntilRef.current) {
+        /* フリーズ中は供給停止 */
       } else if (guardCountRef.current > 0) {
         guardCountRef.current -= 1; // ガード: 複数回ぶん供給を無効化
       } else if (shieldRef.current) {
@@ -1319,12 +1264,9 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                 const amt = Math.min(atkCap, 1 + Math.floor(s.combo / cStep));
                 // アイテムON時は低確率でCPUもアイテムを使用（無効化アイテムは送らない）。
                 const canDazzle = itemsOnRef.current && !disabledItemsRef.current.has('dazzle');
-                const canLong = itemsOnRef.current && !disabledItemsRef.current.has('longbomb');
                 const roll = Math.random();
                 if (canDazzle && roll < 0.06) {
                   sendAttack(roomId, t[0], id, 0, undefined, 'dazzle'); // 視認性低下
-                } else if (canLong && roll < 0.10) {
-                  sendAttack(roomId, t[0], id, 1, randomLongWord()); // 長文おじゃま
                 } else {
                   sendAttack(roomId, t[0], id, amt);
                 }
@@ -1433,7 +1375,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   // 発動中の時間制限アイテム（残り時間カウントダウン表示用）。
   const activeEffects: { type: ItemType; until: number; color: string }[] = (
     [
-      { type: 'brake', until: brakeUntilRef.current, color: 'bg-green-500' },
       { type: 'rapid', until: rapidUntilRef.current, color: 'bg-yellow-400' },
       { type: 'keep', until: keepUntilRef.current, color: 'bg-fuchsia-500' },
       { type: 'parry', until: parryUntilRef.current, color: 'bg-violet-500' },
@@ -2159,8 +2100,6 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 const ItemIcon = ({ type }: { type: ItemType }) => {
   if (type === 'shield') return <Shield className="w-5 h-5 text-blue-300" />;
   if (type === 'clear') return <Wind className="w-5 h-5 text-cyan-300" />;
-  if (type === 'brake') return <Pause className="w-5 h-5 text-green-300" />;
-  if (type === 'longbomb') return <Bomb className="w-5 h-5 text-red-300" />;
   if (type === 'keep') return <Lock className="w-5 h-5 text-fuchsia-300" />;
   if (type === 'rapid') return <Zap className="w-5 h-5 text-yellow-300" />;
   return <span className="text-base leading-none">{ITEM_EMOJI[type]}</span>;
