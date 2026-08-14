@@ -2,7 +2,7 @@
 import type { ItemType } from './types';
 
 // アイテムの大分類（攻撃/防御/持続効果）。使い方設定・効果欄・スロットの分類に使う。
-// timed = 一定時間効果が続くタイプ（ブレーキ/連射/連鎖キープ/受け流し/フリーズ/トーテム）。
+// timed = 一定時間効果が続くタイプ（連射/連鎖キープ/受け流し/フリーズ など）。
 export type ItemCat = 'attack' | 'defense' | 'timed';
 // 使い方: hold=保持(手動) / instant=即時(拾った瞬間) / auto=オート(良い時に自動) /
 //          usenew=新着即時(スロットが埋まっている時、新しく来た方を自動発動して既存は保持)
@@ -21,26 +21,26 @@ export const USE_MODES: { key: UseMode; label: string; desc: string }[] = [
 
 export const ITEM_CAT: Record<ItemType, ItemCat> = {
   // 攻撃（相手におじゃまを送る系）
-  longbomb: 'attack', snipe: 'attack', burst: 'attack', heavy: 'attack', flood: 'attack', drain: 'attack',
+  snipe: 'attack', burst: 'attack', heavy: 'attack', flood: 'attack', drain: 'attack',
   mirror: 'attack', meteor: 'attack', quake: 'attack', rally: 'attack', focus: 'attack',
   thunder: 'attack', jammer: 'attack',
   // 防御（即時に自分を守る/利する系）
   shield: 'defense', clear: 'defense', purge: 'defense', guard: 'defense', barrier: 'defense', shrink: 'defense',
   regen: 'defense',
   // 効果（一定時間続く系＋永続で効果が続く系＋お宝化）
-  brake: 'timed', rapid: 'timed', keep: 'timed', parry: 'timed', totem: 'timed', freeze: 'timed',
-  gaugedown: 'timed', luck: 'timed', maxhp: 'timed', goldify: 'timed',
+  rapid: 'timed', keep: 'timed', parry: 'timed', freeze: 'timed',
+  goldify: 'timed',
   reflect: 'timed', overcharge: 'timed', siphon: 'timed', dazzle: 'timed',
 };
 
 // アイテムの傾向。def=防御/逆転（不利なほど出やすくする）, atk=攻撃（有利なほど出やすくする）, util=その他。
 // 有利不利・順位によるドロップ補正に使う（ソロ/オンライン共通）。
 export const ITEM_KIND: Record<ItemType, 'def' | 'atk' | 'util'> = {
-  shield: 'def', clear: 'def', brake: 'def', keep: 'util', shrink: 'def', parry: 'def',
-  gaugedown: 'def', totem: 'def', barrier: 'def', freeze: 'def', purge: 'def', guard: 'def',
-  regen: 'def', mirror: 'def', goldify: 'def', luck: 'util', maxhp: 'util',
+  shield: 'def', clear: 'def', keep: 'util', shrink: 'def', parry: 'def',
+  barrier: 'def', freeze: 'def', purge: 'def', guard: 'def',
+  regen: 'def', mirror: 'def', goldify: 'def',
   reflect: 'def', overcharge: 'util', siphon: 'def',
-  longbomb: 'atk', rapid: 'atk', meteor: 'atk', quake: 'atk', rally: 'atk', focus: 'atk',
+  rapid: 'atk', meteor: 'atk', quake: 'atk', rally: 'atk', focus: 'atk',
   snipe: 'atk', burst: 'atk', heavy: 'atk', flood: 'atk', drain: 'atk',
   thunder: 'atk', jammer: 'atk', dazzle: 'atk',
 };
@@ -48,19 +48,14 @@ export const ITEM_KIND: Record<ItemType, 'def' | 'atk' | 'util'> = {
 // アイテムのレアリティ係数（ドロップ重みの乗数。1.0=標準、低いほど出にくい）。
 // 強力すぎて出すぎると感じるものを抑える。未指定は 1.0。
 export const ITEM_RARITY: Partial<Record<ItemType, number>> = {
-  totem: 0.3, // 不死のトーテム（一定時間無敵級）→ かなりレアに
   purge: 0.4, // 大掃除（盤面ほぼリセット）→ レアに
-  gaugedown: 0.7,
   freeze: 0.6,
   guard: 0.7,
   barrier: 0.75,
-  maxhp: 0.7,
-  luck: 0.8,
   goldify: 0.8,
   meteor: 0.6,
   quake: 0.5,
   regen: 0.7,
-  longbomb: 0.3, // ロング送信（相殺不可の長文）→ 強力すぎるためレアに
   reflect: 0.7,
   overcharge: 0.8,
   siphon: 0.7,

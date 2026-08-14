@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, Pause, ArrowLeft,
-  Volume2, VolumeX, Bomb, Crown, Target, Lock, Scissors, ArrowDownToLine, Settings, RotateCcw, Timer,
+  Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, ArrowLeft,
+  Volume2, VolumeX, Crown, Target, Lock, Scissors, Settings, RotateCcw, Timer,
   ChevronDown, Gauge, Gift,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
-import { generateWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
+import { generateWord, makeOjamaWordFrom, makeShortWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
 import { loadCustomWords, loadCustomGroups } from '../lib/customwords';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
@@ -27,12 +27,10 @@ const INITIAL_SPAWN_INTERVAL = 4000;
 const MIN_SPAWN_INTERVAL = 1000;
 const DEFAULT_ACCEL = 0.98; // 1供給ごとの間隔倍率
 const DUMMY_COUNT = 20;
-const BRAKE_DURATION = 5000;
 const ATTACK_CAP = 5; // 1回の攻撃量の上限（即死コンボ防止）
 const RAPID_DURATION = 8000; // 連射アイテムの効果時間
 const KEEP_DURATION = 10000; // 連鎖キープ（ミスで連鎖が切れない）の効果時間
 const PARRY_DURATION = 8000; // 受け流し（被攻撃を逸らす）の効果時間
-const TOTEM_DURATION = 12000; // 不死のトーテム（上限超過無効）の効果時間
 const ATTACK_THRESHOLD = 5; // 何クリアごとに攻撃を発射するか（初期値）
 const AVOID_RECENT = 10; // 直近この数の語は再出させない（袋方式に加える近接重複ガード）
 const TELEGRAPH_DELAY = 2500; // CPU攻撃の着弾予告→確定までの猶予（相殺の反応時間を確保）
@@ -49,25 +47,19 @@ const TA_MILESTONES: { at: number; sec: number }[] = [
 
 // 時間制限つきアイテムの効果時間（カウントダウンゲージ用）。
 const ITEM_DURATION: Partial<Record<ItemType, number>> = {
-  brake: BRAKE_DURATION,
   rapid: RAPID_DURATION,
   keep: KEEP_DURATION,
   parry: PARRY_DURATION,
-  totem: TOTEM_DURATION,
   freeze: FREEZE_DURATION,
 };
 
 const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> = {
   shield: { name: 'シールド', icon: '🛡', desc: '次の自動供給を1回無効化' },
   clear: { name: 'おじゃま一掃', icon: '🌀', desc: 'バックログのおじゃまを消す' },
-  brake: { name: 'ブレーキ', icon: '⏸', desc: '自動供給を5秒間ストップ' },
-  longbomb: { name: 'ロング送信', icon: '📨', desc: '敵へ長文おじゃま(相殺不可)を送る' },
   rapid: { name: '連射', icon: '⚡', desc: '8秒間 1クリアごとにおじゃま+1' },
   keep: { name: '連鎖キープ', icon: '🔒', desc: '10秒間ミスしても連鎖が切れない' },
   shrink: { name: '短縮', icon: '✂', desc: '溜まったワードを全て短い単語に変換' },
   parry: { name: '受け流し', icon: '🪃', desc: '8秒間 被攻撃を他の相手へ逸らす' },
-  gaugedown: { name: 'ゲージ短縮', icon: '⏬', desc: '攻撃が4クリアごとに発射(恒久・一個まで)' },
-  totem: { name: '不死のトーテム', icon: '🗿', desc: '12秒間 上限超過しても脱落しない(自動発動)' },
   // ボスモード専用（ソロでは出現しない）。
   meteor: { name: 'メテオ', icon: '🌠', desc: 'ボス: 全挑戦者へ一斉攻撃' },
   quake: { name: '地割れ', icon: '🌋', desc: 'ボス: 最も危険な挑戦者へトドメ' },
@@ -88,8 +80,6 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   mirror: { name: 'ミラー', icon: '🪞', desc: '不利なほど強いおじゃまを送る' },
   // お宝/HP
   goldify: { name: 'ゴールド化', icon: '✨', desc: '溜まっているワードを全てお宝に変える' },
-  luck: { name: '幸運', icon: '🍀', desc: 'お宝の出現率が上がる（永続）' },
-  maxhp: { name: 'HPアップ', icon: '❤️', desc: 'HP(積載上限)+1（永続・最大+3）' },
   // オンライン専用（ソロには出現しない）
   reflect: { name: 'リフレクト', icon: '🪞', desc: '一定時間 受けた攻撃を送り主へ跳ね返す' },
   overcharge: { name: 'オーバーチャージ', icon: '🔋', desc: '一定時間 アタックゲージが倍速で溜まる' },
@@ -99,29 +89,25 @@ const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> 
   dazzle: { name: '視認性低下', icon: '🌈', desc: '一定時間 狙った相手の画面をゲーミングに光らせる' },
 };
 const ITEM_EMOJI: Record<ItemType, string> = {
-  shield: '🛡', clear: '🌀', brake: '⏸', longbomb: '📨', rapid: '⚡', keep: '🔒',
-  shrink: '✂', parry: '🪃', gaugedown: '⏬', totem: '🗿',
+  shield: '🛡', clear: '🌀', rapid: '⚡', keep: '🔒',
+  shrink: '✂', parry: '🪃',
   meteor: '🌠', quake: '🌋', regen: '💚', rally: '⚔', focus: '🎯',
   barrier: '🛡️', freeze: '🧊', purge: '🧹', guard: '🧱',
   snipe: '🎯', burst: '💥', heavy: '🔨', flood: '🌊', drain: '🩸', mirror: '🪞',
-  goldify: '✨', luck: '🍀', maxhp: '❤️',
+  goldify: '✨',
   reflect: '🪞', overcharge: '🔋', thunder: '⚡', jammer: '📡', siphon: '🧛', dazzle: '🌈',
 };
-// プレイ中にドロップするアイテム（役割が被る/強すぎ/地味なものを整理して約15種に統合）。
-// 除外: shield/clear/heavy/mirror（統合済）＋ parry/purge/guard/flood/drain（重複・強すぎ・地味）。
+// プレイ中にドロップするアイテム（役割が被る/強すぎ/地味なものを整理）。
 const ALL_ITEMS: ItemType[] = [
   // 攻撃（相手へおじゃま）
-  'snipe', 'burst', 'longbomb',
+  'snipe', 'burst',
   // 防御（自分を守る/軽くする）
   'barrier', 'freeze', 'shrink',
-  // 効果（一定時間／永続）
-  'brake', 'rapid', 'keep', 'gaugedown',
-  // 逆転（レア）
-  'totem',
-  // お宝 / HP
-  'goldify', 'luck', 'maxhp',
+  // 効果（一定時間）
+  'rapid', 'keep',
+  // お宝
+  'goldify',
 ];
-const MAX_HP_UP = 3; // HPアップの取得上限（永続）
 // ストックされている単語を変化させる系アイテム（発動を分かりやすく強調する）。
 const BOARD_CHANGE_ITEMS = new Set<ItemType>(['purge', 'shrink', 'goldify', 'clear', 'drain']);
 
@@ -255,8 +241,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [maxBacklog, setMaxBacklog] = useState(initialCfg.hp);
   const [dummyCount, setDummyCount] = useState(initialCfg.enemies);
   const maxBacklogRef = useRef(initialCfg.hp);
-  const treasureBoostRef = useRef(0); // 幸運(luck)によるお宝出現率の永続上昇分
-  const hpUpCountRef = useRef(0); // HPアップ(maxhp)の取得回数（上限 MAX_HP_UP）
 
   const [playerKOs, setPlayerKOs] = useState(0);
   const playerKOsRef = useRef(0);
@@ -439,12 +423,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const rapidUntilRef = useRef(0);
   const keepUntilRef = useRef(0);
   const parryUntilRef = useRef(0);
-  const totemUntilRef = useRef(0);
   const freezeUntilRef = useRef(0); // フリーズ（着弾予告/供給停止）
   const barrierRef = useRef(false); // バリア（次の被弾を1回防ぐ）
   const guardCountRef = useRef(0); // ガード（自動供給を複数回防ぐ）
   const attackThresholdRef = useRef(ATTACK_THRESHOLD);
-  const gaugeDownObtainedRef = useRef(false); // ゲージ短縮は一人一個まで
   const attackProgressRef = useRef(0);
   const bagRef = useRef(newWordBag()); // 出題バッグ（全語を1巡するまで重複させない）
   // 直近に出した語（display）。この数（AVOID_RECENT）以内では同じ語を出さないための保険。
@@ -468,7 +450,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // 出題バッグから次の単語を生成（全語を1巡するまで重複しない＋近接重複ガード）。
   const nextWord = useCallback((): Word => {
     const rng = wordRngRef.current!;
-    const draw = () => generateWord(rng, themeRef.current, bagRef.current, false, itemsOnRef.current ? treasureRateRef.current : 0, treasureBoostRef.current);
+    const draw = () => generateWord(rng, themeRef.current, bagRef.current, false, itemsOnRef.current ? treasureRateRef.current : 0, 0);
     let w = draw();
     for (let tries = 0; tries < 8 && recentRef.current.includes(w.display); tries++) w = draw();
     registerRecent(w.display);
@@ -534,7 +516,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const wordRngRef = useRef<RNG | null>(null);
   const itemRngRef = useRef<RNG | null>(null);
   const shieldRef = useRef(false);
-  const brakeUntilRef = useRef(0);
   const dazzleUntilRef = useRef(0); // 視認性低下（CPUから受けてお題パネルがゲーミング化）の終了時刻
 
   // CPUに攻撃を受けた演出（赤ビーム＋画面赤フラッシュ＋シェイク）。
@@ -656,10 +637,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setTimeout(() => setBoardFx((cur) => (cur === item ? null : cur)), 1300);
       }
       if (item === 'shield') shieldRef.current = true;
-      else if (item === 'brake') brakeUntilRef.current = Date.now() + BRAKE_DURATION;
       else if (item === 'clear')
         setBacklog((prev) => (prev.length <= 1 ? prev : [prev[0], ...prev.slice(1).filter((w) => w.type !== 'ojama')]));
-      else if (item === 'longbomb') fireAttack(6); // 敵CPUへの大ダメージ攻撃
       else if (item === 'rapid') {
         rapidUntilRef.current = Date.now() + RAPID_DURATION;
       } else if (item === 'keep') {
@@ -680,11 +659,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         });
       } else if (item === 'parry') {
         parryUntilRef.current = Date.now() + PARRY_DURATION;
-      } else if (item === 'gaugedown') {
-        attackThresholdRef.current = Math.max(2, attackThresholdRef.current - 1);
-        setAttackThreshold(attackThresholdRef.current);
-      } else if (item === 'totem') {
-        totemUntilRef.current = Date.now() + TOTEM_DURATION;
       }
       // --- 防御 ---
       else if (item === 'barrier') barrierRef.current = true;
@@ -739,18 +713,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         // 溜まっているワードを全てお宝に変える（先頭も含む）。
         setBacklog((prev) => prev.map((w) => (w.type === 'ojama' ? w : { ...w, type: 'treasure' as const })));
         pushToast('ゴールド化！ 全ワードがお宝に', 'item');
-      } else if (item === 'luck') {
-        // お宝出現率を永続的に上昇（上限 +0.5）。
-        treasureBoostRef.current = Math.min(0.5, treasureBoostRef.current + 0.08);
-        pushToast('幸運！ お宝の出現率アップ', 'item');
-      } else if (item === 'maxhp') {
-        // HP(積載上限)を永続的に+1（上限 MAX_HP_UP）。
-        if (hpUpCountRef.current < MAX_HP_UP) {
-          hpUpCountRef.current += 1;
-          maxBacklogRef.current += 1;
-          setMaxBacklog(maxBacklogRef.current);
-          pushToast('HPアップ！ 積載上限+1', 'item');
-        }
       }
     },
     [fireAttack, addBeam, pushToast],
@@ -787,19 +749,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
   // 上限超過時の保護。トーテム発動中なら無効化、所持中なら自動発動、無ければ脱落。
   const overflowProtect = useCallback((): 'protected' | 'gameover' => {
-    if (Date.now() < totemUntilRef.current) return 'protected';
-    // トーテムは防御スロットに入る。所持していれば自動発動して脱落を防ぐ。
-    if (slotsRef.current.defense === 'totem') {
-      totemUntilRef.current = Date.now() + TOTEM_DURATION;
-      setSlot('defense', null);
-      setUseFlash('totem');
-      setTimeout(() => setUseFlash(null), 900);
-      sfx.use();
-      pushToast('不死のトーテム発動！', 'item');
-      return 'protected';
-    }
     return 'gameover';
-  }, [pushToast, setSlot]);
+  }, []);
 
   const grantItem = useCallback(() => {
     const rng = itemRngRef.current;
@@ -818,12 +769,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const weighted: { item: ItemType; w: number }[] = [];
     for (const it of ALL_ITEMS) {
       if (disabledItemsRef.current.has(it)) continue; // 個別にOFFにされたアイテムは出さない
-      if (it === 'gaugedown' && gaugeDownObtainedRef.current) continue; // 一人一個まで
-      if (it === 'maxhp' && hpUpCountRef.current >= MAX_HP_UP) continue; // 上限に達したら出さない
       const kind = ITEM_KIND[it];
       // 劣勢ほど防御/逆転、優勢ほど攻撃が出やすい。util はフラット。
       let w = kind === 'def' ? defBoost : kind === 'atk' ? atkBoost : 1;
-      w *= ITEM_RARITY[it] ?? 1; // レアリティ係数（トーテム/大掃除などの強力アイテムを抑える）
+      w *= ITEM_RARITY[it] ?? 1; // レアリティ係数（大掃除などの強力アイテムを抑える）
       weighted.push({ item: it, w });
     }
     if (weighted.length === 0) return; // 全アイテムOFFなどで候補が無ければ何も出さない
@@ -834,7 +783,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       acc -= x.w;
       if (acc <= 0) { pick = x.item; break; }
     }
-    if (pick === 'gaugedown') gaugeDownObtainedRef.current = true; // 以降は出さない
     sfx.item();
     setItemFlash(true);
     setTimeout(() => setItemFlash(false), 1000);
@@ -913,15 +861,12 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     wordRngRef.current = wordRng;
     itemRngRef.current = itemRng;
     shieldRef.current = false;
-    brakeUntilRef.current = 0;
     dazzleUntilRef.current = 0;
     lastAttackerRef.current = null;
     updatePending([]);
     setSeed(newSeed);
     bagRef.current = newWordBag(); // 出題バッグを新しい1巡でリセット
     recentRef.current = []; // 近接重複ガードの直近履歴もリセット
-    treasureBoostRef.current = 0;
-    hpUpCountRef.current = 0;
     setBacklog([nextWord(), nextWord(), nextWord()]);
     setTokenIndex(0);
     setCurrentTyping('');
@@ -958,13 +903,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     rapidUntilRef.current = 0;
     keepUntilRef.current = 0;
     parryUntilRef.current = 0;
-    totemUntilRef.current = 0;
     freezeUntilRef.current = 0;
     barrierRef.current = false;
     guardCountRef.current = 0;
     attackThresholdRef.current = cfgAttackGauge;
     setAttackThreshold(cfgAttackGauge);
-    gaugeDownObtainedRef.current = false;
     attackProgressRef.current = 0;
     setAttackProgress(0);
     setSpawnInterval(cfgInitial);
@@ -1162,7 +1105,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       }
 
       // 一部のCPUがアイテムを使用。多くは演出のみ（ミニボードに絵文字）だが、
-      // ロング送信を引いた時は実際にプレイヤーへ長文（ことわざ）を送りつける。
       // アイテムOFFのときはCPUもアイテムを使わない。
       if (itemsOnRef.current && Math.random() < 0.15) {
         // プレイヤーが無効化したアイテムはCPUも使わない（grantItem と同じゲート）。
@@ -1171,22 +1113,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         const user = alive[Math.floor(Math.random() * alive.length)];
         const item = cpuPool[Math.floor(Math.random() * cpuPool.length)];
         setDummies((prev) => prev.map((d) => (d.id === user.id ? { ...d, lastItem: item, itemAt: Date.now() } : d)));
-        const incomingNew = pendingRef.current.reduce((s, e) => s + e.amount, 0);
-        // 既に山または着弾予告に長文がある相手には、新たな長文を送らない（重ねがけ防止）。
-        const alreadyHasLong =
-          pendingRef.current.some((e) => !!e.word) ||
-          stateRef.current.backlog.some((w) => w.type === 'ojama' && w.reading.length >= 10);
-        if (item === 'longbomb' && !alreadyHasLong && incomingNew < 6 && Date.now() >= freezeUntilRef.current) {
-          const lw = randomLongWord();
-          lastAttackerRef.current = user.id;
-          setDummies((prev) => prev.map((d) => (d.id === user.id ? { ...d, atk: (d.atk ?? 0) + 1 } : d)));
-          updatePending([
-            ...pendingRef.current,
-            { id: telegraphIdRef.current++, amount: 1, confirmAt: Date.now() + TELEGRAPH_DELAY, word: lw },
-          ]);
-          fireIncoming(user.id);
-          pushToast(`${user.name} から長文 📨`, 'in');
-        } else if (item === 'dazzle') {
+        if (item === 'dazzle') {
           // 視認性低下: プレイヤーのお題パネルを一定時間ゲーミングに歪ませる。
           dazzleUntilRef.current = Date.now() + DAZZLE_DURATION;
           setNowTick(Date.now());
@@ -1301,8 +1228,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     let timerId: ReturnType<typeof setTimeout>;
     const loop = () => {
       const now = Date.now();
-      if (now < brakeUntilRef.current || now < freezeUntilRef.current) {
-        // ブレーキ / フリーズ中は供給停止
+      if (now < freezeUntilRef.current) {
+        // フリーズ中は供給停止
       } else if (guardCountRef.current > 0) {
         guardCountRef.current -= 1; // ガード: 複数回ぶん供給を無効化
       } else if (shieldRef.current) {
@@ -1595,11 +1522,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // 発動中の時間制限アイテム（残り時間カウントダウン表示用）。
   const activeEffects: { type: ItemType; until: number; color: string }[] = (
     [
-      { type: 'brake', until: brakeUntilRef.current, color: 'bg-green-500' },
       { type: 'rapid', until: rapidUntilRef.current, color: 'bg-yellow-400' },
       { type: 'keep', until: keepUntilRef.current, color: 'bg-fuchsia-500' },
       { type: 'parry', until: parryUntilRef.current, color: 'bg-violet-500' },
-      { type: 'totem', until: totemUntilRef.current, color: 'bg-amber-400' },
       { type: 'freeze', until: freezeUntilRef.current, color: 'bg-sky-400' },
     ] as { type: ItemType; until: number; color: string }[]
   ).filter((e) => nowTick > 0 && e.until > nowTick);
@@ -1620,23 +1545,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           <div className="absolute parry-label text-4xl font-black italic text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,0.9)]">
             PARRY!
           </div>
-        </div>
-      )}
-
-      {/* 不死のトーテム発動中エフェクト（金色のオーラ＋舞い上がる粒子） */}
-      {gameState === 'playing' && nowTick < totemUntilRef.current && (
-        <div className="fixed inset-0 pointer-events-none z-40 overflow-hidden totem-aura">
-          <div className="absolute inset-0" style={{ boxShadow: 'inset 0 0 160px 50px rgba(250,204,21,0.45)' }} />
-          {Array.from({ length: 14 }).map((_, i) => (
-            <span
-              key={i}
-              className="totem-particle absolute text-yellow-300/90"
-              style={{ left: `${(i * 7 + 5) % 100}%`, animationDelay: `${(i % 7) * 0.22}s`, fontSize: `${10 + (i % 4) * 4}px` }}
-            >
-              ✦
-            </span>
-          ))}
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 text-5xl opacity-40 totem-emblem">🗿</div>
         </div>
       )}
 
@@ -2542,16 +2450,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           80% { transform: translate(4px, 2px); }
         }
         .screen-shake { animation: screenShake 0.45s ease-in-out; }
-        @keyframes totemAura { 0%,100% { opacity: 0.55; } 50% { opacity: 1; } }
-        .totem-aura { animation: totemAura 1.4s ease-in-out infinite; }
-        @keyframes totemRise {
-          0% { transform: translateY(20vh) scale(0.6); opacity: 0; }
-          15% { opacity: 1; }
-          100% { transform: translateY(-110vh) scale(1.1); opacity: 0; }
-        }
-        .totem-particle { bottom: -3vh; animation: totemRise 2.2s linear infinite; }
-        @keyframes totemPulse { 0%,100% { transform: translate(-50%,-50%) scale(1); opacity: 0.7; } 50% { transform: translate(-50%,-50%) scale(1.15); opacity: 1; } }
-        .totem-emblem { animation: totemPulse 1.2s ease-in-out infinite; filter: drop-shadow(0 0 18px rgba(250,204,21,0.8)); }
         @keyframes parryRing { 0% { width: 40px; height: 40px; opacity: 0.9; } 100% { width: 360px; height: 360px; opacity: 0; } }
         .parry-ring { width: 40px; height: 40px; animation: parryRing 0.5s ease-out forwards; box-shadow: 0 0 24px rgba(34,211,238,0.8); }
         @keyframes parryLabel { 0% { transform: scale(0.6); opacity: 0; } 30% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
@@ -2586,12 +2484,9 @@ const Stat = ({ label, value, small, suffix }: { label: string; value: number; s
 const ItemIcon = ({ type }: { type: ItemType }) => {
   if (type === 'shield') return <Shield className="w-5 h-5 text-blue-300" />;
   if (type === 'clear') return <Wind className="w-5 h-5 text-cyan-300" />;
-  if (type === 'brake') return <Pause className="w-5 h-5 text-green-300" />;
-  if (type === 'longbomb') return <Bomb className="w-5 h-5 text-red-300" />;
   if (type === 'keep') return <Lock className="w-5 h-5 text-fuchsia-300" />;
   if (type === 'shrink') return <Scissors className="w-5 h-5 text-emerald-300" />;
   if (type === 'parry') return <Shield className="w-5 h-5 text-violet-300" />;
-  if (type === 'gaugedown') return <ArrowDownToLine className="w-5 h-5 text-orange-300" />;
   if (type === 'rapid') return <Zap className="w-5 h-5 text-yellow-300" />;
   return <span className="text-base leading-none">{ITEM_EMOJI[type]}</span>;
 };
