@@ -2,7 +2,7 @@
 // Firebase Realtime Database の leaderboard/timeattack/{bucket}/{uid} に
 // 各プレイヤーの自己ベストを保存し、制限時間ごとに全プレイヤーで競う。
 import { ref, get, set, update, query, orderByChild, limitToLast } from 'firebase/database';
-import { db, ensureSignedIn } from './firebase';
+import { getDb, ensureSignedIn } from './firebase';
 
 // 集計バケット = タイムアタックの制限時間（秒）。SoloGame の制限時間プリセットと一致させる。
 export const LEADERBOARD_BUCKETS = [30, 60, 90, 120] as const;
@@ -53,7 +53,7 @@ export async function submitGlobalScore(
 ): Promise<{ updated: boolean; rank: number | null }> {
   const uid = await ensureSignedIn();
   const path = `leaderboard/timeattack/${bucketKey(inp.taSeconds)}/${uid}`;
-  const entryRef = ref(db, path);
+  const entryRef = ref(getDb(), path);
 
   // 既存の自己ベストを確認し、上回る時だけ書き込む。
   const prevSnap = await get(entryRef);
@@ -87,7 +87,7 @@ export async function submitGlobalScore(
 // バケット内の上位を取得（スコア降順）。
 export async function fetchGlobalTop(taSeconds: number, limit = 50): Promise<GlobalEntry[]> {
   const q = query(
-    ref(db, `leaderboard/timeattack/${bucketKey(taSeconds)}`),
+    ref(getDb(), `leaderboard/timeattack/${bucketKey(taSeconds)}`),
     orderByChild('score'),
     limitToLast(limit),
   );

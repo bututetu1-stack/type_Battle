@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
 
 // デプロイ確認用のビルド識別子。反映されたか一目で分かるよう画面隅に薄く表示する。
@@ -10,7 +11,9 @@ console.info('[TYPE ROYALE] build', BUILD);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
     <div
       style={{
         position: 'fixed', right: 6, bottom: 4, zIndex: 9999,

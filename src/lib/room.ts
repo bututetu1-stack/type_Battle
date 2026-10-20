@@ -12,7 +12,7 @@ import {
   onDisconnect,
   serverTimestamp,
 } from 'firebase/database';
-import { db } from './firebase';
+import { getDb, firebaseReady } from './firebase';
 import { randomSeed } from './rng';
 
 export type RoomStatus = 'waiting' | 'countdown' | 'playing' | 'finished';
@@ -88,9 +88,11 @@ export const COUNTDOWN_MS = 5000; // 開始カウントダウン
 
 // --- サーバ時刻オフセット（同期スタートの基準） ---
 let serverTimeOffset = 0;
-onValue(ref(db, '.info/serverTimeOffset'), (snap) => {
-  serverTimeOffset = snap.val() || 0;
-});
+if (firebaseReady) {
+  onValue(ref(getDb(), '.info/serverTimeOffset'), (snap) => {
+    serverTimeOffset = snap.val() || 0;
+  });
+}
 
 // サーバ基準の現在時刻(ms)。startAt との比較に使う。
 export function serverNow(): number {
@@ -128,7 +130,7 @@ export async function createRoom(uid: string, name: string): Promise<string> {
   let roomId = generateRoomId();
   // 軽い衝突回避（数回試行）
   for (let i = 0; i < 5; i++) {
-    const exists = await get(ref(db, `rooms/${roomId}/meta`));
+    const exists = await get(ref(getDb(), `rooms/${roomId}/meta`));
     if (!exists.exists()) break;
     roomId = generateRoomId();
   }
@@ -154,35 +156,35 @@ export async function createRoom(uid: string, name: string): Promise<string> {
     gaugeChars: 16,
     comeback: 2,
   };
-  await set(ref(db, `rooms/${roomId}/meta`), meta);
-  await set(ref(db, `rooms/${roomId}/players/${uid}`), newPlayer(name, true));
+  await set(ref(getDb(), `rooms/${roomId}/meta`), meta);
+  await set(ref(getDb(), `rooms/${roomId}/players/${uid}`), newPlayer(name, true));
   return roomId;
 }
 
 // 既存ルームに参加。満員/開始済み/不在なら例外。
 export async function joinRoom(roomId: string, uid: string, name: string): Promise<void> {
-  const metaSnap = await get(ref(db, `rooms/${roomId}/meta`));
+  const metaSnap = await get(ref(getDb(), `rooms/${roomId}/meta`));
   if (!metaSnap.exists()) throw new Error('ルームが見つかりません');
   const meta = metaSnap.val() as RoomMeta;
   if (meta.status !== 'waiting') throw new Error('このルームは既に開始しています');
 
-  const playersSnap = await get(ref(db, `rooms/${roomId}/players`));
+  const playersSnap = await get(ref(getDb(), `rooms/${roomId}/players`));
   const count = playersSnap.exists() ? Object.keys(playersSnap.val()).length : 0;
   const alreadyIn = playersSnap.exists() && playersSnap.val()[uid];
   if (!alreadyIn && count >= meta.maxPlayers) throw new Error('ルームが満員です');
 
-  await set(ref(db, `rooms/${roomId}/players/${uid}`), newPlayer(name, false));
+  await set(ref(getDb(), `rooms/${roomId}/players/${uid}`), newPlayer(name, false));
 }
 
 // presence 設定: 切断時に connected=false / lastSeen を更新（onDisconnect）。
 export async function setupPresence(roomId: string, uid: string): Promise<void> {
-  const pRef = ref(db, `rooms/${roomId}/players/${uid}`);
+  const pRef = ref(getDb(), `rooms/${roomId}/players/${uid}`);
   await onDisconnect(pRef).update({ connected: false, lastSeen: serverTimestamp() });
 }
 
 // ルーム全体（meta + players）を購読。
 export function subscribeRoom(roomId: string, cb: (snap: RoomSnapshot) => void): () => void {
-  const roomRef = ref(db, `rooms/${roomId}`);
+  const roomRef = ref(getDb(), `rooms/${roomId}`);
   return onValue(roomRef, (snap) => {
     const val = snap.val() || {};
     cb({ meta: val.meta || null, players: val.players || {} });
@@ -199,88 +201,88 @@ export function writePlayerSummary(
       | 'curDisplay' | 'curReading' | 'curIdx' | 'curTyping' | 'curRomaji' | 'curRomajiDone'>
   >,
 ): void {
-  update(ref(db, `rooms/${roomId}/players/${uid}`), { ...summary, lastSeen: Date.now() }).catch(() => {});
+  update(ref(getDb(), `rooms/${roomId}/players/${uid}`), { ...summary, lastSeen: Date.now() }).catch(() => {});
 }
 
 // ホスト操作: 出題テーマを変更（待機中）。
 export async function setRoomCategory(roomId: string, category: string): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { category });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { category });
 }
 
 // ホスト操作: ゲームモードを変更（待機中）。boss の場合はホストをボスにする。
 export async function setRoomMode(roomId: string, mode: 'royale' | 'boss', hostUid: string): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { mode, bossUid: mode === 'boss' ? hostUid : '' });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { mode, bossUid: mode === 'boss' ? hostUid : '' });
 }
 
 // ホスト操作: お宝(アイテム)出現率を変更（待機中、0〜100）。
 export async function setRoomItemRate(roomId: string, itemRate: number): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { itemRate: Math.min(100, Math.max(0, Math.round(itemRate))) });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { itemRate: Math.min(100, Math.max(0, Math.round(itemRate))) });
 }
 
 // ホスト操作: 各プレイヤーのHP（積載上限）を変更（待機中、6〜24）。
 export async function setRoomHp(roomId: string, hp: number): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { hp: Math.min(24, Math.max(6, Math.round(hp))) });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { hp: Math.min(24, Math.max(6, Math.round(hp))) });
 }
 
 // ホスト操作: 自動供給の初期間隔(ms)を変更（待機中、1500〜8000。小さいほど速い）。
 export async function setRoomSpawnMs(roomId: string, spawnMs: number): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { spawnMs: Math.min(8000, Math.max(1500, Math.round(spawnMs))) });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { spawnMs: Math.min(8000, Math.max(1500, Math.round(spawnMs))) });
 }
 
 // ホスト操作: 攻撃まわりの設定を変更（待機中）。
 export async function setRoomAttackGauge(roomId: string, v: number): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { attackGauge: Math.min(10, Math.max(2, Math.round(v))) });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { attackGauge: Math.min(10, Math.max(2, Math.round(v))) });
 }
 export async function setRoomAttackCap(roomId: string, v: number): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { attackCap: Math.min(12, Math.max(2, Math.round(v))) });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { attackCap: Math.min(12, Math.max(2, Math.round(v))) });
 }
 export async function setRoomComboStep(roomId: string, v: number): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { comboStep: Math.min(15, Math.max(2, Math.round(v))) });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { comboStep: Math.min(15, Math.max(2, Math.round(v))) });
 }
 export async function setRoomBadgeCap(roomId: string, v: number): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { badgeCap: Math.min(10, Math.max(0, Math.round(v))) });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { badgeCap: Math.min(10, Math.max(0, Math.round(v))) });
 }
 export async function setRoomBadgeRate(roomId: string, v: number): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { badgeRate: Math.min(100, Math.max(0, Math.round(v))) });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { badgeRate: Math.min(100, Math.max(0, Math.round(v))) });
 }
 export async function setRoomGaugeMode(roomId: string, v: 'word' | 'char'): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { gaugeMode: v === 'char' ? 'char' : 'word' });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { gaugeMode: v === 'char' ? 'char' : 'word' });
 }
 export async function setRoomGaugeChars(roomId: string, v: number): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { gaugeChars: Math.min(40, Math.max(6, Math.round(v))) });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { gaugeChars: Math.min(40, Math.max(6, Math.round(v))) });
 }
 export async function setRoomComeback(roomId: string, v: number): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { comeback: Math.min(3, Math.max(0, Math.round(v))) });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { comeback: Math.min(3, Math.max(0, Math.round(v))) });
 }
 
 // ホスト操作: アイテムのON/OFF（false でお宝・アイテムを一切出さない）。
 export async function setRoomItemsOn(roomId: string, on: boolean): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { itemsOn: on });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { itemsOn: on });
 }
 
 // ホスト操作: 部屋共有の追加語句を設定（全員の出題に反映）。
 export async function setRoomCustomWords(roomId: string, words: { display: string; reading: string }[]): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { customWords: words });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { customWords: words });
 }
 
 // ホスト操作: 個別にOFFにするアイテムを設定（全員の排出から除外）。
 export async function setRoomDisabledItems(roomId: string, items: string[]): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { disabledItems: items });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { disabledItems: items });
 }
 
 // ホスト操作: 'all'出題に艦これ語を含めるか（全員に反映）。
 export async function setRoomKancolle(roomId: string, on: boolean): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { kancolleOn: on });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { kancolleOn: on });
 }
 
 // ホスト操作: 'all'(すべて)出題から除外するテーマ一覧（全員に反映）。
 export async function setRoomExcludedThemes(roomId: string, ids: string[]): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { excludedThemes: ids });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { excludedThemes: ids });
 }
 
 // 各プレイヤーが自分の追加語句を「持ち寄る」（自分のノードに書込。全員の出題に合流）。
 export async function setPlayerWords(roomId: string, uid: string, words: { display: string; reading: string }[]): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/players/${uid}`), { words });
+  await update(ref(getDb(), `rooms/${roomId}/players/${uid}`), { words });
 }
 
 // --- CPU（ホストがシミュレートする擬似プレイヤー）---
@@ -289,38 +291,38 @@ const CPU_NAMES = ['タイピー', 'カナ丸', 'ロボ太', 'ことだま', '�
 
 // ホスト操作: CPUプレイヤーを1体追加（待機中）。str は強さ 0..1。
 export async function addCpuPlayer(roomId: string, str: number): Promise<void> {
-  const metaSnap = await get(ref(db, `rooms/${roomId}/meta`));
+  const metaSnap = await get(ref(getDb(), `rooms/${roomId}/meta`));
   if (!metaSnap.exists()) throw new Error('ルームが見つかりません');
   const meta = metaSnap.val() as RoomMeta;
-  const playersSnap = await get(ref(db, `rooms/${roomId}/players`));
+  const playersSnap = await get(ref(getDb(), `rooms/${roomId}/players`));
   const count = playersSnap.exists() ? Object.keys(playersSnap.val()).length : 0;
   if (count >= meta.maxPlayers) throw new Error('ルームが満員です');
   const id = `cpu_${Math.random().toString(36).slice(2, 8)}`;
   const name = `🤖 ${CPU_NAMES[Math.floor(Math.random() * CPU_NAMES.length)]}`;
   const p: RoomPlayer = { ...newPlayer(name, false), isCpu: true, str: Math.min(1, Math.max(0, str)) };
-  await set(ref(db, `rooms/${roomId}/players/${id}`), p);
+  await set(ref(getDb(), `rooms/${roomId}/players/${id}`), p);
 }
 
 // ホスト操作: 指定CPUを削除。
 export async function removeCpuPlayer(roomId: string, cpuId: string): Promise<void> {
-  await remove(ref(db, `rooms/${roomId}/players/${cpuId}`)).catch(() => {});
+  await remove(ref(getDb(), `rooms/${roomId}/players/${cpuId}`)).catch(() => {});
 }
 
 // ホスト操作: すべてのCPUを削除（退室時などに部屋を残さないため）。
 export async function removeAllCpus(roomId: string): Promise<void> {
-  const playersSnap = await get(ref(db, `rooms/${roomId}/players`));
+  const playersSnap = await get(ref(getDb(), `rooms/${roomId}/players`));
   if (!playersSnap.exists()) return;
   const players = playersSnap.val() as Record<string, RoomPlayer>;
   await Promise.all(
     Object.entries(players)
       .filter(([, p]) => p.isCpu)
-      .map(([id]) => remove(ref(db, `rooms/${roomId}/players/${id}`)).catch(() => {})),
+      .map(([id]) => remove(ref(getDb(), `rooms/${roomId}/players/${id}`)).catch(() => {})),
   );
 }
 
 // ホスト操作: カウントダウン付きで開始。startAt をサーバ基準の未来時刻に設定。
 export async function startGame(roomId: string): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), {
+  await update(ref(getDb(), `rooms/${roomId}/meta`), {
     status: 'playing',
     startAt: serverNow() + COUNTDOWN_MS,
   });
@@ -328,19 +330,19 @@ export async function startGame(roomId: string): Promise<void> {
 
 // 決着: ホストが finished へ遷移。
 export async function finishGame(roomId: string): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), { status: 'finished' });
+  await update(ref(getDb(), `rooms/${roomId}/meta`), { status: 'finished' });
 }
 
 // 再戦: ホストが部屋を解散せず待機状態へ戻す（新しいシードで仕切り直し）。
 // 各プレイヤーの alive/rank などは次のゲーム開始時に各自リセットする。
 export async function resetRoom(roomId: string): Promise<void> {
-  await update(ref(db, `rooms/${roomId}/meta`), {
+  await update(ref(getDb(), `rooms/${roomId}/meta`), {
     status: 'waiting',
     startAt: 0,
     seed: randomSeed(),
   });
   // 古い攻撃キューを掃除。
-  await remove(ref(db, `rooms/${roomId}/attacks`)).catch(() => {});
+  await remove(ref(getDb(), `rooms/${roomId}/attacks`)).catch(() => {});
 }
 
 // --- 攻撃（おじゃま送受信 / Phase 2）---
@@ -367,12 +369,12 @@ export function sendAttack(
   const payload: Record<string, unknown> = { from: fromUid, amount, at: serverTimestamp() };
   if (word) payload.word = word;
   if (fx) payload.fx = fx;
-  push(ref(db, `rooms/${roomId}/attacks/${targetUid}`), payload).catch(() => {});
+  push(ref(getDb(), `rooms/${roomId}/attacks/${targetUid}`), payload).catch(() => {});
 }
 
 // 自分宛ての攻撃を購読。受信したらコールバックし、即座にノードを削除（consume）。
 export function subscribeAttacks(roomId: string, uid: string, cb: (ev: AttackEvent) => void): () => void {
-  const aRef = ref(db, `rooms/${roomId}/attacks/${uid}`);
+  const aRef = ref(getDb(), `rooms/${roomId}/attacks/${uid}`);
   const unsub = onChildAdded(aRef, (snap) => {
     const val = snap.val();
     if (val && typeof val.amount === 'number') {
@@ -385,11 +387,11 @@ export function subscribeAttacks(roomId: string, uid: string, cb: (ev: AttackEve
 
 // 退室: 自分のノードを削除。空になればルームごと削除。
 export async function leaveRoom(roomId: string, uid: string): Promise<void> {
-  const pRef = ref(db, `rooms/${roomId}/players/${uid}`);
+  const pRef = ref(getDb(), `rooms/${roomId}/players/${uid}`);
   await onDisconnect(pRef).cancel();
   await remove(pRef);
-  const playersSnap = await get(ref(db, `rooms/${roomId}/players`));
+  const playersSnap = await get(ref(getDb(), `rooms/${roomId}/players`));
   if (!playersSnap.exists()) {
-    await remove(ref(db, `rooms/${roomId}`));
+    await remove(ref(getDb(), `rooms/${roomId}`));
   }
 }

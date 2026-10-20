@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import { ensureSignedIn } from './lib/firebase';
+import { ensureSignedIn, firebaseReady } from './lib/firebase';
 import SoloGame from './components/SoloGame';
 import Lobby from './components/Lobby';
 import OnlineRoom from './components/OnlineRoom';
@@ -81,7 +81,7 @@ export default function App() {
   const bestScore = scores.reduce((m, r) => Math.max(m, r.score || 0), 0);
   const homeNav = [
     { k: 'ソロ', d: 'CPU戦・タイムアタック', onClick: () => setView('solo'), accent: true, loading: false },
-    { k: 'オンライン対戦', d: '最大16人 ロビー/ルーム', onClick: () => setView('lobby'), accent: false, loading: !uid },
+    { k: 'オンライン対戦', d: firebaseReady ? '最大16人 ロビー/ルーム' : '未設定（この環境ではソロのみ）', onClick: () => setView('lobby'), accent: false, loading: !uid && !authError },
     { k: 'プレイヤー設定', d: '名前・カラーテーマ・キー', onClick: () => setShowSettings(true), accent: false, loading: false },
     { k: '語句を追加', d: `お題の単語を登録（${customWords.length}）`, onClick: () => setShowWords(true), accent: false, loading: false },
     { k: '🏆 記録', d: 'ランキング / 統計', onClick: () => setShowRecords(true), accent: false, loading: false },

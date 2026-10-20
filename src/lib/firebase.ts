@@ -6,8 +6,8 @@
 //   Realtime Database セキュリティルール（database.rules.json）と
 //   Google Cloud 側の API キー制限・承認済みドメインで担保する。
 import { initializeApp } from 'firebase/app';
-import { getDatabase } from 'firebase/database';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getDatabase, type Database } from 'firebase/database';
+import { getAuth, signInAnonymously, onAuthStateChanged, type Auth } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -19,21 +19,38 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+// 設定（.env / Secrets）が無い環境でもアプリ全体が落ちないようにする。
+// 以前は未設定だと読み込み時に getDatabase が例外を投げ、ソロすら遊べない真っ白画面になっていた。
+// 未設定ならオンライン機能だけを止め、ソロは通常どおり動かす。
+export const firebaseReady = Boolean(firebaseConfig.apiKey && firebaseConfig.databaseURL && firebaseConfig.projectId);
+export const OFFLINE_MESSAGE = 'オンライン機能が設定されていません（Firebase の設定が必要です）。ソロは遊べます。';
 
-export const db = getDatabase(app);
-export const auth = getAuth(app);
+const app = firebaseReady ? initializeApp(firebaseConfig) : null;
+let db: Database | null = null;
+let auth: Auth | null = null;
+
+// オンライン機能から呼ぶ。未設定なら分かりやすいメッセージで失敗させる。
+export function getDb(): Database {
+  if (!app) throw new Error(OFFLINE_MESSAGE);
+  return (db ??= getDatabase(app));
+}
+function getAuthInstance(): Auth {
+  if (!app) throw new Error(OFFLINE_MESSAGE);
+  return (auth ??= getAuth(app));
+}
 
 // 匿名サインインして uid を返す。既にサインイン済みならその uid。
 export function ensureSignedIn(): Promise<string> {
+  if (!app) return Promise.reject(new Error(OFFLINE_MESSAGE));
+  const a = getAuthInstance();
   return new Promise((resolve, reject) => {
-    const unsub = onAuthStateChanged(auth, (user) => {
+    const unsub = onAuthStateChanged(a, (user) => {
       if (user) {
         unsub();
         resolve(user.uid);
       }
     });
-    signInAnonymously(auth).catch((err) => {
+    signInAnonymously(a).catch((err) => {
       unsub();
       reject(err);
     });
