@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Swords, Users, Settings, BookPlus, Trophy, ChevronRight } from 'lucide-react';
 import { ensureSignedIn, firebaseReady } from './lib/firebase';
 import SoloGame from './components/SoloGame';
 import Lobby from './components/Lobby';
@@ -79,64 +79,89 @@ export default function App() {
   const scores = loadScores();
   const bestKps = scores.reduce((m, r) => Math.max(m, r.kps || 0), 0);
   const bestScore = scores.reduce((m, r) => Math.max(m, r.score || 0), 0);
-  const homeNav = [
-    { k: 'ソロ', d: 'CPU戦・タイムアタック', onClick: () => setView('solo'), accent: true, loading: false },
-    { k: 'オンライン対戦', d: firebaseReady ? '最大16人 ロビー/ルーム' : '未設定（この環境ではソロのみ）', onClick: () => setView('lobby'), accent: false, loading: !uid && !authError },
-    { k: 'プレイヤー設定', d: '名前・カラーテーマ・キー', onClick: () => setShowSettings(true), accent: false, loading: false },
-    { k: '語句を追加', d: `お題の単語を登録（${customWords.length}）`, onClick: () => setShowWords(true), accent: false, loading: false },
-    { k: '🏆 記録', d: 'ランキング / 統計', onClick: () => setShowRecords(true), accent: false, loading: false },
+  // 主役（遊ぶ）と脇役（整える・振り返る）で大きさを分ける。
+  const playNav = [
+    { k: 'ソロ', d: 'CPUとのバトル／制限時間のタイムアタック', onClick: () => setView('solo'), Icon: Swords, loading: false },
+    {
+      k: 'オンライン対戦',
+      d: firebaseReady ? '最大16人。ルームを作るかコードで参加' : 'この環境では未設定（ソロのみ遊べます）',
+      onClick: () => setView('lobby'),
+      Icon: Users,
+      loading: firebaseReady && !uid && !authError,
+    },
+  ];
+  const subNav = [
+    { k: 'プレイヤー設定', Icon: Settings, onClick: () => setShowSettings(true) },
+    { k: `語句を追加（${customWords.length}）`, Icon: BookPlus, onClick: () => setShowWords(true) },
+    { k: '記録・ランキング', Icon: Trophy, onClick: () => setShowRecords(true) },
   ];
   return (
-    <div className="min-h-screen bg-transparent text-text flex flex-col items-center justify-center p-6 relative overflow-hidden">
+    <div className="min-h-screen bg-transparent text-text flex flex-col items-center justify-center px-6 py-10 relative overflow-hidden">
       {/* 背景の巨大な淡い「打」 */}
       <div
         className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none select-none text-primary"
-        style={{ fontFamily: "'Hiragino Mincho ProN','Yu Mincho',serif", fontWeight: 700, fontSize: 'min(80vh,680px)', lineHeight: 1, opacity: 0.04 }}
+        style={{ fontFamily: "'Hiragino Mincho ProN','Yu Mincho',serif", fontWeight: 700, fontSize: 'min(80vh,680px)', lineHeight: 1, opacity: 0.035 }}
+        aria-hidden
       >
         打
       </div>
 
       {/* ワードマーク */}
       <div className="relative z-10 text-center">
-        <div className="font-tech text-muted mb-3" style={{ fontSize: 12, letterSpacing: '0.5em' }}>日本語タイピング・バトルロワイヤル</div>
-        <div className="font-tech font-bold text-text" style={{ fontSize: 'clamp(44px,9vw,110px)', lineHeight: 0.95, letterSpacing: '0.08em', textShadow: '0 0 50px var(--glow)' }}>
+        <div className="ui-eyebrow" style={{ letterSpacing: '0.42em' }}>日本語タイピング・バトルロワイヤル</div>
+        <h1 className="font-tech font-bold text-text mt-4" style={{ fontSize: 'clamp(48px,8vw,104px)', lineHeight: 0.92, letterSpacing: '0.06em', textShadow: '0 0 60px var(--glow)' }}>
           TYPE<br /><span className="text-primary">ROYALE</span>
-        </div>
-        <div className="mx-auto mt-5 bg-primary" style={{ width: 64, height: 2, boxShadow: '0 0 12px var(--glow)' }} />
+        </h1>
       </div>
 
-      {/* ナビカード */}
-      <div className="relative z-10 grid gap-3.5 mt-10 justify-center" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 200px))', maxWidth: 660 }}>
-        {homeNav.map((c) => (
+      {/* 遊ぶ（主役） */}
+      <div className="relative z-10 grid gap-3 mt-11 w-full max-w-[680px] sm:grid-cols-2">
+        {playNav.map(({ k, d, onClick, Icon, loading }, i) => (
           <button
-            key={c.k}
-            onClick={c.onClick}
-            className="text-left rounded-2xl px-5 py-4 border transition-all hover:-translate-y-0.5 hover:border-primary"
+            key={k}
+            type="button"
+            onClick={onClick}
+            className="group text-left rounded-2xl p-5 border transition-all hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             style={{
-              borderColor: c.accent ? 'var(--primary)' : 'var(--line)',
-              background: c.accent ? 'var(--surface2)' : 'var(--surface)',
-              boxShadow: c.accent ? '0 0 24px -8px var(--glow)' : 'none',
+              borderColor: i === 0 ? 'rgb(var(--ac-400) / 0.6)' : 'var(--line)',
+              background: i === 0 ? 'linear-gradient(160deg, rgb(var(--ac-400) / 0.16), rgb(var(--ac-400) / 0.04))' : 'rgb(var(--n-50) / 0.03)',
+              boxShadow: i === 0 ? '0 18px 40px -24px var(--glow)' : 'none',
+              outlineColor: 'rgb(var(--ac-300))',
             }}
           >
-            <div className="flex items-center gap-2">
-              {c.loading
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-                : <span className="rounded-sm" style={{ width: 8, height: 8, background: c.accent ? 'var(--primary)' : 'var(--muted)', boxShadow: c.accent ? '0 0 8px var(--primary)' : 'none' }} />}
-              <span className="text-base font-semibold text-text">{c.k}</span>
+            <div className="flex items-center justify-between">
+              <span
+                className="w-11 h-11 rounded-xl flex items-center justify-center"
+                style={{ background: i === 0 ? 'rgb(var(--ac-400) / 0.2)' : 'rgb(var(--n-50) / 0.06)', color: i === 0 ? 'rgb(var(--ac-300))' : 'rgb(var(--n-300))' }}
+              >
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Icon className="w-5 h-5" />}
+              </span>
+              <ChevronRight className="w-5 h-5 text-muted transition-transform group-hover:translate-x-0.5" />
             </div>
-            <div className="text-xs text-muted mt-2 leading-relaxed">{c.d}</div>
+            <div className="text-xl font-bold text-text mt-4">{k}</div>
+            <div className="text-sm text-muted mt-1 leading-relaxed">{d}</div>
           </button>
         ))}
       </div>
 
-      {/* スタット帯 */}
-      <div className="relative z-10 flex gap-7 mt-9 font-tech">
-        <HomeStat label="BEST KPS" value={bestKps ? bestKps.toFixed(1) : '—'} color="var(--primary)" />
-        <HomeStat label="総プレイ" value={String(scores.length)} color="var(--text)" />
-        <HomeStat label="最高スコア" value={bestScore ? String(bestScore) : '—'} color="var(--charge)" />
+      {/* 整える・振り返る（脇役） */}
+      <div className="relative z-10 flex flex-wrap justify-center gap-2 mt-3 w-full max-w-[680px]">
+        {subNav.map(({ k, Icon, onClick }) => (
+          <button key={k} type="button" onClick={onClick} className="ui-btn-secondary h-11 px-4 text-sm flex-1 min-w-[180px]">
+            <Icon className="w-4 h-4 text-muted" />{k}
+          </button>
+        ))}
       </div>
 
-      {authError && <p className="text-incoming text-sm mt-6 relative z-10">{authError}</p>}
+      {/* 自分の記録 */}
+      <div className="relative z-10 flex gap-10 mt-10">
+        <HomeStat label="最高KPS" value={bestKps ? bestKps.toFixed(1) : '—'} />
+        <HomeStat label="プレイ回数" value={String(scores.length)} />
+        <HomeStat label="最高スコア" value={bestScore ? String(bestScore) : '—'} />
+      </div>
+
+      {/* 未設定（firebaseReady=false）はカードに書いてあるので、ここでは本当の接続エラーだけ出す */}
+      {authError && firebaseReady && <p className="text-incoming text-sm mt-6 relative z-10">{authError}</p>}
       {showSettings && <PlayerSettings onClose={() => setShowSettings(false)} />}
       {showRecords && <RecordsBoard onClose={() => setShowRecords(false)} />}
       {showWords && (
@@ -154,10 +179,10 @@ export default function App() {
   );
 }
 
-const HomeStat = ({ label, value, color }: { label: string; value: string; color: string }) => (
-  <div className="text-center">
-    <div className="text-muted" style={{ fontSize: 12, letterSpacing: '0.16em' }}>{label}</div>
-    <div className="font-bold" style={{ fontSize: 20, color }}>{value}</div>
+const HomeStat = ({ label, value }: { label: string; value: string }) => (
+  <div className="text-center leading-none">
+    <div className="font-tech text-xs tracking-[0.16em] text-muted">{label}</div>
+    <div className="font-tech text-[26px] font-semibold tabular-nums text-text mt-1.5">{value}</div>
   </div>
 );
 
