@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, ArrowLeft,
+  Swords, Zap, Trophy, AlertTriangle, Sparkles, ArrowLeft,
   Volume2, VolumeX, Crown, Target, Settings, RotateCcw, Timer,
   ChevronDown, Gauge, Gift, Play, BookOpen, FolderOpen, SlidersHorizontal, HelpCircle, Check,
 } from 'lucide-react';
-import { Seg, Field, Panel, Kbd } from './ui';
+import { Seg, Field, Panel, Kbd, IconBtn } from './ui';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWordFrom, makeShortWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
 import { loadCustomWords, loadCustomGroups } from '../lib/customwords';
@@ -1526,7 +1526,14 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   };
 
   const renderCurrentWord = () => {
-    if (backlog.length === 0) return null;
+    // 打ち切って山が空の間は、枠だけ出して次のお題を待つ（中央がぽっかり空いて見えないように）。
+    if (backlog.length === 0) {
+      return gameState === 'playing' ? (
+        <div className="w-full h-full rounded-2xl flex items-center justify-center text-sm text-muted" style={{ border: '1px dashed var(--line)' }}>
+          次のお題を待っています…
+        </div>
+      ) : null;
+    }
     const word = backlog[0];
     const isOjama = word.type === 'ojama';
     const isTreasure = word.type === 'treasure';
@@ -1718,54 +1725,49 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         </div>
       )}
 
-      <header className="h-16 border-b border-white/10 flex items-center justify-between px-8 bg-neutral-900/50 backdrop-blur-sm z-10">
-        <div className="flex items-center gap-3">
-          <button onClick={onExit} className="text-gray-500 hover:text-gray-300">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <Swords className="text-cyan-400" />
-          <h1 className="text-xl font-bold tracking-widest text-gray-200">
-            TYPE ROYALE<span className="text-xs ml-2 text-gray-500">SOLO</span>
-          </h1>
+      <header
+        className="h-16 border-b flex items-center justify-between px-5 z-10"
+        style={{ borderColor: 'var(--line)', background: 'rgb(var(--n-950) / 0.55)', backdropFilter: 'blur(8px)' }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <IconBtn label="ホームへ戻る" onClick={onExit}><ArrowLeft className="w-5 h-5" /></IconBtn>
+          <Swords className="w-5 h-5 text-cyan-400 shrink-0" />
+          <h1 className="font-tech text-lg font-bold tracking-[0.16em] text-text whitespace-nowrap">TYPE ROYALE</h1>
+          <span className="font-tech text-xs font-semibold tracking-[0.2em] text-muted mt-0.5 whitespace-nowrap">
+            {soloMode === 'timeattack' ? 'TIME ATTACK' : 'BATTLE'}
+          </span>
         </div>
-        <div className="flex gap-6 md:gap-8">
-          <Hud label="総打鍵" value={keysTyped} className="text-cyan-300" />
-          <Hud label="KPS" value={calculateKPS()} />
-          {soloMode === 'timeattack' ? (
-            <Hud label="TIME" value={timeLeft} className={timeLeft <= 10 ? 'text-red-400' : 'text-cyan-300'} icon={<Timer className="w-4 h-4 text-cyan-300" />} />
-          ) : (
-            <>
-              <Hud label="K.O." value={playerKOs} icon={<Trophy className="w-4 h-4 text-yellow-500" />} />
-              <Hud label="BADGE" value={Math.min(playerKOs, 4)} icon={<Shield className="w-4 h-4 text-blue-400" />} />
-            </>
-          )}
-          {gameState === 'playing' && (
-            <button
-              onClick={() => setGameState('start')}
-              className="text-gray-500 hover:text-amber-300 self-center"
-              title="中断して最初から（スタート画面へ戻る）"
+        <div className="flex items-center gap-5">
+          <div className="flex items-center gap-6 pr-5 border-r" style={{ borderColor: 'var(--line)' }}>
+            <Hud label="KPS" value={calculateKPS().toFixed(1)} />
+            <Hud label="総打鍵" value={keysTyped} />
+            {soloMode === 'timeattack' ? (
+              <Hud label="残り" value={`${timeLeft}秒`} tone={timeLeft <= 10 ? 'text-incoming' : undefined} />
+            ) : (
+              <>
+                <Hud label="撃破" value={playerKOs} />
+                <Hud label="バッジ" value={Math.min(playerKOs, cfgBadgeCap)} />
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-1">
+            {gameState === 'playing' && (
+              <IconBtn label="中断してスタート画面へ" onClick={() => { clearCountdown(); setGameState('start'); }}>
+                <RotateCcw className="w-5 h-5" />
+              </IconBtn>
+            )}
+            <IconBtn
+              label={muted ? '効果音をオンにする' : '効果音をオフにする'}
+              onClick={() => {
+                const next = !muted;
+                setMuted(next);
+                setSfxEnabled(!next);
+              }}
             >
-              <RotateCcw className="w-5 h-5" />
-            </button>
-          )}
-          <button
-            onClick={() => {
-              const next = !muted;
-              setMuted(next);
-              setSfxEnabled(!next);
-            }}
-            className="text-gray-500 hover:text-gray-300 self-center"
-            title={muted ? '効果音オン' : '効果音オフ'}
-          >
-            {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-          </button>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="text-gray-500 hover:text-gray-300 self-center"
-            title="プレイヤー設定（キー設定）"
-          >
-            <Settings className="w-5 h-5" />
-          </button>
+              {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            </IconBtn>
+            <IconBtn label="プレイヤー設定（キー・テーマ）" onClick={() => setShowSettings(true)}><Settings className="w-5 h-5" /></IconBtn>
+          </div>
         </div>
       </header>
 
@@ -1808,7 +1810,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             </div>
           )}
           {isDanger && gameState === 'playing' && (
-            <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
+            <div className="absolute inset-0 rounded-2xl pointer-events-none animate-pulse z-0" style={{ boxShadow: 'inset 0 0 0 2px var(--incoming), inset 0 0 70px -10px rgb(255 77 94 / 0.35)' }} />
           )}
           {/* コンボ強度ビネット: 連鎖が伸びるほど内側発光が濃く・熱くなる（4連鎖以上で点灯） */}
           {gameState === 'playing' && combo >= 4 && (
@@ -1824,74 +1826,71 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
           <div className="flex-1 min-h-0 flex flex-col items-center pt-4 relative z-10">
             {gameState === 'playing' && soloMode !== 'timeattack' && (
-              <div className="absolute top-2 right-0 text-right">
-                <div className="text-xs text-gray-500">ALIVE</div>
-                <div className="font-mono text-2xl font-bold text-gray-300">
+              <div className="absolute top-2 right-0 text-right leading-none">
+                <div className="font-tech text-xs tracking-[0.16em] text-muted">生存</div>
+                <div className="font-tech text-[30px] font-semibold tabular-nums text-text mt-1">
                   {survivors}
-                  <span className="text-sm text-gray-600"> / {dummyCount + 1}</span>
+                  <span className="text-base text-muted"> / {dummyCount + 1}</span>
                 </div>
               </div>
             )}
 
-            {/* ログ（ALIVEの下・入力の右側の空白を使用）。上＝アイテム使用 / 下＝攻撃・撃破 */}
+            {/* ログ（生存数の下・お題の右側の空白を使用）。上＝アイテム使用 / 中＝攻撃・撃破 / 下＝自分のアイテム */}
             {gameState === 'playing' && soloMode !== 'timeattack' && (
-              <div className="absolute top-16 right-0 w-40 z-20 flex flex-col gap-2 pointer-events-none">
-                <div>
-                  <div className="text-xs font-bold text-yellow-300/80 mb-0.5 text-right">アイテム使用</div>
-                  <div className="flex flex-col gap-0.5 items-end">
-                    {toasts.filter((t) => t.kind === 'item').slice(-5).map((t) => (
-                      <div key={t.id} className="max-w-full truncate px-2 py-0.5 rounded bg-yellow-600/80 text-black text-xs font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200">
-                        ✨ {t.text}
-                      </div>
-                    ))}
+              <div className="absolute top-20 right-0 w-44 z-20 flex flex-col gap-3 pointer-events-none">
+                {([
+                  ['アイテム', toasts.filter((t) => t.kind === 'item').slice(-4).map((t) => ({ id: t.id, text: t.text, color: 'var(--charge)', icon: <Sparkles className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--charge)' }} /> }))],
+                  ['攻撃・撃破', toasts.filter((t) => t.kind === 'ko' || t.kind === 'in').slice(-5).map((t) => ({
+                    id: t.id, text: t.text,
+                    color: t.kind === 'ko' ? 'rgb(var(--ac-400))' : 'var(--incoming)',
+                    icon: t.kind === 'ko'
+                      ? <Swords className="w-3.5 h-3.5 shrink-0 text-cyan-300" />
+                      : <AlertTriangle className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--incoming)' }} />,
+                  }))],
+                ] as const).map(([title, rows]) => rows.length > 0 && (
+                  <div key={title}>
+                    <div className="text-xs text-muted mb-1 text-right">{title}</div>
+                    <div className="flex flex-col gap-1 items-end">
+                      {rows.map((r) => (
+                        <div key={r.id} className="max-w-full flex items-center gap-1.5 pl-2.5 pr-2 py-1 rounded-md text-xs font-medium text-text animate-in fade-in slide-in-from-right-2 duration-200"
+                          style={{ background: 'rgb(var(--n-900) / 0.92)', boxShadow: `inset 2px 0 0 ${r.color}` }}>
+                          {r.icon}<span className="truncate">{r.text}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-orange-300/80 mb-0.5 text-right">攻撃・撃破</div>
-                  <div className="flex flex-col gap-0.5 items-end">
-                    {toasts.filter((t) => t.kind === 'ko' || t.kind === 'in').slice(-6).map((t) => (
-                      <div key={t.id} className={`max-w-full truncate px-2 py-0.5 rounded text-xs font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200 ${
-                        t.kind === 'ko' ? 'bg-orange-600/85 text-white' : 'bg-red-950/85 text-red-200 border border-red-500/40'
-                      }`}>
-                        {t.kind === 'ko' ? '🏆 ' : '⚠ '}{t.text}
-                      </div>
-                    ))}
+                ))}
+                {selfLog.length > 0 && (
+                  <div>
+                    <div className="text-xs text-muted mb-1 text-right">自分のアイテム</div>
+                    <div className="flex flex-col gap-1 items-end">
+                      {selfLog.slice(-4).map((l) => (
+                        <div key={l.id} className="max-w-full px-2.5 py-1.5 rounded-md text-xs text-text animate-in fade-in slide-in-from-right-2 duration-200"
+                          style={{ background: 'rgb(var(--n-900) / 0.92)', boxShadow: 'inset 2px 0 0 rgb(var(--ac-400))' }}>
+                          <div className="flex items-center gap-1.5 font-semibold"><span className="leading-none">{ITEM_META[l.item].icon}</span>{ITEM_META[l.item].name}</div>
+                          <div className="text-muted leading-snug mt-0.5">{ITEM_META[l.item].desc}</div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-cyan-300/80 mb-0.5 text-right">自分のアイテム</div>
-                  <div className="flex flex-col gap-0.5 items-end">
-                    {selfLog.slice(-5).map((l) => (
-                      <div key={l.id} className="max-w-full px-2 py-0.5 rounded bg-cyan-900/85 text-cyan-100 text-xs font-bold shadow border border-cyan-500/40 animate-in fade-in slide-in-from-right-2 duration-200">
-                        <div className="flex items-center gap-1">{ITEM_META[l.item].icon} {ITEM_META[l.item].name}</div>
-                        <div className="text-xs font-normal text-cyan-200/80 leading-tight">{ITEM_META[l.item].desc}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                )}
               </div>
             )}
 
-            {/* ターゲットモード切替（[Tab]でも切替） */}
+            {/* 狙いの切替（キーでも切替） */}
             {gameState === 'playing' && soloMode !== 'timeattack' && (
-              <div className="absolute top-1 left-0 flex flex-col items-start gap-1">
-                <div className="flex items-center gap-1 text-xs text-gray-500"><Target className="w-3 h-3" /> 狙い [{keyLabel(keyCfg.target)}]</div>
-                <div className="flex gap-1">
+              <div className="absolute top-1 left-0 flex flex-col items-start gap-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-muted"><Target className="w-3.5 h-3.5" /> 狙い <Kbd>{keyLabel(keyCfg.target)}</Kbd></div>
+                <div className="ui-seg ui-seg-sm" role="radiogroup" aria-label="狙う相手">
                   {TARGET_MODES.map((t) => (
-                    <button
-                      key={t.mode}
-                      onClick={() => setTargetMode(t.mode)}
-                      className={`px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
-                        targetMode === t.mode ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
-                      }`}
-                    >
+                    <button key={t.mode} type="button" role="radio" aria-checked={targetMode === t.mode} data-on={targetMode === t.mode}
+                      onClick={() => setTargetMode(t.mode)} className="ui-seg-btn">
                       {t.label}
                     </button>
                   ))}
                 </div>
               </div>
             )}
-
 
             <div className="shrink-0 mb-3 text-center h-16 flex items-end justify-center">
               {combo > 2 && (
@@ -1916,29 +1915,28 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
             {/* タイムアタック: 残り時間（大）＋連打メーター。予告お題の上に配置。 */}
             {gameState === 'playing' && soloMode === 'timeattack' && (
-              <div className="shrink-0 w-full max-w-lg mb-3 flex items-center gap-4">
-                <div className="shrink-0 flex items-baseline gap-1">
-                  <span className="text-sm text-gray-400">残り</span>
-                  <span className={`font-mono font-black leading-none ${timeLeft <= 10 ? 'text-red-400 animate-pulse' : 'text-cyan-300'} text-5xl drop-shadow-[0_0_12px_rgb(var(--ac-400)/0.5)]`}>{timeLeft}</span>
-                  <span className="text-lg text-gray-500">秒</span>
+              <div className="shrink-0 w-full max-w-lg mb-4 flex items-center gap-5">
+                <div className="shrink-0 flex items-baseline gap-1.5">
+                  <span className="text-sm text-muted">残り</span>
+                  <span className={`font-tech font-bold tabular-nums leading-none text-5xl ${timeLeft <= 10 ? 'text-incoming animate-pulse' : 'text-text'}`}>{timeLeft}</span>
+                  <span className="text-base text-muted">秒</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 text-xs text-amber-300 font-bold mb-0.5">
-                    連打メーター
-                    {timeBonusFlash > nowTick && <span className="text-amber-300 animate-bounce">+{timeBonusAmt}秒！</span>}
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="text-muted">連打メーター（ノーミスで時間がのびる）</span>
+                    {timeBonusFlash > nowTick && <span className="font-tech font-bold text-cyan-300 animate-bounce">+{timeBonusAmt}秒</span>}
                   </div>
                   {/* バー本体（ノーミス打鍵で伸びる）＋区切り線 */}
-                  <div className="relative h-4 w-full rounded bg-neutral-800 border border-white/10 overflow-hidden">
-                    <div className="h-full rounded bg-gradient-to-r from-cyan-500 via-emerald-400 to-amber-400 transition-[width] duration-100" style={{ width: `${Math.round(timeGauge * 100)}%` }} />
+                  <div className="relative h-2.5 w-full rounded-full overflow-hidden" style={{ background: 'rgb(var(--n-50) / 0.06)' }}>
+                    <div className="h-full rounded-full transition-[width] duration-100" style={{ width: `${Math.round(timeGauge * 100)}%`, background: 'rgb(var(--ac-400))' }} />
                     {TA_MILESTONES.slice(0, -1).map((m) => (
-                      <div key={m.at} className="absolute top-0 bottom-0 w-px bg-neutral-900/70" style={{ left: `${(m.at / TA_STREAK_MAX) * 100}%` }} />
+                      <div key={m.at} className="absolute top-0 bottom-0 w-[2px]" style={{ left: `${(m.at / TA_STREAK_MAX) * 100}%`, background: 'var(--bg)' }} />
                     ))}
                   </div>
-                  {/* 区切りごとの追加秒ラベル（画像の 1秒追加/1秒追加/2秒追加/3秒追加） */}
-                  <div className="relative h-3.5">
+                  <div className="relative h-4 mt-1">
                     {TA_MILESTONES.map((m) => (
-                      <span key={m.at} className="absolute text-xs font-bold text-red-400 whitespace-nowrap" style={{ left: `${(m.at / TA_STREAK_MAX) * 100}%`, transform: 'translateX(-90%)' }}>
-                        {m.sec}秒追加↑
+                      <span key={m.at} className="absolute font-tech text-xs text-muted whitespace-nowrap tabular-nums" style={{ left: `${(m.at / TA_STREAK_MAX) * 100}%`, transform: 'translateX(-100%)' }}>
+                        +{m.sec}秒
                       </span>
                     ))}
                   </div>
@@ -1954,17 +1952,17 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 .map((word) => (
                   <div
                     key={word.id}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-bold opacity-80 flex justify-between items-center ${
-                      word.type === 'ojama'
-                        ? 'bg-red-950/50 text-red-300 border border-red-900/50'
-                        : word.type === 'treasure'
-                          ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50'
-                          : 'bg-blue-950/40 text-blue-200 border border-blue-900/50'
-                    }`}
+                    className="px-4 py-1.5 rounded-lg text-sm font-semibold flex justify-between items-center text-text"
+                    style={{
+                      background: 'rgb(var(--n-900) / 0.7)',
+                      border: '1px solid var(--line)',
+                      boxShadow: `inset 3px 0 0 ${word.type === 'ojama' ? 'var(--incoming)' : word.type === 'treasure' ? 'var(--charge)' : 'var(--backload)'}`,
+                      opacity: 0.85,
+                    }}
                   >
                     <span>{word.display}</span>
-                    {word.type === 'ojama' && <AlertTriangle className="w-4 h-4" />}
-                    {word.type === 'treasure' && <Sparkles className="w-4 h-4" />}
+                    {word.type === 'ojama' && <AlertTriangle className="w-4 h-4" style={{ color: 'var(--incoming)' }} />}
+                    {word.type === 'treasure' && <Sparkles className="w-4 h-4" style={{ color: 'var(--charge)' }} />}
                   </div>
                 ))}
             </div>
@@ -1975,7 +1973,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <div className="shrink-0 w-full max-w-lg relative">
               {gameState === 'playing' && soloMode !== 'timeattack' && (
                 <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 w-12 flex flex-col items-center gap-1 pointer-events-none">
-                  <div className={`text-sm font-bold text-incoming mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
+                  <div className={`flex items-center gap-1 font-tech text-sm font-bold text-incoming mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 && <><AlertTriangle className="w-4 h-4" />{totalIncoming}</>}</div>
                   <div className="w-6 flex flex-col-reverse gap-[3px]">
                     {Array.from({ length: Math.min(maxBacklog, 12) }).map((_, i) => {
                       const filled = i < Math.min(totalIncoming, 12);
@@ -1992,7 +1990,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                       );
                     })}
                   </div>
-                  <div className="text-xs text-muted text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
+                  <div className="text-xs text-muted text-center leading-tight mt-1">着弾<br />予告</div>
                 </div>
               )}
 
@@ -2020,31 +2018,32 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                         <button
                           key={c.key}
                           onClick={() => (direct ? fireSlot(c.key) : setSelectedSlot(c.key))}
-                          className={`min-w-[5.5rem] rounded-lg border px-2 py-1 flex flex-col items-center transition-colors ${
-                            sel ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_8px_rgb(var(--ac-400)/0.4)]' : 'border-white/10 bg-neutral-900/80'
-                          }`}
+                          className="min-w-[6.5rem] rounded-xl border px-3 py-1.5 flex flex-col items-center gap-0.5 transition-colors"
+                          style={{
+                            borderColor: sel ? 'rgb(var(--ac-400) / 0.7)' : 'var(--line)',
+                            background: sel ? 'rgb(var(--ac-400) / 0.1)' : 'rgb(var(--n-900) / 0.7)',
+                          }}
                         >
-                          <span className={`text-xs font-bold ${c.color}`}>
+                          <span className="text-xs font-semibold text-muted flex items-center gap-1">
                             {c.label}
-                            {direct && <span className="ml-1 text-gray-400 font-mono">[{keyLabel(keyCfg.slots[c.key])}]</span>}
+                            {direct && <Kbd>{keyLabel(keyCfg.slots[c.key])}</Kbd>}
                           </span>
                           {item ? (
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-1.5">
                               <ItemIcon type={item} />
-                              <span className="text-xs font-bold text-yellow-200">{ITEM_META[item].name}</span>
+                              <span className="text-sm font-semibold text-text">{ITEM_META[item].name}</span>
                             </span>
                           ) : (
-                            <span className="text-xs text-gray-600">空き</span>
+                            <span className="text-sm text-muted opacity-60">空き</span>
                           )}
                         </button>
                       );
                     })}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-muted flex items-center gap-1.5 mt-0.5">
                     {keyCfg.inputMode === 'cycle' ? (
                       <>
-                        <span className="text-cyan-300 font-bold">[{keyLabel(keyCfg.cycle)}]</span> 切替 ／{' '}
-                        <span className="text-cyan-300 font-bold">[{keyLabel(keyCfg.fire)}]</span> 発動
+                        <Kbd>{keyLabel(keyCfg.cycle)}</Kbd> 切替 <span className="opacity-50">・</span> <Kbd>{keyLabel(keyCfg.fire)}</Kbd> 発動
                       </>
                     ) : (
                       <>各スロットのキーで即発動</>
@@ -2063,14 +2062,14 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   const remain = Math.max(0, e.until - nowTick);
                   const frac = Math.max(0, Math.min(1, remain / dur));
                   return (
-                    <div key={e.type} className="bg-neutral-900/90 border border-white/15 rounded-lg px-3 py-1 flex items-center gap-2">
-                      <span className="text-lg leading-none">{ITEM_EMOJI[e.type]}</span>
-                      <span className="text-xs font-bold text-gray-100 whitespace-nowrap w-20 shrink-0">{ITEM_META[e.type].name}</span>
-                      <div className="flex-1 h-2.5 rounded-full bg-neutral-700 overflow-hidden">
+                    <div key={e.type} className="rounded-lg px-3 py-1 flex items-center gap-2" style={{ background: 'rgb(var(--n-900) / 0.85)', border: '1px solid var(--line)' }}>
+                      <span className="text-base leading-none">{ITEM_EMOJI[e.type]}</span>
+                      <span className="text-xs font-semibold text-text whitespace-nowrap w-20 shrink-0">{ITEM_META[e.type].name}</span>
+                      <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgb(var(--n-50) / 0.08)' }}>
                         <div className={`h-full ${e.color} transition-[width] duration-150`} style={{ width: `${frac * 100}%` }} />
                       </div>
-                      <span className="text-xs font-mono font-black text-white tabular-nums w-10 text-right">
-                        {(remain / 1000).toFixed(1)}<span className="text-xs text-gray-400">s</span>
+                      <span className="font-tech text-xs font-semibold text-text tabular-nums w-10 text-right">
+                        {(remain / 1000).toFixed(1)}<span className="text-muted">秒</span>
                       </span>
                     </div>
                   );
@@ -2081,7 +2080,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             {/* 自分のバックログ（処理待ち）。満タンでトップアウト＝敗北。タイムアタックでは非表示。 */}
             {soloMode !== 'timeattack' && (
             <div className="w-full max-w-lg mt-4">
-              <div className="text-xs text-muted mb-0.5">自分のバックログ（満タンで脱落）</div>
+              <div className="flex justify-between text-xs text-muted mb-1.5">
+                <span>自分の山（満タンで脱落）</span>
+                <span className={`font-tech tabular-nums ${isDanger ? 'text-incoming font-semibold' : ''}`}>{backlog.length} / {maxBacklog}</span>
+              </div>
               <div className="flex gap-1">
                 {Array.from({ length: maxBacklog }).map((_, i) => {
                   const filled = i < backlog.length;
@@ -2089,11 +2091,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   return (
                     <div
                       key={i}
-                      className="h-2 flex-1 rounded-sm"
-                      style={{
-                        background: filled ? (danger ? 'var(--incoming)' : 'var(--backload)') : 'var(--surface2)',
-                        boxShadow: filled ? `0 0 6px ${danger ? 'var(--incoming)' : 'var(--backload)'}` : 'none',
-                      }}
+                      className="h-2.5 flex-1 rounded-[3px] transition-colors"
+                      style={{ background: filled ? (danger ? 'var(--incoming)' : 'var(--backload)') : 'rgb(var(--n-50) / 0.06)' }}
                     />
                   );
                 })}
@@ -2487,12 +2486,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   );
 }
 
-const Hud = ({ label, value, icon, className }: { label: string; value: number; icon?: React.ReactNode; className?: string }) => (
-  <div className="tr-tile px-3 py-1.5 flex flex-col items-center justify-center min-w-[60px]">
-    <span className="font-tech text-muted" style={{ fontSize: 8, letterSpacing: '0.12em' }}>{label}</span>
-    <span className={`font-tech text-lg font-bold leading-tight flex items-center gap-1 ${className ?? 'text-text'}`}>
-      {icon} {value}
-    </span>
+// ヘッダーの計器表示（箱なし・ラベル＋大きな数字）。
+const Hud = ({ label, value, tone }: { label: string; value: string | number; tone?: string }) => (
+  <div className="flex flex-col items-end leading-none min-w-[3.25rem]">
+    <span className="font-tech text-xs tracking-[0.16em] text-muted">{label}</span>
+    <span className={`font-tech text-[22px] font-semibold tabular-nums mt-1 ${tone ?? 'text-text'}`}>{value}</span>
   </div>
 );
 

@@ -289,6 +289,9 @@ body {
     outline: 2px solid rgb(var(--ac-300));
     outline-offset: 2px;
   }
+  /* 小さいセグメント（プレイ中の狙いの切替など） */
+  .ui-seg-sm { padding: 3px; gap: 2px; border-radius: 10px; }
+  .ui-seg-sm .ui-seg-btn { flex: none; padding: 4px 10px; font-size: 12px; border-radius: 7px; }
   /* スライダーのつまみ・溝をアクセント色に */
   .ui-range { accent-color: rgb(var(--ac-400)); }
 

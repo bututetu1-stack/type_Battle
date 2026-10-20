@@ -58,3 +58,16 @@ export function Panel({ title, icon, aside, children }: { title: string; icon?: 
 }
 
 export const Kbd = ({ children }: { children: ReactNode }) => <kbd className="ui-kbd">{children}</kbd>;
+
+// アイコンだけのボタン（読み上げ用の名前は必須）。
+export const IconBtn = ({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) => (
+  <button
+    type="button"
+    aria-label={label}
+    title={label}
+    onClick={onClick}
+    className="w-9 h-9 rounded-lg flex items-center justify-center text-muted hover:text-text hover:bg-neutral-800 transition-colors"
+  >
+    {children}
+  </button>
+);

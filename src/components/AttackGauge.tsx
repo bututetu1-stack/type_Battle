@@ -23,29 +23,23 @@ export default function AttackGauge({ progress, combo, pinch, badges = 0, thresh
 
   return (
     <div className="w-full max-w-lg">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-muted tracking-wide flex items-center gap-1">
-          <Swords className="w-3.5 h-3.5 text-charge" /> 攻撃チャージ
-          <span className="text-xs text-muted">（{threshold}{unit}ごとに発射）</span>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs text-muted flex items-center gap-1.5">
+          <Swords className="w-3.5 h-3.5 text-charge" /> 攻撃ゲージ（{threshold}{unit}ごとに発射）
         </span>
-        <span className={`text-sm font-black font-tech flex items-center gap-1 ${pinch ? 'text-incoming' : 'text-charge'}`}>
+        <span className={`font-tech text-sm font-bold tabular-nums flex items-center gap-1.5 ${pinch ? 'text-incoming' : 'text-charge'}`}>
           次の攻撃 +{amount}
-          {pinch && <span className="text-xs text-incoming">ピンチ×1.5</span>}
+          {pinch && <span className="text-xs font-semibold">ピンチ×1.5</span>}
         </span>
       </div>
-      <div className="flex gap-1.5">
+      <div className="flex gap-1">
         {Array.from({ length: segCount }).map((_, i) => {
           const on = i < segFilled;
-          const col = pinch ? 'var(--incoming)' : 'var(--charge)';
           return (
             <div
               key={i}
-              className="h-3.5 flex-1 rounded transition-colors"
-              style={{
-                background: on ? col : 'var(--surface2)',
-                border: on ? 'none' : '1px solid var(--line)',
-                boxShadow: on ? `0 0 8px ${col}` : 'none',
-              }}
+              className="h-2.5 flex-1 rounded-[3px] transition-colors"
+              style={{ background: on ? (pinch ? 'var(--incoming)' : 'var(--charge)') : 'rgb(var(--n-50) / 0.06)' }}
             />
           );
         })}
