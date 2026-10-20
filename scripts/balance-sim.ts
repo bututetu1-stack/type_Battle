@@ -7,7 +7,7 @@
 // 環境変数（例: GAMES=100 ONLY=normal npm run balancesim）:
 //   GAMES（1条件あたりの試合数、既定300）/ TARGET=finish（狙いを「とどめ」に。既定はランダム）/
 //   MISS（1打のミス率、既定0.05）/ OVERHEAD（お題を読む時間ms、既定300）/ ITEMS=0（アイテムなし）/
-//   KPS（例 "3,5"）/ ONLY（例 "normal"）/ PRESET（JSON でプリセットを上書き。調整用）
+//   GAUGE（何語で攻撃するか、既定5）/ KPS（例 "3,5"）/ ONLY（例 "normal"）/ PRESET（JSON でプリセットを上書き。調整用）
 // 実ゲームとの照合（2026-10-21）: ふつう・4.7KPS・ノーミス・アイテムなしで、旧CPUの実プレイが 55〜90秒で
 // 7〜10位、模擬が中央 77秒・9位。
 import { DIFFICULTY_PRESETS, DIFFICULTY_KEYS, accelFromSpeed, type DifficultyPreset } from '../src/lib/difficulty';
@@ -27,7 +27,7 @@ const SPREAD = process.env.SPREAD ? Number(process.env.SPREAD) : undefined; // C
 
 // SoloGame と同じ値
 const TELEGRAPH_DELAY = 2500;
-const ATTACK_GAUGE = 5;
+const ATTACK_GAUGE = Number(process.env.GAUGE ?? 5);
 const ATTACK_CAP = 5;
 const COMBO_STEP = 5;
 const BADGE_CAP = 4;

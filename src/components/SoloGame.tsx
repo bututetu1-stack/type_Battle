@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   Swords, Zap, Trophy, AlertTriangle, Sparkles, ArrowLeft,
   Volume2, VolumeX, Crown, Target, Settings, RotateCcw, Timer,
-  Gauge, Gift, Play, BookOpen, FolderOpen, SlidersHorizontal, HelpCircle, Check,
+  ChevronDown, Gauge, Gift, Play, BookOpen, FolderOpen, SlidersHorizontal, HelpCircle, Check,
 } from 'lucide-react';
 import { Seg, Field, Panel, Kbd, IconBtn, Hud, CfgSlider, CfgSection } from './ui';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
@@ -1443,6 +1443,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       timeup: { tag: 'TIME UP', title: `${cfgTaSeconds}秒タイムアタック終了`, color: 'rgb(var(--ac-300))', Icon: Timer },
     }[kind];
     const acc = accuracyOf(keysTyped, missCount);
+    // 生存者の半分より前に脱落したら「ひとつ易しい難易度」を勧める。
+    const outEarly = dummies.filter((d) => !d.isKO).length + 1 > (dummies.length + 1) / 2;
+    const easier = !outEarly ? null : activePreset === 'hard' ? 'normal' : activePreset === 'normal' ? 'easy' : null;
     const stats: [string, string | number][] = [
       ['KPS', calculateKPS().toFixed(1)],
       ['正確率', `${Math.round(acc * 100)}%`],
@@ -1491,6 +1494,13 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             <button type="button" onClick={() => setSettingsOpen(true)} className="ui-btn-secondary h-12 px-5 text-[15px]">
               <SlidersHorizontal className="w-4 h-4" /> 設定を変える
             </button>
+            {/* 早めに脱落したら、ひとつ易しい難易度を勧める（展示で初めて遊ぶ人向け）。
+                押すと難易度を下げて開始画面を開く（その場で始めず、選ばれたことが見えるように）。 */}
+            {kind === 'gameover' && easier && (
+              <button type="button" onClick={() => { applyDifficulty(DIFFICULTY_PRESETS[easier]); setSettingsOpen(true); }} className="ui-btn-secondary h-12 px-5 text-[15px]">
+                <ChevronDown className="w-4 h-4" /> 難易度を「{DIFFICULTY_PRESETS[easier].label}」に下げる
+              </button>
+            )}
             <span className="text-[13px] text-muted ml-1"><Kbd>Tab</Kbd> でも即リスタート</span>
           </div>
         </div>
@@ -2280,7 +2290,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                       </CfgSection>
 
                       <CfgSection title="お宝・アイテム" icon={<Gift className="w-4 h-4" />}>
-                        <Field label="アイテム" note={cfgItemsOn ? undefined : 'お宝もアイテムも出ません'}>
+                        <Field label="アイテム" note={cfgItemsOn ? undefined : 'お宝もアイテムも出ません。攻め手が減るので1段階むずかしくなります'}>
                           <Seg label="アイテム" value={cfgItemsOn} onChange={setCfgItemsOn}
                             options={[{ value: true, label: 'あり' }, { value: false, label: 'なし' }]} />
                         </Field>
