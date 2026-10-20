@@ -27,7 +27,9 @@ const NEUTRAL_TARGET = [250, 245, 229, 212, 163, 115, 82, 64, 38, 23, 10];
 const TAILWIND_NEUTRAL = ['#fafafa', '#f5f5f5', '#e5e5e5', '#d4d4d4', '#a3a3a3', '#737373', '#525252', '#404040', '#262626', '#171717', '#0a0a0a'];
 const hexRgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
 function neutralRamp(t: ColorTheme): string[] {
-  if (t.light) return TAILWIND_NEUTRAL.map(rgbTriplet);
+  // ライトテーマは明暗を反転する（950＝背景用が白寄り、50＝文字用が黒寄り）。
+  // 画面は「暗い中間色を背景・明るい中間色を文字」に使っているので、反転すれば明るい地でもそのまま読める。
+  if (t.light) return [...TAILWIND_NEUTRAL].reverse().map(rgbTriplet);
   // 背景の2番目の色に、アクセントの最も暗い色を少し混ぜた「色味つきの黒」を起点にする。
   const a = hexRgb(t.tokens.bg2);
   const b = hexRgb(PALETTES[t.accent][10]);
@@ -128,7 +130,9 @@ function applyTokens(t: ColorTheme): void {
   for (const [k, v] of Object.entries(t.tokens)) {
     body.style.setProperty(`--${k}`, v);
   }
-  PALETTES[t.accent].forEach((hex, i) => body.style.setProperty(`--ac-${ACCENT_SHADES[i]}`, rgbTriplet(hex)));
+  // アクセントもライトテーマでは明暗を反転する（文字用の 300 番が濃い色、塗り用の 400 番が 600 番相当になる）。
+  const palette = t.light ? [...PALETTES[t.accent]].reverse() : [...PALETTES[t.accent]];
+  palette.forEach((hex, i) => body.style.setProperty(`--ac-${ACCENT_SHADES[i]}`, rgbTriplet(hex)));
   neutralRamp(t).forEach((rgb, i) => body.style.setProperty(`--n-${ACCENT_SHADES[i]}`, rgb));
 }
 

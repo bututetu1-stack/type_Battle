@@ -1347,7 +1347,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               key={k}
               onClick={() => setResultTab(k)}
               className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
-                resultTab === k ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                resultTab === k ? 'bg-primary text-bg' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
               }`}
             >
               {lbl}
@@ -1667,7 +1667,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                           i < rdone
                             ? 'text-emerald-300'
                             : i === rdone
-                              ? 'text-white bg-cyan-500/40 rounded-sm'
+                              ? 'text-text bg-cyan-500/40 rounded-sm'
                               : 'text-gray-500'
                         }
                       >
@@ -1715,7 +1715,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                       key={t.mode}
                       onClick={() => setTargetMode(t.mode)}
                       className={`px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
-                        targetMode === t.mode ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                        targetMode === t.mode ? 'bg-primary text-bg' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
                       }`}
                     >
                       {t.label}

@@ -116,7 +116,7 @@ export default function ImageCropper({ src, onCancel, onConfirm, aspect, title =
               key={pr.label}
               onClick={() => changeAspect(pr.a)}
               className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors ${
-                near(asp, pr.a) ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
+                near(asp, pr.a) ? 'bg-primary text-bg' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
               }`}
             >
               {pr.label}
