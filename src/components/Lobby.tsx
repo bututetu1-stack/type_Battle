@@ -18,16 +18,17 @@ const inputStyle = { background: 'rgb(var(--n-950) / 0.6)', border: '1px solid v
 export default function Lobby({ uid, name, setName, onJoined, onBack }: LobbyProps) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState<'create' | 'join' | null>(null);
-  const [error, setError] = useState('');
+  // エラーは、どちらの操作で起きたかを覚えて、そのカードの下に出す。
+  const [error, setError] = useState<{ on: 'create' | 'join'; text: string } | null>(null);
 
   const handleCreate = async () => {
     setBusy('create');
-    setError('');
+    setError(null);
     try {
       const roomId = await createRoom(uid, name.trim() || 'Host');
       onJoined(roomId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '作成に失敗しました');
+      setError({ on: 'create', text: e instanceof Error ? e.message : '作成に失敗しました' });
       setBusy(null);
     }
   };
@@ -35,16 +36,16 @@ export default function Lobby({ uid, name, setName, onJoined, onBack }: LobbyPro
   const handleJoin = async () => {
     const roomId = code.trim().toUpperCase();
     if (roomId.length < 4) {
-      setError('4文字のルームコードを入力してください');
+      setError({ on: 'join', text: '4文字のルームコードを入力してください' });
       return;
     }
     setBusy('join');
-    setError('');
+    setError(null);
     try {
       await joinRoom(roomId, uid, name.trim() || 'Player');
       onJoined(roomId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : '参加に失敗しました');
+      setError({ on: 'join', text: e instanceof Error ? e.message : '参加に失敗しました' });
       setBusy(null);
     }
   };
@@ -102,6 +103,8 @@ export default function Lobby({ uid, name, setName, onJoined, onBack }: LobbyPro
                 {busy === 'create' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
                 ルームを作成
               </button>
+              {/* エラーの行は両方のカードで同じ高さを確保し、ボタンの高さがずれないようにする */}
+              <p role="alert" className="text-sm text-incoming -mt-3 min-h-5">{error?.on === 'create' ? error.text : ''}</p>
             </section>
 
             {/* コードで参加 */}
@@ -131,10 +134,9 @@ export default function Lobby({ uid, name, setName, onJoined, onBack }: LobbyPro
                   参加
                 </button>
               </form>
+              <p role="alert" className="text-sm text-incoming -mt-3 min-h-5">{error?.on === 'join' ? error.text : ''}</p>
             </section>
           </div>
-
-          {error && <p role="alert" className="text-sm text-incoming -mt-2">{error}</p>}
         </div>
       </main>
     </div>
