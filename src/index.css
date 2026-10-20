@@ -236,6 +236,10 @@ body {
     border-color: rgb(var(--ac-300));
   }
   .ui-chip[data-off='true'] { color: rgb(var(--n-500)); text-decoration: line-through; }
+  /* 見せるだけ（オンラインでホスト以外）: 選択中はそのまま、他は押せない見た目に */
+  .ui-seg-btn:disabled, .ui-chip:disabled { cursor: default; }
+  .ui-seg-btn:disabled:not([data-on='true']):hover { color: rgb(var(--n-400)); background: transparent; }
+  .ui-chip:disabled:not([data-on='true']):hover { color: rgb(var(--n-300)); border-color: var(--line); }
   /* キーの表示 */
   .ui-kbd {
     display: inline-flex;

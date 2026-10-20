@@ -38,6 +38,10 @@ node scripts/screenshots.mjs [出力先] [テーマ] [幅x高さ]  # 自動プ�
   ローマ字表・判定・ルビなど軽い部分は `romaji.ts`（`words.ts` からも再公開）。
   確認: `npm run build` で `dist/index.html` の modulepreload に `vendor-firebase` や `words` が出ないこと。
   本物の値は GitHub Secrets にある。ローカルは `.env.example` を写してダミー値でもよい。
+- **オンラインを手元で試す時は `.env.online.local` に設定を書き、`npm run dev -- --mode online` で起動する。**
+  `.env.local` に書くとソロの確認（タイムアタック）でも本物のオンラインランキングに記録が送られてしまう。
+  Web 用の設定値は公開中のビルド（gh-pages の JS）にも入っている公開値。
+  2人で試すには別のブラウザ（または別プロファイル／シークレット）でもう1人入る。
 - `tsconfig` は `noUnusedLocals` / `noUnusedParameters` が有効。使わなくなった import は消す。
 - 型チェックが不自然に通る／落ちる時は `tsconfig*.tsbuildinfo`（増分キャッシュ、git 管理外）を消す。
 - `vite.config.js` は `vite.config.ts` のコンパイル結果（git 管理外）。編集するのは `.ts`。
@@ -73,7 +77,8 @@ node scripts/screenshots.mjs [出力先] [テーマ] [幅x高さ]  # 自動プ�
   アクセントの塗りの上の文字は `text-white` ではなく `text-bg`（`var(--bg)`）を使う。
 - 書体は IBM Plex Sans JP（本文・和文。`palt` 有効）、Chakra Petch（見出し・数字 `font-tech`）、
   JetBrains Mono（ローマ字 `font-mono2`）を Google Fonts から読み込み。
-- 共通部品: `src/components/ui.tsx`（`Seg` セグメント / `Field` / `Panel` / `Kbd` キー表示 / `IconBtn`）と
+- 共通部品: `src/components/ui.tsx`（`Seg` セグメント / `Field` / `Panel` / `Kbd` キー表示 / `IconBtn` /
+  `Hud` ヘッダーの計器 / `CfgSlider` 設定スライダー / `CfgSection` 折りたたみ。`disabled` で見せるだけにもできる）と
   `src/index.css` の `ui-*` クラス（`ui-panel` `ui-seg` `ui-chip` `ui-kbd` `ui-btn-primary` `ui-btn-secondary`
   `ui-eyebrow`）。新しい画面はこれを使い、色付きの小ボタンや絵文字の見出しを増やさない。
 - 文字は最小 12px、本文 14px、見出し 15〜17px。意味の色（被弾=incoming / お宝=charge / 通常=backload）は

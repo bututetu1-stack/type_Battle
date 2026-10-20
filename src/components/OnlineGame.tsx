@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Swords, Zap, AlertTriangle, Crown, Shield, Sparkles,
+  Swords, Zap, AlertTriangle, Crown, Sparkles, Trophy, Loader2, Eye,
   Target, RotateCcw, LogOut, Volume2, VolumeX, Settings,
 } from 'lucide-react';
+import { Kbd, IconBtn, Hud } from './ui';
 import { mulberry32, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, setExtraWords, setExcludedThemes } from '../lib/words';
 import { loadBgImageMini } from '../lib/theme';
@@ -1326,88 +1327,124 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       return ra - rb;
     });
     const winner = ranked.find(isLive) || ranked[0];
-    const myRank = selfAlive ? 1 : rank;
+    const myIdx = ranked.findIndex((p) => p === players[uid]);
+    const myRank = myIdx >= 0 ? myIdx + 1 : selfAlive ? 1 : rank;
     // ボスモードの勝敗判定。
     const bossWon = bossMode && bossAlive; // ボス生存＝ボスの勝ち
-    const bossTitle = bossMode ? (bossWon ? 'BOSS WIN' : 'BOSS DEFEATED') : 'RESULT';
-    const bossLine = bossMode
-      ? bossWon
-        ? `👑 ボス ${bossPlayer?.name ?? ''} の勝利！ 挑戦者は全滅`
-        : `⚔ 討伐成功！ 挑戦者チームの勝利（ボス: ${bossPlayer?.name ?? ''}）`
-      : `勝者: ${winner?.name ?? '—'}`;
+    const iWon = bossMode ? (isBoss ? bossWon : !bossWon) : myRank === 1;
+    const meta = bossMode
+      ? {
+        tag: iWon ? 'VICTORY' : 'DEFEAT',
+        title: bossWon ? `ボス ${bossPlayer?.name ?? ''} の勝ち（挑戦者は全滅）` : `討伐成功！ 挑戦者チームの勝ち（ボス: ${bossPlayer?.name ?? ''}）`,
+        color: iWon ? 'var(--success)' : 'var(--incoming)',
+        Icon: Crown,
+      }
+      : iWon
+        ? { tag: 'VICTORY', title: `最後の1人まで勝ち残りました（${totalCount}人中）`, color: 'var(--success)', Icon: Crown }
+        : { tag: 'RESULT', title: `勝者は ${winner?.name ?? '—'}`, color: 'rgb(var(--ac-300))', Icon: Trophy };
+    // 総合スコア順位用の表示値（kps はフォールバックで kpm を使う）。
+    const kpsOf = (p: RoomPlayer) => p.kps ?? p.kpm ?? 0;
+    const list = resultTab === 'ko'
+      ? Object.values(players).slice().sort((a, b) => (b.badges || 0) - (a.badges || 0) || kpsOf(b) - kpsOf(a))
+      : resultTab === 'kpm'
+        ? Object.values(players).slice().sort((a, b) => kpsOf(b) - kpsOf(a) || (b.badges || 0) - (a.badges || 0))
+        : resultTab === 'score'
+          ? Object.values(players).slice().sort((a, b) => (b.score || 0) - (a.score || 0) || kpsOf(b) - kpsOf(a))
+          : ranked;
+    const me = players[uid];
+    const myScore = computeScore({ keys: keysTyped, miss: missCount, seconds: Math.max(0.1, ((endTimeRef.current || Date.now()) - startTimeRef.current) / 1000), maxCombo });
+    const stats: [string, string | number][] = [
+      ['総合スコア', myScore],
+      ['KPS', calculateKPS().toFixed(1)],
+      ['正確率', `${Math.round(accuracyOf(keysTyped, missCount) * 100)}%`],
+      ['総打鍵', keysTyped],
+      ['最大連鎖', maxCombo],
+      ['撃破', myBadges],
+    ];
     return (
-      <div className="min-h-screen bg-transparent text-white flex flex-col items-center justify-center p-6">
-        <Crown className={`w-16 h-16 mb-4 ${bossMode && !bossWon ? 'text-emerald-400' : 'text-yellow-400'}`} />
-        <h2 className="text-3xl font-black tracking-widest mb-1">{bossTitle}</h2>
-        <p className="text-yellow-300 mb-6 text-lg text-center">{bossLine}</p>
-        {/* 表示切替: 順位 / 総合スコア / KO数 / KPS ランキング */}
-        <div className="flex gap-1 mb-2">
-          {([['rank', '順位'], ['score', '総合スコア'], ['ko', 'KO数'], ['kpm', 'KPS']] as const).map(([k, lbl]) => (
-            <button
-              key={k}
-              onClick={() => setResultTab(k)}
-              className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
-                resultTab === k ? 'bg-primary text-bg' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
-              }`}
-            >
-              {lbl}
-            </button>
-          ))}
-        </div>
-        {(() => {
-          // 総合スコア順位用の表示値（kps はフォールバックで kpm を使う）。
-          const kpsOf = (p: RoomPlayer) => p.kps ?? p.kpm ?? 0;
-          const list = resultTab === 'ko'
-            ? Object.values(players).slice().sort((a, b) => (b.badges || 0) - (a.badges || 0) || kpsOf(b) - kpsOf(a))
-            : resultTab === 'kpm'
-              ? Object.values(players).slice().sort((a, b) => kpsOf(b) - kpsOf(a) || (b.badges || 0) - (a.badges || 0))
-              : resultTab === 'score'
-                ? Object.values(players).slice().sort((a, b) => (b.score || 0) - (a.score || 0) || kpsOf(b) - kpsOf(a))
-                : ranked;
-          return (
-            <div className="bg-neutral-900/70 rounded-xl border border-white/10 w-full max-w-md mb-6 divide-y divide-white/5">
-              {list.map((p, i) => (
-                <div key={p.name + i} className="flex items-center justify-between px-4 py-2">
-                  <span className="flex items-center gap-3">
-                    <span className="font-mono text-gray-500 w-6">#{i + 1}</span>
-                    <span className={i === 0 ? 'text-yellow-300 font-bold' : 'text-gray-300'}>{p.name}</span>
-                  </span>
-                  <span className="text-xs font-mono">
-                    {resultTab === 'ko' ? (
-                      <><span className="text-orange-300 font-bold">{p.badges} KO</span><span className="text-gray-600"> · {kpsOf(p)} KPS</span></>
-                    ) : resultTab === 'kpm' ? (
-                      <><span className="text-cyan-300 font-bold">{kpsOf(p)} KPS</span><span className="text-gray-600"> · {p.badges} KO</span></>
-                    ) : resultTab === 'score' ? (
-                      <><span className="text-amber-300 font-bold">{p.score ?? 0} 点</span><span className="text-gray-600"> · {p.keys ?? 0} 打 · {kpsOf(p)} KPS</span></>
-                    ) : (
-                      <span className="text-gray-500">{p.score ?? 0} 点 · {p.badges} KO</span>
-                    )}
-                  </span>
+      <div className="min-h-screen bg-transparent text-text flex flex-col">
+        <div className="h-[3px] shrink-0" style={{ background: meta.color, boxShadow: `0 0 18px ${meta.color}` }} />
+        <div className="w-full max-w-[1120px] mx-auto px-6 py-8 flex flex-col justify-center gap-5 flex-1">
+          <header className="flex items-end justify-between gap-6 flex-wrap">
+            <div>
+              <div className="flex items-center gap-2 font-tech text-sm font-semibold tracking-[0.24em]" style={{ color: meta.color }}>
+                <meta.Icon className="w-4 h-4" />{meta.tag}
+              </div>
+              <h2 className="text-[28px] leading-tight font-bold text-text mt-1.5 [text-wrap:balance]">{meta.title}</h2>
+            </div>
+            <div className="text-right leading-none">
+              <div className="text-xs text-muted tracking-wide">あなたの順位</div>
+              <div className="mt-1">
+                <span className="font-tech text-[56px] font-bold tabular-nums text-text">{myRank}</span>
+                <span className="text-lg font-bold text-text ml-1">位</span>
+                <span className="text-sm text-muted ml-2">/ {totalCount}人中</span>
+              </div>
+            </div>
+          </header>
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,320px)] items-start">
+            <section className="ui-panel p-5 min-w-0">
+              <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                <h3 className="text-[15px] font-bold text-text">ランキング</h3>
+                {/* 表示切替: 順位 / 総合スコア / 撃破 / KPS */}
+                <div className="ui-seg ui-seg-sm" role="radiogroup" aria-label="ランキングの並べ方">
+                  {([['rank', '順位'], ['score', '総合スコア'], ['ko', '撃破'], ['kpm', 'KPS']] as const).map(([k, lbl]) => (
+                    <button key={k} type="button" role="radio" aria-checked={resultTab === k} data-on={resultTab === k}
+                      onClick={() => setResultTab(k)} className="ui-seg-btn">
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <ol className="max-h-[50vh] overflow-y-auto">
+                {list.map((p, i) => {
+                  const mine = p === me;
+                  const main = resultTab === 'ko' ? `${p.badges ?? 0}` : resultTab === 'kpm' ? kpsOf(p).toFixed(1) : `${p.score ?? 0}`;
+                  const unit = resultTab === 'ko' ? '撃破' : resultTab === 'kpm' ? 'KPS' : '点';
+                  return (
+                    <li key={p.name + i} className="flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg border-t first:border-t-0"
+                      style={{ borderColor: 'var(--line)', background: mine ? 'rgb(var(--ac-400) / 0.1)' : undefined }}>
+                      <span className="font-tech text-sm tabular-nums text-muted w-7 shrink-0">#{i + 1}</span>
+                      {i === 0 && <Crown className="w-4 h-4 shrink-0" style={{ color: 'var(--charge)' }} />}
+                      <span className={`truncate text-[15px] ${mine ? 'font-bold text-text' : 'text-text'}`}>{p.name}</span>
+                      {mine && <span className="text-xs text-muted shrink-0">あなた</span>}
+                      <span className="ml-auto text-right shrink-0">
+                        <span className="font-tech text-lg font-semibold tabular-nums text-text">{main}</span>
+                        <span className="text-xs text-muted ml-1">{unit}</span>
+                        <span className="block text-xs text-muted tabular-nums">
+                          {resultTab === 'score' || resultTab === 'rank' ? `${p.keys ?? 0}打 · ${kpsOf(p).toFixed(1)} KPS · 撃破${p.badges ?? 0}` : `${p.score ?? 0}点`}
+                        </span>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+
+            <section className="ui-panel p-5 grid grid-cols-2 gap-x-6 gap-y-5">
+              {stats.map(([k, v]) => (
+                <div key={k}>
+                  <div className="text-xs text-muted tracking-wide">{k}</div>
+                  <div className="font-tech text-[28px] font-semibold tabular-nums text-text leading-tight mt-0.5">{v}</div>
                 </div>
               ))}
-            </div>
-          );
-        })()}
-        <p className="text-gray-400 mb-2 font-mono">
-          あなたの順位: {myRank} 位 / 総合スコア {computeScore({ keys: keysTyped, miss: missCount, seconds: Math.max(0.1, ((endTimeRef.current || Date.now()) - startTimeRef.current) / 1000), maxCombo })} 点
-        </p>
-        <p className="text-gray-500 mb-4 font-mono text-sm">
-          総打鍵 {keysTyped} · KPS {calculateKPS()} · 最高連鎖 {maxCombo} · ミス {missCount}
-        </p>
-        <div className="flex gap-3">
-          <button onClick={onExit} className="bg-neutral-800 hover:bg-neutral-700 rounded-lg px-5 py-2 font-bold flex items-center gap-2">
-            <LogOut className="w-4 h-4" /> ロビーに戻る
-          </button>
-          {isHost ? (
-            <button
-              onClick={() => resetRoom(roomId)}
-              className="bg-cyan-600 hover:bg-cyan-500 rounded-lg px-5 py-2 font-bold flex items-center gap-2"
-            >
-              <RotateCcw className="w-4 h-4" /> もう一度（部屋へ）
+            </section>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {isHost ? (
+              <button type="button" onClick={() => resetRoom(roomId)} className="ui-btn-primary h-12 px-7 text-base">
+                <RotateCcw className="w-4 h-4" /> もう一度（同じメンバーで）
+              </button>
+            ) : (
+              <div className="ui-panel h-12 px-5 flex items-center gap-2.5 text-sm text-muted">
+                <Loader2 className="w-4 h-4 animate-spin text-primary" /> ホストの再戦を待っています…
+              </div>
+            )}
+            <button type="button" onClick={onExit} className="ui-btn-secondary h-12 px-5 text-[15px]">
+              <LogOut className="w-4 h-4" /> ロビーに戻る
             </button>
-          ) : (
-            <div className="flex items-center text-sm text-gray-500 px-3">ホストの再戦を待っています…</div>
-          )}
+          </div>
         </div>
       </div>
     );
@@ -1534,48 +1571,51 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       )}
 
       {!started && (
-        <div className="fixed inset-0 bg-neutral-950/90 flex flex-col items-center justify-center z-50">
-          <p className="text-gray-400 mb-2 tracking-widest">GET READY</p>
-          <div className="text-8xl font-black text-cyan-400 animate-pulse">{countdown > 0 ? countdown : 'GO!'}</div>
+        <div className="fixed inset-0 flex flex-col items-center justify-center z-50" style={{ background: 'rgb(var(--n-950) / 0.92)', backdropFilter: 'blur(6px)' }} aria-live="assertive">
+          <p className="ui-eyebrow">GET READY</p>
+          <div
+            key={countdown}
+            className="tr-count font-tech font-bold leading-none mt-4"
+            style={{ fontSize: 'clamp(96px, 14vw, 180px)', color: countdown > 0 ? 'var(--text)' : 'var(--primary)', textShadow: '0 0 40px var(--glow)' }}
+          >
+            {countdown > 0 ? countdown : 'GO'}
+          </div>
+          <p className="text-sm text-muted mt-6">全員同時にスタートします</p>
         </div>
       )}
 
 
       {!selfAlive && status === 'playing' && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 bg-red-950/80 border border-red-500/40 rounded-lg px-6 py-2 text-center">
-          <div className="text-red-300 font-bold">TOP OUT — {rank} 位</div>
-          <div className="text-xs text-gray-400">観戦中… 盤面をクリックで観戦相手を切り替え</div>
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-40 rounded-xl px-6 py-2.5 text-center"
+          style={{ background: 'rgb(var(--n-950) / 0.92)', border: '1px solid var(--line)', boxShadow: 'inset 0 2px 0 var(--incoming)' }}>
+          <div className="font-tech font-bold tracking-[0.12em] text-incoming">TOP OUT — {rank} 位</div>
+          <div className="text-xs text-muted mt-0.5">観戦中。盤面をクリックすると観戦する相手を切り替えられます</div>
         </div>
       )}
 
-      <header className="h-16 border-b flex items-center justify-between px-8 z-10" style={{ borderColor: 'var(--line)', background: 'linear-gradient(180deg, var(--surface2), transparent)' }}>
-        <div className="flex items-center gap-3">
-          <Swords className="text-primary" />
-          <h1 className="font-tech text-xl font-bold tracking-[0.18em] text-text">
-            TYPE ROYALE<span className="text-xs ml-2 text-muted">ROOM {roomId}</span>
-          </h1>
+      <header
+        className="h-16 border-b flex items-center justify-between px-5 z-10"
+        style={{ borderColor: 'var(--line)', background: 'rgb(var(--n-950) / 0.55)', backdropFilter: 'blur(8px)' }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <Swords className="w-5 h-5 text-cyan-400 shrink-0" />
+          <h1 className="font-tech text-lg font-bold tracking-[0.16em] text-text whitespace-nowrap">TYPE ROYALE</h1>
+          <span className="font-tech text-xs font-semibold tracking-[0.2em] text-muted mt-0.5 whitespace-nowrap">
+            {bossMode ? 'BOSS' : 'ONLINE'} · ROOM {roomId}
+          </span>
         </div>
-        <div className="flex gap-2.5 items-center">
-          <div className="tr-tile px-3 py-1.5 flex flex-col items-center justify-center min-w-[60px]">
-            <span className="font-tech text-muted" style={{ fontSize: 8, letterSpacing: '0.12em' }}>総打鍵</span>
-            <span className="font-tech text-lg font-bold leading-tight text-primary">{keysTyped}</span>
+        <div className="flex items-center gap-5">
+          <div className="flex items-center gap-6 pr-5 border-r" style={{ borderColor: 'var(--line)' }}>
+            <Hud label="KPS" value={calculateKPS().toFixed(1)} />
+            <Hud label="総打鍵" value={keysTyped} />
+            <Hud label="バッジ" value={myBadges} />
           </div>
-          <div className="tr-tile px-3 py-1.5 flex flex-col items-center justify-center min-w-[60px]">
-            <span className="font-tech text-muted" style={{ fontSize: 8, letterSpacing: '0.12em' }}>KPS</span>
-            <span className="font-tech text-lg font-bold leading-tight text-text">{calculateKPS()}</span>
+          <div className="flex items-center gap-1">
+            <IconBtn label={muted ? '効果音をオンにする' : '効果音をオフにする'} onClick={toggleMute}>
+              {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            </IconBtn>
+            <IconBtn label="プレイヤー設定（キー・テーマ）" onClick={() => setShowSettings(true)}><Settings className="w-5 h-5" /></IconBtn>
           </div>
-          <div className="tr-tile px-3 py-1.5 flex flex-col items-center justify-center min-w-[60px]">
-            <span className="font-tech text-muted" style={{ fontSize: 8, letterSpacing: '0.12em' }}>BADGE</span>
-            <span className="font-tech text-lg font-bold leading-tight flex items-center gap-1 text-text">
-              <Shield className="w-4 h-4 text-backload" /> {myBadges}
-            </span>
-          </div>
-          <button onClick={toggleMute} className="text-gray-500 hover:text-gray-300" title={muted ? '効果音オン' : '効果音オフ'}>
-            {muted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-          </button>
-          <button onClick={() => setShowSettings(true)} className="text-gray-500 hover:text-gray-300" title="プレイヤー設定（キー設定）">
-            <Settings className="w-5 h-5" />
-          </button>
         </div>
       </header>
 
@@ -1593,7 +1633,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             >
               <MiniBoard
                 height={p.backlog}
-                max={bossMode && id === bossUid ? BOSS_MAX_BACKLOG : MAX_BACKLOG}
+                max={bossMode && id === bossUid ? BOSS_MAX_BACKLOG : playerHp}
                 isKO={!isLive(p)}
                 name={bossMode && id === bossUid ? `👑 ${p.name}` : p.name}
                 combo={p.combo}
@@ -1609,7 +1649,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
 
         <div ref={centerRef} className={`w-2/4 flex flex-col h-full min-h-0 relative ${dazzleUntil > nowTick ? 'dazzle-fx' : ''}`}>
           {isDanger && selfAlive && started && (
-            <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
+            <div className="absolute inset-0 rounded-2xl pointer-events-none animate-pulse z-0" style={{ boxShadow: 'inset 0 0 0 2px var(--incoming), inset 0 0 70px -10px rgb(255 77 94 / 0.35)' }} />
           )}
           {/* コンボ強度ビネット: 連鎖が伸びるほど内側発光が濃く・熱くなる（4連鎖以上で点灯） */}
           {selfAlive && started && combo >= 4 && (
@@ -1627,48 +1667,54 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           {!selfAlive && status === 'playing' && (() => {
             const wp = watchId ? players[watchId] : undefined;
             if (!wp) return (
-              <div className="absolute inset-0 z-30 flex items-center justify-center text-gray-500">観戦できるプレイヤーがいません</div>
+              <div className="absolute inset-0 z-30 flex items-center justify-center text-muted">観戦できるプレイヤーがいません</div>
             );
             const reading = wp.curReading ?? '';
             const idx = Math.min(wp.curIdx ?? 0, reading.length);
             const romaji = wp.curRomaji ?? '';
             const rdone = Math.min(wp.curRomajiDone ?? 0, romaji.length);
-            const wpMax = bossMode && watchId === bossUid ? BOSS_MAX_BACKLOG : (typeof hp === 'number' ? hp : MAX_BACKLOG);
+            const wpMax = bossMode && watchId === bossUid ? BOSS_MAX_BACKLOG : playerHp;
             return (
-              <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-neutral-950/95 rounded-2xl px-4">
-                <div className="text-sm font-bold text-cyan-300 flex items-center gap-2">👁 {wp.name} を観戦中</div>
+              <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 rounded-2xl px-4" style={{ background: 'rgb(var(--n-950))' }}>
+                <div className="text-sm font-semibold text-cyan-300 flex items-center gap-2"><Eye className="w-4 h-4" /> {wp.name} を観戦中</div>
                 {/* 残りバックログ（HP）バー */}
                 <div className="w-full max-w-xs">
-                  <div className="flex justify-between text-xs text-gray-500 mb-0.5">
-                    <span>残り {wp.backlog} / {wpMax}</span>
-                    <span>{wp.combo ?? 0} 連鎖 · {wp.kps ?? wp.kpm ?? 0} KPS</span>
+                  <div className="flex justify-between text-xs text-muted mb-1.5">
+                    <span className="font-tech tabular-nums">山 {wp.backlog} / {wpMax}</span>
+                    <span className="font-tech tabular-nums">{wp.combo ?? 0} 連鎖 · {wp.kps ?? wp.kpm ?? 0} KPS</span>
                   </div>
-                  <div className="w-full h-2.5 rounded-full bg-neutral-800 overflow-hidden border border-neutral-700">
+                  <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: 'rgb(var(--n-50) / 0.06)' }}>
                     <div
-                      className={`h-full transition-[width] duration-200 ${wp.backlog >= wpMax - 3 ? 'bg-red-500' : 'bg-cyan-500'}`}
-                      style={{ width: `${Math.min(100, (wp.backlog / wpMax) * 100)}%` }}
+                      className="h-full rounded-full transition-[width] duration-200"
+                      style={{ width: `${Math.min(100, (wp.backlog / wpMax) * 100)}%`, background: wp.backlog >= wpMax - 3 ? 'var(--incoming)' : 'var(--backload)' }}
                     />
                   </div>
                 </div>
-                {/* 現在のワードと入力進捗（自分の盤面と同じく、ローマ字でどこまで打ったか表示） */}
-                <div className="w-full max-w-lg bg-neutral-900/80 border border-cyan-500/30 rounded-xl px-6 py-8 text-center shadow-2xl">
-                  <div className="text-4xl font-black text-gray-100 mb-2 break-all">{wp.curDisplay || '—'}</div>
-                  <div className="text-base font-mono tracking-wide mb-3">
-                    <span className="text-gray-600">{reading.slice(0, idx)}</span>
+                {/* 現在のワードと入力進捗（自分の盤面と同じく、ローマ字でどこまで打ったか表示）。
+                    CPU は実際の単語を打たないので、入力の代わりに一言だけ出す。 */}
+                {wp.isCpu ? (
+                  <div className="tr-card w-full max-w-lg px-6 py-8 text-center text-sm text-muted">
+                    CPU は単語を表示せずに戦っています（山の高さと連鎖で様子が分かります）
+                  </div>
+                ) : (
+                <div className="tr-card w-full max-w-lg px-6 py-8 text-center">
+                  <div className="text-4xl font-bold text-text mb-2 break-all">{wp.curDisplay || '—'}</div>
+                  <div className="text-base font-mono2 tracking-wide mb-3">
+                    <span className="text-muted opacity-60">{reading.slice(0, idx)}</span>
                     <span className="text-cyan-200">{reading.slice(idx)}</span>
                   </div>
                   {/* ローマ字の入力進捗（打った部分=緑／次の文字=ハイライト／未入力=灰）。
                       文字の横位置がズレないよう、カーソルは幅を持たせず背景ハイライトで表す。 */}
-                  <div className="text-2xl font-mono tracking-wide break-all whitespace-pre-wrap">
+                  <div className="text-2xl font-mono2 tracking-wide break-all whitespace-pre-wrap">
                     {romaji.split('').map((ch, i) => (
                       <span
                         key={i}
                         className={
                           i < rdone
-                            ? 'text-emerald-300'
+                            ? 'text-text'
                             : i === rdone
                               ? 'text-text bg-cyan-500/40 rounded-sm'
-                              : 'text-gray-500'
+                              : 'text-muted'
                         }
                       >
                         {ch}
@@ -1676,7 +1722,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                     ))}
                   </div>
                 </div>
-                <div className="text-xs text-gray-600">他の盤面をクリックすると観戦相手を切り替えられます</div>
+                )}
+                <div className="text-xs text-muted">ほかの盤面をクリックすると観戦する相手を切り替えられます</div>
               </div>
             );
           })()}
@@ -1705,19 +1752,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               )
             )}
 
-            {/* ターゲットモード切替（[Tab]でも切替）。ボスモードの挑戦者は常にボスを狙うため非表示。 */}
+            {/* 狙いの切替（キーでも切替）。ボスモードの挑戦者は常にボスを狙うため非表示。 */}
             {!(bossMode && !isBoss) && (
-              <div className="absolute top-1 left-0 flex flex-col items-start gap-1">
-                <div className="flex items-center gap-1 text-xs text-gray-500"><Target className="w-3 h-3" /> 狙い [Tab]</div>
-                <div className="flex gap-1">
+              <div className="absolute top-1 left-0 flex flex-col items-start gap-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-muted"><Target className="w-3.5 h-3.5" /> 狙い <Kbd>{keyLabel(keyCfg.target)}</Kbd></div>
+                <div className="ui-seg ui-seg-sm" role="radiogroup" aria-label="狙う相手">
                   {TARGET_MODES.map((t) => (
-                    <button
-                      key={t.mode}
-                      onClick={() => setTargetMode(t.mode)}
-                      className={`px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
-                        targetMode === t.mode ? 'bg-primary text-bg' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
-                      }`}
-                    >
+                    <button key={t.mode} type="button" role="radio" aria-checked={targetMode === t.mode} data-on={targetMode === t.mode}
+                      onClick={() => setTargetMode(t.mode)} className="ui-seg-btn">
                       {t.label}
                     </button>
                   ))}
@@ -1725,50 +1767,53 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               </div>
             )}
 
-            {/* ALIVE 表示（ソロと配置を統一：右上） */}
-            <div className="absolute top-2 right-0 text-right">
-              <div className="text-xs text-gray-500">ALIVE</div>
-              <div className="font-mono text-2xl font-bold text-gray-300">
+            {/* 生存数（ソロと同じ：右上） */}
+            <div className="absolute top-2 right-0 text-right leading-none">
+              <div className="font-tech text-xs tracking-[0.16em] text-muted">生存</div>
+              <div className="font-tech text-[30px] font-semibold tabular-nums text-text mt-1">
                 {aliveCount}
-                <span className="text-sm text-gray-600"> / {totalCount}</span>
+                <span className="text-base text-muted"> / {totalCount}</span>
               </div>
             </div>
 
-            {/* ログ（ALIVEの下・入力の右側の空白を使用）。上＝アイテム使用 / 下＝攻撃・撃破 */}
-            <div className="absolute top-16 right-0 w-40 z-20 flex flex-col gap-2 pointer-events-none">
-              <div>
-                <div className="text-xs font-bold text-yellow-300/80 mb-0.5 text-right">アイテム使用</div>
-                <div className="flex flex-col gap-0.5 items-end">
-                  {toasts.filter((t) => t.kind === 'item').slice(-5).map((t) => (
-                    <div key={t.id} className="max-w-full truncate px-2 py-0.5 rounded bg-yellow-600/80 text-black text-xs font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200">
-                      ✨ {t.text}
-                    </div>
-                  ))}
+            {/* ログ（生存数の下・お題の右側の空白を使用）。上＝アイテム使用 / 中＝攻撃・撃破 / 下＝自分のアイテム */}
+            <div className="absolute top-20 right-0 w-44 z-20 flex flex-col gap-3 pointer-events-none">
+              {([
+                ['アイテム', toasts.filter((t) => t.kind === 'item').slice(-4).map((t) => ({ id: t.id, text: t.text, color: 'var(--charge)', icon: <Sparkles className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--charge)' }} /> }))],
+                ['攻撃・撃破', toasts.filter((t) => t.kind === 'ko' || t.kind === 'in').slice(-5).map((t) => ({
+                  id: t.id, text: t.text,
+                  color: t.kind === 'ko' ? 'rgb(var(--ac-400))' : 'var(--incoming)',
+                  icon: t.kind === 'ko'
+                    ? <Swords className="w-3.5 h-3.5 shrink-0 text-cyan-300" />
+                    : <AlertTriangle className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--incoming)' }} />,
+                }))],
+              ] as const).map(([title, rows]) => rows.length > 0 && (
+                <div key={title}>
+                  <div className="text-xs text-muted mb-1 text-right">{title}</div>
+                  <div className="flex flex-col gap-1 items-end">
+                    {rows.map((r) => (
+                      <div key={r.id} className="max-w-full flex items-center gap-1.5 pl-2.5 pr-2 py-1 rounded-md text-xs font-medium text-text animate-in fade-in slide-in-from-right-2 duration-200"
+                        style={{ background: 'rgb(var(--n-900) / 0.92)', boxShadow: `inset 2px 0 0 ${r.color}` }}>
+                        {r.icon}<span className="truncate">{r.text}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div className="text-xs font-bold text-orange-300/80 mb-0.5 text-right">攻撃・撃破</div>
-                <div className="flex flex-col gap-0.5 items-end">
-                  {toasts.filter((t) => t.kind === 'ko' || t.kind === 'in').slice(-6).map((t) => (
-                    <div key={t.id} className={`max-w-full truncate px-2 py-0.5 rounded text-xs font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200 ${
-                      t.kind === 'ko' ? 'bg-orange-600/85 text-white' : 'bg-red-950/85 text-red-200 border border-red-500/40'
-                    }`}>
-                      {t.kind === 'ko' ? '🏆 ' : '⚠ '}{t.text}
-                    </div>
-                  ))}
+              ))}
+              {selfLog.length > 0 && (
+                <div>
+                  <div className="text-xs text-muted mb-1 text-right">自分のアイテム</div>
+                  <div className="flex flex-col gap-1 items-end">
+                    {selfLog.slice(-4).map((l) => (
+                      <div key={l.id} className="max-w-full px-2.5 py-1.5 rounded-md text-xs text-text animate-in fade-in slide-in-from-right-2 duration-200"
+                        style={{ background: 'rgb(var(--n-900) / 0.92)', boxShadow: 'inset 2px 0 0 rgb(var(--ac-400))' }}>
+                        <div className="flex items-center gap-1.5 font-semibold"><span className="leading-none">{ITEM_EMOJI[l.item]}</span>{ITEM_META[l.item].name}</div>
+                        <div className="text-muted leading-snug mt-0.5">{ITEM_META[l.item].desc}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div className="text-xs font-bold text-cyan-300/80 mb-0.5 text-right">自分のアイテム</div>
-                <div className="flex flex-col gap-0.5 items-end">
-                  {selfLog.slice(-5).map((l) => (
-                    <div key={l.id} className="max-w-full px-2 py-0.5 rounded bg-cyan-900/85 text-cyan-100 text-xs font-bold shadow border border-cyan-500/40 animate-in fade-in slide-in-from-right-2 duration-200">
-                      <div className="flex items-center gap-1">{ITEM_EMOJI[l.item]} {ITEM_META[l.item].name}</div>
-                      <div className="text-xs font-normal text-cyan-200/80 leading-tight">{ITEM_META[l.item].desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              )}
             </div>
 
 
@@ -1799,17 +1844,17 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                 .map((w) => (
                   <div
                     key={w.id}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-bold opacity-80 flex justify-between items-center ${
-                      w.type === 'ojama'
-                        ? 'bg-red-950/50 text-red-300 border border-red-900/50'
-                        : w.type === 'treasure'
-                          ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-700/50'
-                          : 'bg-blue-950/40 text-blue-200 border border-blue-900/50'
-                    }`}
+                    className="px-4 py-1.5 rounded-lg text-sm font-semibold flex justify-between items-center text-text"
+                    style={{
+                      background: 'rgb(var(--n-900) / 0.7)',
+                      border: '1px solid var(--line)',
+                      boxShadow: `inset 3px 0 0 ${w.type === 'ojama' ? 'var(--incoming)' : w.type === 'treasure' ? 'var(--charge)' : 'var(--backload)'}`,
+                      opacity: 0.85,
+                    }}
                   >
                     <span>{w.display}</span>
-                    {w.type === 'ojama' && <AlertTriangle className="w-4 h-4" />}
-                    {w.type === 'treasure' && <Sparkles className="w-4 h-4" />}
+                    {w.type === 'ojama' && <AlertTriangle className="w-4 h-4" style={{ color: 'var(--incoming)' }} />}
+                    {w.type === 'treasure' && <Sparkles className="w-4 h-4" style={{ color: 'var(--charge)' }} />}
                   </div>
                 ))}
             </div>
@@ -1819,22 +1864,36 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             <div className="shrink-0 w-full max-w-lg relative">
               {started && (
                 <div className="absolute right-full top-1/2 -translate-y-1/2 mr-2 w-12 flex flex-col items-center gap-1 pointer-events-none">
-                  <div className={`text-sm font-bold text-red-400 mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 ? `⚠ ${totalIncoming}` : ''}</div>
+                  <div className={`flex items-center gap-1 font-tech text-sm font-bold text-incoming mb-0.5 h-5 ${totalIncoming > 0 ? 'animate-pulse' : ''}`}>{totalIncoming > 0 && <><AlertTriangle className="w-4 h-4" />{totalIncoming}</>}</div>
                   <div className="w-6 flex flex-col-reverse gap-[3px]">
                     {Array.from({ length: Math.min(selfMax, 12) }).map((_, i) => {
                       const filled = i < Math.min(totalIncoming, 12);
                       return (
-                        <div key={i} className={`w-full h-[13px] rounded ${filled ? 'bg-red-500 border border-red-300/50 shadow-[0_0_7px_rgba(239,68,68,0.65)]' : 'bg-neutral-800/50 border border-neutral-700/40'}`} />
+                        <div
+                          key={i}
+                          className="w-full h-[13px] rounded"
+                          style={{
+                            background: filled ? 'var(--incoming)' : 'var(--surface2)',
+                            border: filled ? '1px solid var(--incoming)' : '1px solid var(--line)',
+                            boxShadow: filled ? '0 0 7px var(--incoming)' : 'none',
+                          }}
+                        />
                       );
                     })}
                   </div>
-                  <div className="text-xs text-gray-400 text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
+                  <div className="text-xs text-muted text-center leading-tight mt-1">着弾<br />予告</div>
                 </div>
               )}
 
               {/* お題カードの固定高さスロット（中央寄せ）。お題の有無や行数が変わっても高さ一定。
                   overflow-hidden で、万一カードが伸びても隣（次のお題・アイテムスロット）に被らせない。 */}
               <div className="h-56 flex items-stretch justify-center overflow-hidden">
+                {/* 打ち切って山が空の間は、枠だけ出して次のお題を待つ（中央がぽっかり空いて見えないように） */}
+                {!word && started && selfAlive && (
+                  <div className="w-full h-full rounded-2xl flex items-center justify-center text-sm text-muted" style={{ border: '1px dashed var(--line)' }}>
+                    次のお題を待っています…
+                  </div>
+                )}
                 {word && (
                   <div
                     className="tr-card w-full h-full px-5 py-4 overflow-hidden flex flex-col justify-center"
@@ -1873,31 +1932,32 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                       <button
                         key={c.key}
                         onClick={() => (direct ? fireSlot(c.key) : setSelectedSlot(c.key))}
-                        className={`min-w-[5.5rem] rounded-lg border px-2 py-1 flex flex-col items-center transition-colors ${
-                          sel ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_8px_rgb(var(--ac-400)/0.4)]' : 'border-white/10 bg-neutral-900/80'
-                        }`}
+                        className="min-w-[6.5rem] rounded-xl border px-3 py-1.5 flex flex-col items-center gap-0.5 transition-colors"
+                        style={{
+                          borderColor: sel ? 'rgb(var(--ac-400) / 0.7)' : 'var(--line)',
+                          background: sel ? 'rgb(var(--ac-400) / 0.1)' : 'rgb(var(--n-900) / 0.7)',
+                        }}
                       >
-                        <span className={`text-xs font-bold ${c.color}`}>
+                        <span className="text-xs font-semibold text-muted flex items-center gap-1">
                           {c.label}
-                          {direct && <span className="ml-1 text-gray-400 font-mono">[{keyLabel(keyCfg.slots[c.key])}]</span>}
+                          {direct && <Kbd>{keyLabel(keyCfg.slots[c.key])}</Kbd>}
                         </span>
                         {item ? (
-                          <span className="flex items-center gap-1">
+                          <span className="flex items-center gap-1.5">
                             <ItemIcon type={item} />
-                            <span className="text-xs font-bold text-yellow-200">{ITEM_META[item].name}</span>
+                            <span className="text-sm font-semibold text-text">{ITEM_META[item].name}</span>
                           </span>
                         ) : (
-                          <span className="text-xs text-gray-600">空き</span>
+                          <span className="text-sm text-muted opacity-60">空き</span>
                         )}
                       </button>
                     );
                   })}
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-muted flex items-center gap-1.5 mt-0.5">
                   {keyCfg.inputMode === 'cycle' ? (
                     <>
-                      <span className="text-cyan-300 font-bold">[{keyLabel(keyCfg.cycle)}]</span> 切替 ／{' '}
-                      <span className="text-cyan-300 font-bold">[{keyLabel(keyCfg.fire)}]</span> 発動
+                      <Kbd>{keyLabel(keyCfg.cycle)}</Kbd> 切替 <span className="opacity-50">・</span> <Kbd>{keyLabel(keyCfg.fire)}</Kbd> 発動
                     </>
                   ) : (
                     <>各スロットのキーで即発動</>
@@ -1916,14 +1976,14 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   const remain = Math.max(0, e.until - nowTick);
                   const frac = Math.max(0, Math.min(1, remain / dur));
                   return (
-                    <div key={e.type} className="bg-neutral-900/90 border border-white/15 rounded-lg px-3 py-1 flex items-center gap-2">
-                      <span className="text-lg leading-none">{ITEM_EMOJI[e.type]}</span>
-                      <span className="text-xs font-bold text-gray-100 whitespace-nowrap w-20 shrink-0">{ITEM_META[e.type].name}</span>
-                      <div className="flex-1 h-2.5 rounded-full bg-neutral-700 overflow-hidden">
+                    <div key={e.type} className="rounded-lg px-3 py-1 flex items-center gap-2" style={{ background: 'rgb(var(--n-900) / 0.85)', border: '1px solid var(--line)' }}>
+                      <span className="text-base leading-none">{ITEM_EMOJI[e.type]}</span>
+                      <span className="text-xs font-semibold text-text whitespace-nowrap w-24 shrink-0 truncate">{ITEM_META[e.type].name}</span>
+                      <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'rgb(var(--n-50) / 0.08)' }}>
                         <div className={`h-full ${e.color} transition-[width] duration-150`} style={{ width: `${frac * 100}%` }} />
                       </div>
-                      <span className="text-xs font-mono font-black text-white tabular-nums w-10 text-right">
-                        {(remain / 1000).toFixed(1)}<span className="text-xs text-gray-400">s</span>
+                      <span className="font-tech text-xs font-semibold text-text tabular-nums w-10 text-right">
+                        {(remain / 1000).toFixed(1)}<span className="text-muted">秒</span>
                       </span>
                     </div>
                   );
@@ -1932,24 +1992,22 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             )}
 
             <div className="w-full max-w-lg mt-4">
-              <div className="text-xs text-gray-500 mb-0.5">
-                {isBoss ? 'あなたのHP（満タンで討伐される）' : '自分のバックログ（満タンで脱落）'}
+              <div className="flex justify-between text-xs text-muted mb-1.5">
+                <span>{isBoss ? 'あなたの山（満タンで討伐される）' : '自分の山（満タンで脱落）'}</span>
+                <span className={`font-tech tabular-nums ${isDanger ? 'text-incoming font-semibold' : ''}`}>{backlog.length} / {selfMax}</span>
               </div>
-              <div className="flex gap-0.5">
-                {Array.from({ length: selfMax }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-2 flex-1 rounded-sm ${
-                      i < backlog.length
-                        ? i >= selfMax - 3
-                          ? 'bg-red-500'
-                          : isBoss
-                            ? 'bg-amber-500'
-                            : 'bg-cyan-500'
-                        : 'bg-neutral-800'
-                    }`}
-                  />
-                ))}
+              <div className="flex gap-1">
+                {Array.from({ length: selfMax }).map((_, i) => {
+                  const filled = i < backlog.length;
+                  const danger = i >= selfMax - 3;
+                  return (
+                    <div
+                      key={i}
+                      className="h-2.5 flex-1 rounded-[3px] transition-colors"
+                      style={{ background: filled ? (danger ? 'var(--incoming)' : isBoss ? 'var(--charge)' : 'var(--backload)') : 'rgb(var(--n-50) / 0.06)' }}
+                    />
+                  );
+                })}
               </div>
             </div>
 
@@ -1970,7 +2028,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             >
               <MiniBoard
                 height={p.backlog}
-                max={bossMode && id === bossUid ? BOSS_MAX_BACKLOG : MAX_BACKLOG}
+                max={bossMode && id === bossUid ? BOSS_MAX_BACKLOG : playerHp}
                 isKO={!isLive(p)}
                 name={bossMode && id === bossUid ? `👑 ${p.name}` : p.name}
                 combo={p.combo}

@@ -177,9 +177,21 @@ export async function joinRoom(roomId: string, uid: string, name: string): Promi
 }
 
 // presence 設定: 切断時に connected=false / lastSeen を更新（onDisconnect）。
-export async function setupPresence(roomId: string, uid: string): Promise<void> {
-  const pRef = ref(getDb(), `rooms/${roomId}/players/${uid}`);
-  await onDisconnect(pRef).update({ connected: false, lastSeen: serverTimestamp() });
+// 接続が切れたらサーバー側で connected:false にし、つながり直したら connected:true に戻す。
+// （以前は戻す処理が無く、Wi-Fi が一瞬切れただけで以後ずっと「脱落」扱いになり、
+//   ホストの決着判定で試合が終わってしまうことがあった）
+// 戻り値は監視の解除。退室時に呼ぶ。
+export function setupPresence(roomId: string, uid: string): () => void {
+  const db = getDb();
+  const pRef = ref(db, `rooms/${roomId}/players/${uid}`);
+  return onValue(ref(db, '.info/connected'), (snap) => {
+    if (snap.val() !== true) return;
+    onDisconnect(pRef).update({ connected: false, lastSeen: serverTimestamp() })
+      // 退室済み（自分の項目が消えている）なら作り直さない（空の参加者が残らないように）
+      .then(() => get(pRef))
+      .then((s) => (s.exists() ? update(pRef, { connected: true }) : undefined))
+      .catch(() => {});
+  });
 }
 
 // ルーム全体（meta + players）を購読。

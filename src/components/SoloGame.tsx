@@ -5,7 +5,7 @@ import {
   Volume2, VolumeX, Crown, Target, Settings, RotateCcw, Timer,
   Gauge, Gift, Play, BookOpen, FolderOpen, SlidersHorizontal, HelpCircle, Check,
 } from 'lucide-react';
-import { Seg, Field, Panel, Kbd, IconBtn, CfgSlider, CfgSection } from './ui';
+import { Seg, Field, Panel, Kbd, IconBtn, Hud, CfgSlider, CfgSection } from './ui';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWordFrom, makeShortWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
 import { loadCustomWords, loadCustomGroups } from '../lib/customwords';
@@ -2449,12 +2449,4 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     </div>
   );
 }
-
-// ヘッダーの計器表示（箱なし・ラベル＋大きな数字）。
-const Hud = ({ label, value, tone }: { label: string; value: string | number; tone?: string }) => (
-  <div className="flex flex-col items-end leading-none min-w-[3.25rem]">
-    <span className="font-tech text-xs tracking-[0.16em] text-muted">{label}</span>
-    <span className={`font-tech text-[22px] font-semibold tabular-nums mt-1 ${tone ?? 'text-text'}`}>{value}</span>
-  </div>
-);
 

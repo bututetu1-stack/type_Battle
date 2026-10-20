@@ -3,15 +3,16 @@ import { ChevronDown } from 'lucide-react';
 
 // 選択式のボタン群（セグメント）。options の value を一つだけ選ぶ。
 export function Seg<T extends string | number | boolean>({
-  value, options, onChange, label,
+  value, options, onChange, label, disabled,
 }: {
   value: T | null; // null = どれにも当てはまらない（カスタム調整中など）
   options: { value: T; label: ReactNode }[];
   onChange: (v: T) => void;
   label: string; // 読み上げ用のグループ名
+  disabled?: boolean; // 見せるだけ（オンラインでホスト以外など）
 }) {
   return (
-    <div className="ui-seg" role="radiogroup" aria-label={label}>
+    <div className="ui-seg" role="radiogroup" aria-label={label} aria-disabled={disabled || undefined}>
       {options.map((o) => (
         <button
           key={String(o.value)}
@@ -19,6 +20,7 @@ export function Seg<T extends string | number | boolean>({
           role="radio"
           aria-checked={value === o.value}
           data-on={value === o.value}
+          disabled={disabled}
           onClick={() => onChange(o.value)}
           className="ui-seg-btn"
         >
@@ -59,6 +61,14 @@ export function Panel({ title, icon, aside, children }: { title: string; icon?: 
 }
 
 export const Kbd = ({ children }: { children: ReactNode }) => <kbd className="ui-kbd">{children}</kbd>;
+
+// ヘッダーの計器（小さな見出し＋大きな数字）。
+export const Hud = ({ label, value, tone }: { label: string; value: string | number; tone?: string }) => (
+  <div className="flex flex-col items-end leading-none min-w-[3.25rem]">
+    <span className="font-tech text-xs tracking-[0.16em] text-muted">{label}</span>
+    <span className={`font-tech text-[22px] font-semibold tabular-nums mt-1 ${tone ?? 'text-text'}`}>{value}</span>
+  </div>
+);
 
 // アイコンだけのボタン（読み上げ用の名前は必須）。
 export const IconBtn = ({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) => (
