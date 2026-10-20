@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Swords, LogIn, Plus, Loader2, ArrowLeft, Users } from 'lucide-react';
 import { createRoom, joinRoom } from '../lib/room';
+import { savePlayerName } from '../lib/scores';
 import { Field, IconBtn } from './ui';
 
 interface LobbyProps {
@@ -21,7 +22,11 @@ export default function Lobby({ uid, name, setName, onJoined, onBack }: LobbyPro
   // エラーは、どちらの操作で起きたかを覚えて、そのカードの下に出す。
   const [error, setError] = useState<{ on: 'create' | 'join'; text: string } | null>(null);
 
+  // 入れた名前はソロの記録の名前としても覚える（次回からどちらにも入っている）。
+  const rememberName = () => { if (name.trim()) savePlayerName(name); };
+
   const handleCreate = async () => {
+    rememberName();
     setBusy('create');
     setError(null);
     try {
@@ -39,6 +44,7 @@ export default function Lobby({ uid, name, setName, onJoined, onBack }: LobbyPro
       setError({ on: 'join', text: '4文字のルームコードを入力してください' });
       return;
     }
+    rememberName();
     setBusy('join');
     setError(null);
     try {

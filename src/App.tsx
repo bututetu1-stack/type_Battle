@@ -4,7 +4,7 @@ import { firebaseReady, OFFLINE_MESSAGE } from './lib/firebaseEnv';
 import PlayerSettings from './components/PlayerSettings';
 import { applyColorTheme, loadThemeId } from './lib/theme';
 import { loadCustomWords, saveCustomWords, loadCustomGroups, saveCustomGroups, type CustomWord } from './lib/customwords';
-import { loadScores } from './lib/scores';
+import { loadScores, loadPlayerName } from './lib/scores';
 
 // 初回表示を速くするため、重いものはホームを出した後で読み込む。
 //   単語辞書（words.ts 約270KB）… ソロ／オンラインの画面と一緒に
@@ -34,7 +34,8 @@ export default function App() {
   const [view, setView] = useState<View>('home');
   const [uid, setUid] = useState<string | null>(null);
   const [authError, setAuthError] = useState('');
-  const [name, setName] = useState('');
+  // オンラインの表示名。ソロの記録で使っている名前があれば最初から入れておく（既定の「プレイヤー」は入れない）。
+  const [name, setName] = useState(() => { const n = loadPlayerName(); return n === 'プレイヤー' ? '' : n; });
   const [roomId, setRoomId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showWords, setShowWords] = useState(false);
