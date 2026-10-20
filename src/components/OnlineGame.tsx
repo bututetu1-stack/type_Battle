@@ -1179,7 +1179,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       for (const id of cpuIds) {
         const s = cpuSimRef.current[id];
         if (!s || s.d.isKO) continue;
-        const step = stepCpu(s.d, 1000 / spawnMsNow, cpuMax, Math.random, attackOpts);
+        // 人は山が上限に達した時点で脱落するので、CPU も同じにする（stepCpu は「上限を超えたら」なので 1 小さく渡す）
+        const step = stepCpu(s.d, 1000 / spawnMsNow, cpuMax - 1, Math.random, attackOpts);
         s.d = step.next;
         for (const amt of step.attacks) {
           const targets = Object.entries(playersRef.current).filter(([tid, tp]) => tid !== id && isLive(tp));

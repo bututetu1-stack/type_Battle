@@ -6,7 +6,8 @@ import { resolve } from 'node:path';
 // 重いもの（単語辞書 words.ts・Firebase SDK・ゲーム画面）を「静的に」import すると、
 // ホームを出す前にそれらを全部読み込むことになり、表示が 0.5 秒ほど遅くなる（CLAUDE.md「ハマりどころ」）。
 const src = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
-const staticImports = (code: string) => [...code.matchAll(/^import\s[^;]*?from\s+'([^']+)'/gm)].map((m) => m[1]);
+// import … from と export … from（再公開）の両方。引用符は ' と " のどちらでも。
+const staticImports = (code: string) => [...code.matchAll(/^(?:import|export)\s[^;]*?from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]);
 
 const HEAVY = [/\/words$/, /\/firebase$/, /\/room$/, /\/leaderboard$/, /^firebase\//, /\/SoloGame$/, /\/OnlineGame$/, /\/OnlineRoom$/, /\/Lobby$/];
 

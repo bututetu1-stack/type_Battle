@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Swords, Copy, Check, LogOut, Play, Loader2, Crown, Users, Bot, Plus, X, BookOpen, BookPlus,
   SlidersHorizontal, Gift, Hand, Gauge,
@@ -85,11 +85,15 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
   const [cpuStr, setCpuStr] = useState(5); // 追加するCPUの強さ(0〜10)
   const [showWords, setShowWords] = useState(false); // 追加語句エディタの開閉
 
+  const stopPresenceRef = useRef<() => void>(() => {});
   useEffect(() => {
     const stopPresence = setupPresence(roomId, uid);
+    stopPresenceRef.current = stopPresence;
     const unsub = subscribeRoom(roomId, setSnap);
     return () => { unsub(); stopPresence(); };
   }, [roomId, uid]);
+  // 端末の追加語句（「持ち寄る」用）。部屋の更新のたびに読み直さないよう最初に1回だけ読む。
+  const [localWords] = useState(() => loadCustomWords());
 
   // 再戦などで待機状態に戻ったら「開始中」表示を解除する。
   // （これを怠ると一度開始したホストのボタンが回り続けて再開始できない＝ロード地獄）
@@ -100,6 +104,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
   const handleLeave = async () => {
     // ホストが抜けるときはCPUも片付けて、部屋が残らないようにする。
     if (snap?.meta?.hostUid === uid) await removeAllCpus(roomId).catch(() => {});
+    stopPresenceRef.current(); // 退室の途中で再接続しても、自分の項目を作り直さないように先に止める
     await leaveRoom(roomId, uid).catch(() => {});
     onLeave();
   };
@@ -201,7 +206,6 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
   const category = meta.category || 'all';
   const disabledItems = Array.isArray(meta.disabledItems) ? meta.disabledItems : [];
   const myWords = players[uid]?.words || [];
-  const localWords = loadCustomWords();
   const contributing = myWords.length > 0;
 
   const handleStart = async () => {

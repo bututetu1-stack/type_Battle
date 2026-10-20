@@ -184,14 +184,16 @@ export async function joinRoom(roomId: string, uid: string, name: string): Promi
 export function setupPresence(roomId: string, uid: string): () => void {
   const db = getDb();
   const pRef = ref(db, `rooms/${roomId}/players/${uid}`);
-  return onValue(ref(db, '.info/connected'), (snap) => {
-    if (snap.val() !== true) return;
+  let active = true; // 解除後（退室の途中）に再接続が来ても onDisconnect を登録し直さない
+  const unsub = onValue(ref(db, '.info/connected'), (snap) => {
+    if (!active || snap.val() !== true) return;
     onDisconnect(pRef).update({ connected: false, lastSeen: serverTimestamp() })
       // 退室済み（自分の項目が消えている）なら作り直さない（空の参加者が残らないように）
       .then(() => get(pRef))
-      .then((s) => (s.exists() ? update(pRef, { connected: true }) : undefined))
+      .then((s) => (active && s.exists() ? update(pRef, { connected: true }) : undefined))
       .catch(() => {});
   });
+  return () => { active = false; unsub(); };
 }
 
 // ルーム全体（meta + players）を購読。
