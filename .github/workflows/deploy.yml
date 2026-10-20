@@ -33,6 +33,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # 打鍵判定などのテストが落ちたら公開しない
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
         env:
