@@ -16,7 +16,7 @@ export default function ResultInsights({ kps, acc, score, prev, series, missKeys
   const r = rankOf(kps, acc);
   const totalMiss = Object.values(missKeys).reduce((a, b) => a + b, 0);
   return (
-    <div className="w-full max-w-xl grid gap-3 mb-5 text-left" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.35fr)' }}>
+    <div className="w-full grid gap-4 text-left" style={{ gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.35fr)' }}>
       {/* ランク（e-typing / 寿司打風の称号） */}
       <Panel>
         <div className="flex items-center gap-3">
@@ -68,9 +68,7 @@ export default function ResultInsights({ kps, acc, score, prev, series, missKeys
   );
 }
 
-const Panel = ({ children }: { children: React.ReactNode }) => (
-  <div className="rounded-xl p-3 h-full" style={{ background: 'rgba(0,0,0,.35)', border: '1px solid var(--line)' }}>{children}</div>
-);
+const Panel = ({ children }: { children: React.ReactNode }) => <div className="ui-panel p-4 h-full">{children}</div>;
 
 function BestDiff({ kps, score, prev }: Pick<Props, 'kps' | 'score' | 'prev'>) {
   if (!prev) return <div className="mt-2 text-xs text-muted">初めての記録です。次はこれを超えよう</div>;

@@ -1392,42 +1392,39 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   };
 
   const renderResultExtras = () => (
-    <div className="flex flex-col items-center gap-3 mb-6 w-full max-w-sm">
-      <div className="text-center">
-        <div className="font-tech text-charge" style={{ fontSize: 12, letterSpacing: '0.14em', opacity: 0.85 }}>総合スコア</div>
-        <div className="font-tech text-4xl font-black text-charge" style={{ textShadow: '0 0 12px var(--charge)' }}>{currentScore()}</div>
-      </div>
-      <div className="flex items-center justify-center gap-3 flex-wrap text-sm">
-        <span className="text-success font-bold">{hasSaved ? '記録を自動保存しました' : '記録を保存中…'}</span>
-        {savedRank != null && <span className="text-warning font-bold">🏅 端末内 {savedRank}位</span>}
-      </div>
-      {soloMode === 'timeattack' && (
-        <div className="flex items-center justify-center gap-2 flex-wrap text-xs">
-          {globalState === 'sending' && <span className="text-primary animate-pulse">🌐 オンライン登録中…</span>}
-          {globalState === 'done' && (
-            <span className="text-primary font-bold">🌐 オンライン{globalRank != null ? ` ${globalRank}位` : '登録済み'}（{cfgTaSeconds}秒）</span>
-          )}
-          {globalState === 'error' && <span className="text-incoming">🌐 オンライン登録失敗（記録画面から確認できます）</span>}
-        </div>
-      )}
-      <div className="flex items-center gap-2 w-full mt-1">
-        <span className="text-xs text-muted whitespace-nowrap">名前</span>
+    <div className="ui-panel px-5 py-4 flex flex-wrap items-center gap-x-6 gap-y-3">
+      <div className="flex items-center gap-2 w-full sm:w-auto sm:min-w-[240px] sm:max-w-xs flex-1">
+        <label htmlFor="result-name" className="text-sm text-muted whitespace-nowrap">名前</label>
         <input
+          id="result-name"
           value={playerName}
           onChange={(e) => handleRenameChange(e.target.value)}
           onBlur={handleRenameBlur}
           maxLength={16}
           placeholder="名前"
-          className="flex-1 rounded-lg px-3 py-2 text-sm text-text outline-none"
-          style={{ background: 'var(--bg2)', border: '1px solid var(--line)' }}
+          className="flex-1 min-w-0 w-full rounded-lg px-3 py-2 text-[15px] text-text outline-none focus:ring-2 focus:ring-cyan-400/60"
+          style={{ background: 'rgb(var(--n-950) / 0.6)', border: '1px solid var(--line)' }}
         />
-        <button
-          onClick={() => { setRecordsView(soloMode === 'timeattack' ? 'online' : 'local'); setShowRecords(true); }}
-          className="tr-btn-ghost text-primary px-3 py-2 text-sm whitespace-nowrap"
-        >
-          ランキング
-        </button>
       </div>
+      <div className="flex items-center gap-x-4 gap-y-1 flex-wrap text-sm">
+        <span className="flex items-center gap-1.5 text-text">
+          <Check className="w-4 h-4 text-success" />{hasSaved ? '記録を保存しました' : '記録を保存中…'}
+        </span>
+        {savedRank != null && <span className="text-text">この端末で <b className="font-tech tabular-nums">{savedRank}</b> 位</span>}
+        {soloMode === 'timeattack' && globalState === 'sending' && <span className="text-muted animate-pulse">オンラインに登録中…</span>}
+        {soloMode === 'timeattack' && globalState === 'done' && (
+          <span className="text-text">オンライン{globalRank != null ? <> <b className="font-tech tabular-nums">{globalRank}</b> 位</> : '登録済み'}（{cfgTaSeconds}秒）</span>
+        )}
+        {soloMode === 'timeattack' && globalState === 'error' && <span className="text-muted">オンライン登録はできませんでした</span>}
+        <span className="text-xs text-muted font-mono2" title="同じ出題の並びを再現する番号">SEED {seed}</span>
+      </div>
+      <button
+        type="button"
+        onClick={() => { setRecordsView(soloMode === 'timeattack' ? 'online' : 'local'); setShowRecords(true); }}
+        className="ui-btn-secondary h-10 px-4 text-sm ml-auto"
+      >
+        <Trophy className="w-4 h-4" /> ランキング
+      </button>
     </div>
   );
 
@@ -1442,29 +1439,87 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     const mmss = `${Math.floor(survivedSec / 60)}:${String(survivedSec % 60).padStart(2, '0')}`;
     const progressPct = totalPlayers > 1 ? Math.round(((totalPlayers - myRank) / (totalPlayers - 1)) * 100) : 100;
     return (
-      <div className="w-full max-w-sm mb-6 flex flex-col items-center gap-2">
-        <div className="text-center leading-none">
-          <span className="font-tech text-6xl font-black text-charge" style={{ textShadow: '0 0 12px var(--charge)' }}>{myRank}</span>
-          <span className="text-2xl font-bold text-charge"> 位</span>
-          <span className="text-base text-muted"> / 全{totalPlayers}人中</span>
+      <div className="ui-panel px-5 py-4 flex flex-wrap items-center gap-x-8 gap-y-3">
+        <div className="leading-none">
+          <span className="font-tech text-[44px] font-bold tabular-nums text-text">{myRank}</span>
+          <span className="text-lg font-bold text-text ml-1">位</span>
+          <span className="text-sm text-muted ml-2">/ {totalPlayers}人中</span>
         </div>
-        <div className="text-sm text-text flex items-center gap-3 flex-wrap justify-center">
-          <span>優勝まであと <span className="text-text font-bold font-tech">{aliveEnemies}</span> 体</span>
-          <span className="text-muted">|</span>
-          <span>生存 <span className="text-text font-bold font-tech">{mmss}</span></span>
+        <div className="flex gap-6 text-sm">
+          <div><div className="text-xs text-muted">優勝まで</div><div className="font-tech text-lg font-semibold tabular-nums text-text">あと{aliveEnemies}人</div></div>
+          <div><div className="text-xs text-muted">生存時間</div><div className="font-tech text-lg font-semibold tabular-nums text-text">{mmss}</div></div>
         </div>
-        <div className="w-full">
-          <div className="flex justify-between text-xs text-muted mb-0.5">
+        <div className="flex-1 min-w-[200px]">
+          <div className="flex justify-between text-xs text-muted mb-1.5">
             <span>スタート</span>
-            <span>優勝 🏆</span>
+            <span className="flex items-center gap-1"><Crown className="w-3.5 h-3.5" />優勝 {progressPct}%</span>
           </div>
-          <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: 'var(--surface2)', border: '1px solid var(--line)' }}>
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg, var(--incoming), var(--charge), var(--success))', boxShadow: '0 0 14px var(--glow)' }}
-            />
+          <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgb(var(--n-50) / 0.06)' }}>
+            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${progressPct}%`, background: 'rgb(var(--ac-400))' }} />
           </div>
-          <div className="text-center text-xs text-muted mt-1">優勝への到達度 {progressPct}%</div>
+        </div>
+      </div>
+    );
+  };
+
+  // 結果画面（TOP OUT / 勝利 / 時間切れで共通）。状態の色は上端の帯と見出しだけに使う。
+  const renderResult = (kind: 'gameover' | 'win' | 'timeup') => {
+    const meta = {
+      gameover: { tag: 'TOP OUT', title: 'おじゃまがあふれました', color: 'var(--incoming)', Icon: AlertTriangle },
+      win: { tag: 'VICTORY', title: `全員を倒して1位（${dummies.length + 1}人中）`, color: 'var(--success)', Icon: Crown },
+      timeup: { tag: 'TIME UP', title: `${cfgTaSeconds}秒タイムアタック終了`, color: 'rgb(var(--ac-300))', Icon: Timer },
+    }[kind];
+    const acc = accuracyOf(keysTyped, missCount);
+    const stats: [string, string | number][] = [
+      ['KPS', calculateKPS().toFixed(1)],
+      ['正確率', `${Math.round(acc * 100)}%`],
+      ['総打鍵', keysTyped],
+      ['最大連鎖', maxCombo],
+      kind === 'timeup' ? ['クリア語数', wordsCleared] : ['撃破', playerKOs],
+      ['ミス', missCount],
+    ];
+    return (
+      <div className="fixed left-0 right-0 top-16 bottom-0 z-30 overflow-y-auto" style={{ background: 'rgb(var(--n-950) / 0.94)', backdropFilter: 'blur(10px)' }}>
+        <div className="sticky top-0 h-[3px] z-10" style={{ background: meta.color, boxShadow: `0 0 18px ${meta.color}` }} />
+        <div className="w-full max-w-[1120px] mx-auto px-6 py-8 flex flex-col justify-center gap-5 min-h-[calc(100%-3px)]">
+          <header className="flex items-end justify-between gap-6 flex-wrap">
+            <div>
+              <div className="flex items-center gap-2 font-tech text-sm font-semibold tracking-[0.24em]" style={{ color: meta.color }}>
+                <meta.Icon className="w-4 h-4" />{meta.tag}
+              </div>
+              <h2 className="text-[28px] leading-tight font-bold text-text mt-1.5 [text-wrap:balance]">{meta.title}</h2>
+            </div>
+            <div className="text-right">
+              <div className="text-xs text-muted tracking-wide">総合スコア</div>
+              <div className="font-tech text-[56px] font-bold tabular-nums text-text leading-none mt-1">{currentScore()}</div>
+            </div>
+          </header>
+
+          {kind === 'gameover' && renderBattleStanding()}
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)] items-start">
+            <div className="ui-panel p-5 grid grid-cols-2 gap-x-6 gap-y-5">
+              {stats.map(([k, v]) => (
+                <div key={k}>
+                  <div className="text-xs text-muted tracking-wide">{k}</div>
+                  <div className="font-tech text-[28px] font-semibold tabular-nums text-text leading-tight mt-0.5">{v}</div>
+                </div>
+              ))}
+            </div>
+            {renderInsights()}
+          </div>
+
+          {renderResultExtras()}
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button type="button" onClick={() => startGame()} className="ui-btn-primary h-12 px-7 text-base">
+              <RotateCcw className="w-4 h-4" /> もう一度 <Kbd>Space</Kbd>
+            </button>
+            <button type="button" onClick={() => setSettingsOpen(true)} className="ui-btn-secondary h-12 px-5 text-[15px]">
+              <SlidersHorizontal className="w-4 h-4" /> 設定を変える
+            </button>
+            <span className="text-[13px] text-muted ml-1"><Kbd>Tab</Kbd> でも即リスタート</span>
+          </div>
         </div>
       </div>
     );
@@ -2059,7 +2114,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             // <main> は画面揺れ演出のため transform を持ち、fixed の基準が <main> になって
             // 64px 下にずれる（後ろのバトル画面が上に見えていた）。body 直下に出して画面基準にする。
             <div
-              className="fixed left-0 right-0 top-16 bottom-0 z-30 overflow-y-auto"
+              className="fixed left-0 right-0 top-16 bottom-0 z-40 overflow-y-auto"
               style={{ background: 'rgb(var(--n-950) / 0.94)', backdropFilter: 'blur(10px)' }}
             >
               <div className="w-full max-w-[1180px] mx-auto px-6 py-8 grid gap-6 lg:gap-10 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] items-start">
@@ -2363,80 +2418,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             document.body,
           )}
 
-          {gameState === 'gameover' && (
-            <div className="absolute inset-0 bg-red-950/90 backdrop-blur-md overflow-y-auto z-20 rounded-2xl flex">
-              <div className="m-auto flex flex-col items-center py-6 px-4 w-full">
-              <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">TOP OUT</h2>
-              <p className="text-red-300 mb-6">おじゃまブロックがあふれました</p>
-              {renderBattleStanding()}
-              <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-red-500/30">
-                <Stat label="総打鍵" value={keysTyped} />
-                <Stat label="MAX COMBO" value={maxCombo} />
-                <Stat label="K.O." value={playerKOs} />
-                <Stat label="KPS" value={calculateKPS()} />
-                <Stat label="正確率" value={keysTyped + missCount > 0 ? Math.round((keysTyped / (keysTyped + missCount)) * 100) : 100} suffix="%" />
-                <Stat label="ミス" value={missCount} />
-                <Stat label="SEED" value={seed} small />
-              </div>
-              {renderInsights()}
-              {renderResultExtras()}
-              <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
-              <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
-                <Zap className="w-4 h-4 text-amber-300" /> カスタム設定を変更
-              </button>
-              </div>
-            </div>
-          )}
-
-          {gameState === 'win' && (
-            <div className="absolute inset-0 bg-emerald-950/90 backdrop-blur-md overflow-y-auto z-20 rounded-2xl flex">
-              <div className="m-auto flex flex-col items-center py-6 px-4 w-full">
-              <Crown className="w-16 h-16 text-yellow-400 mb-3" />
-              <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]">YOU WIN!</h2>
-              <p className="text-emerald-300 mb-3">全ての敵を倒した！</p>
-              <p className="mb-6 text-lg font-bold text-yellow-300">🏆 1 位 / 全{dummies.length + 1}人中</p>
-              <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-emerald-500/30">
-                <Stat label="総打鍵" value={keysTyped} />
-                <Stat label="MAX COMBO" value={maxCombo} />
-                <Stat label="K.O." value={playerKOs} />
-                <Stat label="KPS" value={calculateKPS()} />
-                <Stat label="正確率" value={keysTyped + missCount > 0 ? Math.round((keysTyped / (keysTyped + missCount)) * 100) : 100} suffix="%" />
-                <Stat label="ミス" value={missCount} />
-                <Stat label="SEED" value={seed} small />
-              </div>
-              {renderInsights()}
-              {renderResultExtras()}
-              <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
-              <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
-                <Zap className="w-4 h-4 text-amber-300" /> カスタム設定を変更
-              </button>
-              </div>
-            </div>
-          )}
-
-          {gameState === 'timeup' && (
-            <div className="absolute inset-0 bg-indigo-950/90 backdrop-blur-md overflow-y-auto z-20 rounded-2xl flex">
-              <div className="m-auto flex flex-col items-center py-6 px-4 w-full">
-              <Timer className="w-16 h-16 text-cyan-300 mb-3" />
-              <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(99,102,241,0.8)]">TIME UP</h2>
-              <p className="text-indigo-200 mb-8">{cfgTaSeconds}秒タイムアタック終了！</p>
-              <div className="bg-black/40 p-6 rounded-xl grid grid-cols-3 gap-x-8 gap-y-4 mb-6 border border-indigo-500/30">
-                <Stat label="総打鍵" value={keysTyped} />
-                <Stat label="語数" value={wordsCleared} />
-                <Stat label="MAX COMBO" value={maxCombo} />
-                <Stat label="KPS" value={calculateKPS()} />
-                <Stat label="正確率" value={keysTyped + missCount > 0 ? Math.round((keysTyped / (keysTyped + missCount)) * 100) : 100} suffix="%" />
-                <Stat label="ミス" value={missCount} />
-              </div>
-              {renderInsights()}
-              {renderResultExtras()}
-              <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
-              <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
-                <Zap className="w-4 h-4 text-amber-300" /> カスタム設定を変更
-              </button>
-              </div>
-            </div>
-          )}
+          {(gameState === 'gameover' || gameState === 'win' || gameState === 'timeup') && createPortal(renderResult(gameState), document.body)}
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-[repeat(auto-fill,minmax(8rem,1fr))] gap-2 content-start">
@@ -2513,14 +2495,6 @@ const Hud = ({ label, value, icon, className }: { label: string; value: number; 
     </span>
   </div>
 );
-
-const Stat = ({ label, value, small, suffix }: { label: string; value: number; small?: boolean; suffix?: string }) => (
-  <div className="text-center">
-    <div className="font-tech text-muted" style={{ fontSize: 12, letterSpacing: '0.12em' }}>{label}</div>
-    <div className={`font-tech font-bold text-text ${small ? 'text-lg' : 'text-3xl'}`}>{value}{suffix ?? ''}</div>
-  </div>
-);
-
 
 // カスタム設定の ±0.1秒 ステップボタン。
 // スライダー横の ±1段ボタン。
