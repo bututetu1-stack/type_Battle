@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useRef, useId } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Swords, Zap, Trophy, AlertTriangle, Sparkles, ArrowLeft,
   Volume2, VolumeX, Crown, Target, Settings, RotateCcw, Timer,
-  ChevronDown, Gauge, Gift, Play, BookOpen, FolderOpen, SlidersHorizontal, HelpCircle, Check,
+  Gauge, Gift, Play, BookOpen, FolderOpen, SlidersHorizontal, HelpCircle, Check,
 } from 'lucide-react';
-import { Seg, Field, Panel, Kbd, IconBtn } from './ui';
+import { Seg, Field, Panel, Kbd, IconBtn, CfgSlider, CfgSection } from './ui';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWordFrom, makeShortWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
 import { loadCustomWords, loadCustomGroups } from '../lib/customwords';
@@ -29,17 +29,21 @@ import { computeScore, accuracyOf, addScore, renameScore, loadPlayerName, savePl
 import { expectedNextChar, bump, kpsSeries, type Tally } from '../lib/analytics';
 import ResultInsights from './ResultInsights';
 import { submitGlobalScore } from '../lib/leaderboard';
+import { DIFFICULTY_PRESETS, DIFFICULTY_KEYS, accelFromSpeed, speedFromAccel, migrateDifficulty, type DifficultyPreset } from '../lib/difficulty';
+import { makeCpu, stepCpu, mergeCpuStep } from '../lib/cpu';
 
 // --- 定数 ---
-const MAX_BACKLOG = 12;
-const INITIAL_SPAWN_INTERVAL = 4000;
-const MIN_SPAWN_INTERVAL = 1000;
-const DEFAULT_ACCEL = 0.98; // 1供給ごとの間隔倍率
-const DUMMY_COUNT = 20;
+// 初めて遊ぶ人の設定は難易度「ふつう」。
+const NORMAL = DIFFICULTY_PRESETS.normal;
+const MAX_BACKLOG: number = NORMAL.hp;
+const INITIAL_SPAWN_INTERVAL: number = NORMAL.initial;
+const MIN_SPAWN_INTERVAL: number = NORMAL.min;
+const DEFAULT_ACCEL = accelFromSpeed(NORMAL.accelSpeed); // 1供給ごとの間隔倍率
 const ATTACK_CAP = 5; // 1回の攻撃量の上限（即死コンボ防止）
 const ATTACK_THRESHOLD = 5; // 何クリアごとに攻撃を発射するか（初期値）
 const AVOID_RECENT = 10; // 直近この数の語は再出させない（袋方式に加える近接重複ガード）
 const TELEGRAPH_DELAY = 2500; // CPU攻撃の着弾予告→確定までの猶予（相殺の反応時間を確保）
+const MAX_INCOMING = 4; // 予告がこれ以上たまっている間はCPUから撃たれない（理不尽な集中砲火を防ぐ）
 const CFG_KEY = 'typeRoyale.custom'; // カスタム設定の保存キー
 
 // タイムアタックの「連打メーター」: ノーミス打鍵数で貯まり、区切りごとに時間追加。
@@ -92,7 +96,7 @@ const validMode = (v: unknown): UseMode => (v === 'instant' ? 'instant' : 'hold'
 function loadCfg(): CustomCfg {
   const def: CustomCfg = {
     initial: INITIAL_SPAWN_INTERVAL, min: MIN_SPAWN_INTERVAL, accel: DEFAULT_ACCEL,
-    theme: 'all', hp: MAX_BACKLOG, enemies: DUMMY_COUNT, cpuStr: 5, treasureRate: 20,
+    theme: 'all', hp: MAX_BACKLOG, enemies: NORMAL.enemies, cpuStr: NORMAL.cpuStr, treasureRate: 20,
     attackGauge: ATTACK_THRESHOLD, attackCap: ATTACK_CAP, comboStep: 5,
     badgeCap: 4, badgeRate: 25,
     gaugeMode: 'word', gaugeChars: 16, comeback: 2,
@@ -103,7 +107,7 @@ function loadCfg(): CustomCfg {
   try {
     const raw = localStorage.getItem(CFG_KEY);
     if (raw) {
-      const o = JSON.parse(raw);
+      const o = migrateDifficulty(JSON.parse(raw));
       return {
         initial: typeof o.initial === 'number' ? o.initial : def.initial,
         min: typeof o.min === 'number' ? o.min : def.min,
@@ -189,6 +193,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [globalState, setGlobalState] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
   const [globalRank, setGlobalRank] = useState<number | null>(null);
   const [spawnInterval, setSpawnInterval] = useState(INITIAL_SPAWN_INTERVAL);
+  const spawnIntervalRef = useRef(INITIAL_SPAWN_INTERVAL); // CPU にも同じペースで積む（lib/cpu.ts）
+  useEffect(() => { spawnIntervalRef.current = spawnInterval; }, [spawnInterval]);
   const [seed, setSeed] = useState(0);
   // カスタム: HP（積載限界）と敵数。
   const [maxBacklog, setMaxBacklog] = useState(initialCfg.hp);
@@ -360,7 +366,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   useEffect(() => { badgeRateRef.current = cfgBadgeRate; }, [cfgBadgeRate]);
   useEffect(() => { gaugeModeRef.current = cfgGaugeMode; }, [cfgGaugeMode]);
   useEffect(() => { gaugeCharsRef.current = cfgGaugeChars; }, [cfgGaugeChars]);
-  const cpuStrengthRef = useRef(initialCfg.cpuStr / 10); // 0..1 の目標強さ
   const treasureRateRef = useRef(initialCfg.treasureRate / 100); // お宝の基本出現率（0..1）
   useEffect(() => { treasureRateRef.current = cfgTreasureRate / 100; }, [cfgTreasureRate]);
   // アイテムON/OFF（OFFならお宝もアイテムも出さない）。タイムアタックは寿司打式で常にOFF。
@@ -853,7 +858,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     maxBacklogRef.current = cfgHp;
     setMaxBacklog(cfgHp);
     setDummyCount(cfgEnemies);
-    cpuStrengthRef.current = cfgCpuStr / 10;
     accelRef.current = cfgAccel;
     minRef.current = cfgMin;
     rapidUntilRef.current = 0;
@@ -874,17 +878,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       setDummies([]);
       setTimeLeft(cfgTaSeconds);
     } else {
-      // 敵数ぶんのダミーを作り直す。各CPUは目標強さの周りにばらつかせた個別の str を持つ
-      // （＝強いCPU・弱いCPUが混在し、平均が設定値になる。個体ごとに独立した挙動の元）。
-      const target = cfgCpuStr / 10;
-      setDummies(
-        Array.from({ length: cfgEnemies }).map((_, i) => {
-          const str = Math.min(1, Math.max(0, target + (Math.random() - 0.5) * 0.7));
-          return {
-            id: i, height: Math.floor(Math.random() * 5), isKO: false, name: cpuName(i), combo: 0, atk: 0, str,
-          };
-        }),
-      );
+      // 敵数ぶんのCPUを作り直す。各CPUは平均の強さの周りにばらつかせた個別の速さを持つ
+      // （＝速いCPU・遅いCPUが混在し、平均が設定値になる）。
+      setDummies(Array.from({ length: cfgEnemies }).map((_, i) => makeCpu(i, cpuName(i), cfgCpuStr / 10, Math.random)));
     }
   }, [cfgInitial, cfgMin, cfgAccel, cfgHp, cfgEnemies, cfgCpuStr, cfgAttackGauge, cfgExcluded, soloMode, cfgTaSeconds, updatePending, nextWord]);
 
@@ -1054,53 +1050,60 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [startGame, fireSelected, cycleSlot, fireSlot, fireAttack, grantItem, cycleTargetMode, offsetIncoming]);
 
-  // --- CPUの挙動: 自滅ランダムウォーク + プレイヤーへの攻撃 + アイテム使用 ---
+  // --- CPUの挙動: 自分と同じペースで積まれる単語を各自の速さで片付け、攻撃し合う（lib/cpu.ts） ---
   useEffect(() => {
     if (gameState !== 'playing' || soloMode === 'timeattack') return; // タイムアタックは敵なし
     const interval = setInterval(() => {
-      // 盤面の上下動。CPUごとの強さ(str)で「処理が速い＝下がりやすい」を表現する。
-      // 強いCPUほど height が下がりやすく（生き残る）、弱いCPUは溜まって自滅しやすい。
-      setDummies((prev) =>
-        prev.map((d) => {
-          if (d.isKO) return d;
-          const s = d.str ?? 0.5;
-          const downProb = 0.4 + s * 0.45; // 強いほど下がる（クリアする）確率が高い
-          let newHeight = d.height + (Math.random() < downProb ? -1 : 1);
-          if (newHeight < 0) newHeight = 0;
-          let combo = d.combo ?? 0;
-          combo = Math.random() < 0.4 + s * 0.4 ? combo + 1 : 0; // 強いほど連鎖が伸びやすい
-          if (newHeight > maxBacklogRef.current) {
-            sfx.eliminate();
-            return { ...d, height: 0, isKO: true, combo: 0 };
-          }
-          return { ...d, height: newHeight, combo };
-        }),
-      );
+      const maxH = maxBacklogRef.current;
+      const before = dummiesRef.current;
+      const steps = before.map((d) => stepCpu(d, 1000 / spawnIntervalRef.current, maxH, Math.random));
+      const byId = new Map(steps.map((s, i) => [before[i].id, { before: before[i], after: s.next }]));
+      setDummies((prev) => prev.map((d) => { const s = byId.get(d.id); return s ? mergeCpuStep(d, s.before, s.after, maxH) : d; }));
+      if (steps.some((s) => s.overflow)) sfx.eliminate();
 
-      const alive = dummiesRef.current.filter((d) => !d.isKO);
+      const alive = steps.map((s) => s.next).filter((d) => !d.isKO);
       if (alive.length === 0) return;
-      const target = cpuStrengthRef.current; // 0..1 目標強さ
 
-      // 一部のCPUがプレイヤーを攻撃（着弾予告ゲージに追加）。
-      // 攻撃頻度は全体の強さ設定に比例。攻撃者は強いCPUほど選ばれやすい（個体差）。
-      const incomingNow = pendingRef.current.reduce((s, e) => s + e.amount, 0);
-      const attackChance = 0.1 + target * 0.3;
-      const frozen = Date.now() < freezeUntilRef.current; // フリーズ中は被攻撃を無効化
-      if (!frozen && incomingNow < 4 && Math.random() < attackChance) {
-        // str を重みにして攻撃者を選ぶ（強いCPUが主な脅威になる）。
-        const totW = alive.reduce((sum, d) => sum + 0.2 + (d.str ?? 0.5), 0);
-        let acc = Math.random() * totW;
-        let attacker = alive[0];
-        for (const d of alive) { acc -= 0.2 + (d.str ?? 0.5); if (acc <= 0) { attacker = d; break; } }
-        const amount = Math.random() < 0.5 + (attacker.str ?? 0.5) * 0.4 ? (Math.random() < 0.6 ? 2 : 1) : 1;
-        lastAttackerRef.current = attacker.id;
-        setDummies((prev) => prev.map((d) => (d.id === attacker.id ? { ...d, atk: (d.atk ?? 0) + 1 } : d)));
-        updatePending([
-          ...pendingRef.current,
-          { id: telegraphIdRef.current++, amount, confirmAt: Date.now() + TELEGRAPH_DELAY },
-        ]);
-        fireIncoming(attacker.id);
-        pushToast(`${attacker.name} から攻撃 +${amount}`, 'in');
+      // 攻撃の行き先は、自分（プレイヤー）を含む生存者からランダム。
+      // フリーズ中や、予告が溜まっている間（MAX_INCOMING 以上）はプレイヤーには撃たれない。
+      for (const s of steps) {
+        for (const amount of s.attacks) {
+          const from = s.next;
+          if (from.isKO) continue;
+          const others = alive.filter((d) => d.id !== from.id);
+          const pick = Math.floor(Math.random() * (others.length + 1));
+          if (pick === others.length) {
+            const incomingNow = pendingRef.current.reduce((sum, e) => sum + e.amount, 0);
+            if (Date.now() < freezeUntilRef.current || incomingNow >= MAX_INCOMING) continue;
+            lastAttackerRef.current = from.id;
+            setDummies((prev) => prev.map((d) => (d.id === from.id ? { ...d, atk: (d.atk ?? 0) + 1 } : d)));
+            updatePending([
+              ...pendingRef.current,
+              { id: telegraphIdRef.current++, amount, confirmAt: Date.now() + TELEGRAPH_DELAY },
+            ]);
+            fireIncoming(from.id);
+            pushToast(`${from.name} から攻撃 +${amount}`, 'in');
+          } else {
+            // CPU同士の撃ち合い（テトリス99のように、自分以外の攻防も見せる）。
+            const to = others[pick];
+            if (to.height + amount > maxH) sfx.eliminate();
+            setDummies((prev) =>
+              prev.map((d) => {
+                if (d.id !== to.id || d.isKO) return d;
+                return d.height + amount > maxH ? { ...d, height: 0, isKO: true, combo: 0 } : { ...d, height: d.height + amount };
+              }),
+            );
+            const a = dummyRefs.current[from.id]?.getBoundingClientRect();
+            const b = dummyRefs.current[to.id]?.getBoundingClientRect();
+            if (a && b) {
+              addBeam(
+                a.left + a.width / 2, a.top + a.height / 2,
+                b.left + b.width / 2, b.top + b.height / 2,
+                '#94a3b8', // CPU同士は中立的なグレーで自分の攻撃(オレンジ)と区別
+              );
+            }
+          }
+        }
       }
 
       // 一部のCPUがアイテムを使用。多くは演出のみ（ミニボードに絵文字）だが、
@@ -1120,31 +1123,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         } else {
           pushToast(`${user.name} が ${ITEM_META[item].name} 使用`, 'item');
         }
-        }
-      }
-
-      // テトリス99のように、CPU同士も撃ち合う（自分以外の攻防を可視化）。
-      if (alive.length >= 2 && Math.random() < 0.6) {
-        const a = alive[Math.floor(Math.random() * alive.length)];
-        let b = alive[Math.floor(Math.random() * alive.length)];
-        if (b.id === a.id) b = alive[(alive.indexOf(a) + 1) % alive.length];
-        if (b.id !== a.id) {
-          const willKO = b.height + 1 > maxBacklogRef.current;
-          setDummies((prev) =>
-            prev.map((d) =>
-              d.id === b.id ? (willKO ? { ...d, height: 0, isKO: true, combo: 0 } : { ...d, height: d.height + 1 }) : d,
-            ),
-          );
-          if (willKO) sfx.eliminate();
-          const from = dummyRefs.current[a.id]?.getBoundingClientRect();
-          const to = dummyRefs.current[b.id]?.getBoundingClientRect();
-          if (from && to) {
-            addBeam(
-              from.left + from.width / 2, from.top + from.height / 2,
-              to.left + to.width / 2, to.top + to.height / 2,
-              '#94a3b8', // CPU同士は中立的なグレーで自分の攻撃(オレンジ)と区別
-            );
-          }
         }
       }
     }, 1000);
@@ -1555,31 +1533,22 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     );
   };
 
-  // 加速度（表示用）: 大きいほど速く加速。内部の供給間隔倍率(cfgAccel)は
-  // 1.00=加速なし、0.90=最速。speed = (1 - 倍率) * 100 で 0〜10 にマップ。
-  const accelSpeed = Math.round((1 - cfgAccel) * 1000) / 10;
-  const setAccelFromSpeed = (s: number) => {
-    const clamped = Math.min(10, Math.max(0, s));
-    setCfgAccel(Math.round((1 - clamped / 100) * 1000) / 1000);
-  };
+  // 加速度（表示用 0〜10）: 大きいほど速く加速。内部の供給間隔倍率(cfgAccel)は 1.00=加速なし、0.90=最速。
+  const accelSpeed = speedFromAccel(cfgAccel);
+  const setAccelFromSpeed = (s: number) => setCfgAccel(accelFromSpeed(s));
 
-  // 難易度プリセット（速度・敵・CPUをまとめて設定）。細かいチューニングは各スライダーで。
-  const DIFFICULTY_PRESETS = {
-    easy: { label: 'かんたん', initial: 3800, min: 1800, accelSpeed: 1, hp: 14, enemies: 5, cpuStr: 3 },
-    normal: { label: 'ふつう', initial: 2800, min: 1100, accelSpeed: 2, hp: 12, enemies: 10, cpuStr: 5 },
-    hard: { label: 'むずかしい', initial: 2000, min: 750, accelSpeed: 5, hp: 9, enemies: 14, cpuStr: 7 },
-  } as const;
-  const activePreset = (Object.keys(DIFFICULTY_PRESETS) as (keyof typeof DIFFICULTY_PRESETS)[]).find((k) => {
+  // 難易度プリセット（速度・敵・CPUをまとめて設定。lib/difficulty.ts）。細かいチューニングは各スライダーで。
+  const activePreset = DIFFICULTY_KEYS.find((k) => {
     const p = DIFFICULTY_PRESETS[k];
     return cfgInitial === p.initial && cfgMin === p.min && Math.abs(accelSpeed - p.accelSpeed) < 0.05
-      && cfgHp === Math.min(HP_MAX, Math.max(HP_MIN, p.hp)) && cfgEnemies === Math.min(MAX_DUMMIES, p.enemies) && cfgCpuStr === p.cpuStr;
+      && cfgHp === p.hp && cfgEnemies === p.enemies && cfgCpuStr === p.cpuStr;
   }) ?? null;
-  const applyDifficulty = (p: typeof DIFFICULTY_PRESETS[keyof typeof DIFFICULTY_PRESETS]) => {
+  const applyDifficulty = (p: DifficultyPreset) => {
     setCfgInitial(p.initial);
     setCfgMin(p.min);
     setAccelFromSpeed(p.accelSpeed);
-    setCfgHp(Math.min(HP_MAX, Math.max(HP_MIN, p.hp)));
-    setCfgEnemies(Math.min(MAX_DUMMIES, p.enemies));
+    setCfgHp(p.hp);
+    setCfgEnemies(p.enemies);
     setCfgCpuStr(p.cpuStr);
     sfx.type();
   };
@@ -2171,7 +2140,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                       <Seg label="難易度" value={activePreset ?? 'custom'}
                         onChange={(k) => { if (k !== 'custom') applyDifficulty(DIFFICULTY_PRESETS[k]); }}
                         options={[
-                          ...(['easy', 'normal', 'hard'] as const).map((k) => ({ value: k, label: DIFFICULTY_PRESETS[k].label })),
+                          ...DIFFICULTY_KEYS.map((k) => ({ value: k, label: DIFFICULTY_PRESETS[k].label })),
                           { value: 'custom' as const, label: 'カスタム' },
                         ]} />
                     </Field>
@@ -2489,71 +2458,3 @@ const Hud = ({ label, value, tone }: { label: string; value: string | number; to
   </div>
 );
 
-// カスタム設定の ±0.1秒 ステップボタン。
-// スライダー横の ±1段ボタン。
-const StepBtn = ({ onClick, label, children }: { onClick: () => void; label: string; children: React.ReactNode }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    aria-label={label}
-    className="w-8 h-8 rounded-lg flex items-center justify-center text-base font-bold shrink-0 text-text transition-colors hover:bg-neutral-800"
-    style={{ background: 'rgb(var(--n-50) / 0.05)', border: '1px solid var(--line)' }}
-  >
-    {children}
-  </button>
-);
-
-// 設定のスライダー1行（見出し・現在値・補足・±ボタン）。
-const CfgSlider = ({
-  label, value, display, min, max, step, onChange, hint,
-}: {
-  label: string; value: number; display: string; min: number; max: number; step: number;
-  onChange: (v: number) => void; hint?: string;
-}) => {
-  const id = useId();
-  const round = (v: number) => Math.round(v * 1000) / 1000; // 0.5等の浮動小数を丸める
-  return (
-    <div>
-      <div className="flex items-baseline justify-between gap-3">
-        <label htmlFor={id} className="text-sm text-text">{label}</label>
-        <span className="font-tech text-[15px] font-semibold tabular-nums text-cyan-200">{display}</span>
-      </div>
-      {hint && <div className="text-xs text-muted mt-0.5 leading-snug">{hint}</div>}
-      <div className="flex items-center gap-2.5 mt-2">
-        <StepBtn label={`${label}を下げる`} onClick={() => onChange(round(Math.max(min, value - step)))}>−</StepBtn>
-        <input
-          id={id}
-          type="range" min={min} max={max} step={step} value={value}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="flex-1 ui-range"
-        />
-        <StepBtn label={`${label}を上げる`} onClick={() => onChange(round(Math.min(max, value + step)))}>＋</StepBtn>
-      </div>
-    </div>
-  );
-};
-
-// 折りたたみできる設定セクション（見出し＋開閉）。項目を分類して、普段は隠しておける。
-const CfgSection = ({
-  title, icon, defaultOpen = false, children,
-}: {
-  title: string; icon: React.ReactNode; defaultOpen?: boolean; children: React.ReactNode;
-}) => {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border-t first:border-t-0" style={{ borderColor: 'var(--line)' }}>
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between py-3.5 text-left"
-      >
-        <span className="flex items-center gap-2 text-[15px] font-semibold text-text">
-          <span className="text-muted">{icon}</span>{title}
-        </span>
-        <ChevronDown className={`w-4 h-4 text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
-      </button>
-      {open && <div className="pb-5 flex flex-col gap-5">{children}</div>}
-    </div>
-  );
-};

@@ -29,7 +29,10 @@ export interface Dummy {
   lastItem?: ItemType; // 直近に使ったアイテム（演出用）
   itemAt?: number; // 直近にアイテムを使った時刻
   atk?: number; // プレイヤーを攻撃した回数（strongターゲット用）
-  str?: number; // CPUの強さ（0..1）。個体ごとに独立した思考・挙動の元
+  str?: number; // CPUの強さ（0..1）。打鍵の速さの元（lib/cpu.ts）
+  feed?: number; // 積まれる途中の端数（lib/cpu.ts）
+  prog?: number; // 片付け途中の端数（lib/cpu.ts）
+  gauge?: number; // 次の攻撃までのクリア数（lib/cpu.ts）
 }
 
 // お宝単語クリアで獲得できるアイテム種別。

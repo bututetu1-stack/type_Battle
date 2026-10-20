@@ -14,6 +14,7 @@ npm test           # Vitest（打鍵判定・アイテム定義・分析・記�
 npm run build      # tsc -b（型チェック）+ 本番ビルド。コミット前に必ず
 npm run preview    # ビルド結果を http://localhost:4173/type_Battle/ で確認
 npm run wordtest   # 出題の近接重複を数値で確認
+npm run balancesim # ソロの難易度バランス（打鍵の速さ別の勝率・試合時間）を模擬対戦で確認
 node scripts/screenshots.mjs [出力先] [テーマ] [幅x高さ]  # 自動プレイしてスクショ（準備は docs/HANDOFF.md 5章）
 ```
 
@@ -55,6 +56,10 @@ node scripts/screenshots.mjs [出力先] [テーマ] [幅x高さ]  # 自動プ�
   出題は `src/lib/words.ts`（約4400行の辞書込み）。
 - リザルトの分析（ランク・速度推移・苦手キー）は `src/lib/analytics.ts`（純粋関数）と
   `components/ResultInsights.tsx`。
+- ソロの難易度プリセットは `src/lib/difficulty.ts`、敵CPUの動きは `src/lib/cpu.ts`（どちらも純粋）。
+  CPU は「打つ速さ」を持つプレイヤーとして、自分と同じペースで積まれる単語を片付ける（遅い順に脱落）。
+  数値を変えたら `npm run balancesim`（`scripts/balance-sim.ts`）で勝率・試合時間を確かめる。
+  模擬対戦は SoloGame の攻撃・相殺・アイテムの数値を写しているので、そちらを変えたら合わせる。
 
 ## デザインの仕組み
 
