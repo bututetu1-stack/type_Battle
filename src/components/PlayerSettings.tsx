@@ -5,7 +5,7 @@ import {
   type KeyConfig, type InputMode,
 } from '../lib/keyconfig';
 import { CAT_META } from '../lib/items';
-import { COLOR_THEMES, loadThemeId, saveThemeId, applyColorTheme, IMAGE_THEME_ID, fileToDataUrl, cropToBgImages, saveBgImage, clearBgImage, loadBgImage, cropToMiniImage, saveBoardImage, clearBoardImage, loadBoardImage } from '../lib/theme';
+import { COLOR_THEMES, accentHex, loadThemeId, saveThemeId, applyColorTheme, IMAGE_THEME_ID, fileToDataUrl, cropToBgImages, saveBgImage, clearBgImage, loadBgImage, cropToMiniImage, saveBoardImage, clearBoardImage, loadBoardImage } from '../lib/theme';
 import ImageCropper from './ImageCropper';
 
 // プレイヤー設定（入力方式＋キーコンフィグ）。ソロ/オンライン共通でlocalStorageに保存。
@@ -132,7 +132,7 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
 
         {/* カラーテーマ（背景の雰囲気） */}
         <div className="mb-4">
-          <div className="text-xs text-muted mb-1.5">カラーテーマ（背景）</div>
+          <div className="text-xs text-muted mb-1.5">カラーテーマ（背景＋アクセント色）</div>
           <div className="grid grid-cols-4 gap-2">
             {COLOR_THEMES.map((t) => (
               <button
@@ -142,7 +142,9 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
                   themeId === t.id ? 'border-primary bg-surface2' : 'border-line bg-surface hover:bg-surface2'
                 }`}
               >
-                <span className="w-7 h-7 rounded-full border border-white/20" style={{ background: t.css }} />
+                <span className="relative w-7 h-7 rounded-full border border-white/20" style={{ background: t.css }}>
+                  <span className="absolute right-0 bottom-0 w-2.5 h-2.5 rounded-full" style={{ background: accentHex(t.accent), boxShadow: `0 0 6px ${accentHex(t.accent)}` }} />
+                </span>
                 <span className={`text-[10px] font-bold ${themeId === t.id ? 'text-primary' : 'text-muted'}`}>{t.label}</span>
               </button>
             ))}

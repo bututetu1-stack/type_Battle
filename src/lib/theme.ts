@@ -6,6 +6,23 @@ export type ThemeTokens = Record<
   string
 >;
 
+// アクセントの濃淡パレット（Tailwind 公式の 50〜950）。テーマごとに1つ選ぶ。
+// 画面の cyan-300 などのクラスは tailwind.config で「アクセント」に読み替えているので、
+// ここを変えるとゲージ・お題の発光・ボタンまで全画面がテーマ色に揃う。
+export const ACCENT_SHADES = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
+const PALETTES = {
+  cyan: ['#ecfeff', '#cffafe', '#a5f3fc', '#67e8f9', '#22d3ee', '#06b6d4', '#0891b2', '#0e7490', '#155e75', '#164e63', '#083344'],
+  teal: ['#f0fdfa', '#ccfbf1', '#99f6e4', '#5eead4', '#2dd4bf', '#14b8a6', '#0d9488', '#0f766e', '#115e59', '#134e4a', '#042f2e'],
+  pink: ['#fdf2f8', '#fce7f3', '#fbcfe8', '#f9a8d4', '#f472b6', '#ec4899', '#db2777', '#be185d', '#9d174d', '#831843', '#500724'],
+  violet: ['#f5f3ff', '#ede9fe', '#ddd6fe', '#c4b5fd', '#a78bfa', '#8b5cf6', '#7c3aed', '#6d28d9', '#5b21b6', '#4c1d95', '#2e1065'],
+  lime: ['#f7fee7', '#ecfccb', '#d9f99d', '#bef264', '#a3e635', '#84cc16', '#65a30d', '#4d7c0f', '#3f6212', '#365314', '#1a2e05'],
+  orange: ['#fff7ed', '#ffedd5', '#fed7aa', '#fdba74', '#fb923c', '#f97316', '#ea580c', '#c2410c', '#9a3412', '#7c2d12', '#431407'],
+} as const;
+export type AccentName = keyof typeof PALETTES;
+const rgbTriplet = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(' ');
+// テーマ選択ボタンで背景と並べて見せるアクセント色（400 番）。
+export const accentHex = (a: AccentName): string => PALETTES[a][4];
+
 export interface ColorTheme {
   id: string;
   label: string;
@@ -13,25 +30,26 @@ export interface ColorTheme {
   swatch: string; // 設定画面のプレビュー色
   light?: boolean; // ライト系（body に theme-light クラスを付け、文字色を暗くする）
   tokens: ThemeTokens; // カラートークン一式
+  accent: AccentName; // アクセント色の濃淡パレット（Tailwind の cyan-* クラスもこれに追従する）
 }
 
 export const COLOR_THEMES: ColorTheme[] = [
   { id: 'midnight', label: '標準（夜）', css: 'radial-gradient(circle at 50% -10%, #14161f 0%, #0a0a0b 60%)', swatch: '#12141c',
-    tokens: { bg: '#0a0a0b', bg2: '#14161f', surface: 'rgba(120,190,255,.04)', surface2: 'rgba(120,190,255,.08)', line: 'rgba(120,200,255,.15)', text: '#e8f4ff', muted: '#6b7c90', primary: '#22d3ee', glow: 'rgba(34,211,238,.5)' } },
+    tokens: { bg: '#0a0a0b', bg2: '#14161f', surface: 'rgba(120,190,255,.04)', surface2: 'rgba(120,190,255,.08)', line: 'rgba(120,200,255,.15)', text: '#e8f4ff', muted: '#6b7c90', primary: '#22d3ee', glow: 'rgba(34,211,238,.5)' }, accent: 'cyan' },
   { id: 'abyss', label: '深海', css: 'radial-gradient(circle at 50% -10%, #0b2a44 0%, #04101c 60%)', swatch: '#0a2236',
-    tokens: { bg: '#04101c', bg2: '#0b2a44', surface: 'rgba(120,190,255,.05)', surface2: 'rgba(120,190,255,.09)', line: 'rgba(120,200,255,.15)', text: '#e8f4ff', muted: '#6b7c90', primary: '#22d3ee', glow: 'rgba(34,211,238,.5)' } },
+    tokens: { bg: '#04101c', bg2: '#0b2a44', surface: 'rgba(120,190,255,.05)', surface2: 'rgba(120,190,255,.09)', line: 'rgba(120,200,255,.15)', text: '#e8f4ff', muted: '#6b7c90', primary: '#2dd4bf', glow: 'rgba(45,212,191,.5)' }, accent: 'teal' },
   { id: 'crimson', label: '深紅', css: 'radial-gradient(circle at 50% -10%, #2d0e13 0%, #120608 60%)', swatch: '#2a0d12',
-    tokens: { bg: '#120608', bg2: '#2d0e13', surface: 'rgba(120,190,255,.045)', surface2: 'rgba(120,190,255,.085)', line: 'rgba(150,180,220,.16)', text: '#f4eaec', muted: '#8f7378', primary: '#22d3ee', glow: 'rgba(34,211,238,.5)' } },
+    tokens: { bg: '#120608', bg2: '#2d0e13', surface: 'rgba(255,150,190,.045)', surface2: 'rgba(255,150,190,.085)', line: 'rgba(255,170,200,.16)', text: '#f4eaec', muted: '#8f7378', primary: '#f472b6', glow: 'rgba(244,114,182,.5)' }, accent: 'pink' },
   { id: 'violet', label: '紫夜', css: 'radial-gradient(circle at 50% -10%, #1e1136 0%, #0d0718 60%)', swatch: '#1c1030',
-    tokens: { bg: '#0d0718', bg2: '#1e1136', surface: 'rgba(160,150,255,.05)', surface2: 'rgba(160,150,255,.09)', line: 'rgba(170,160,255,.16)', text: '#f0ecff', muted: '#7a6f9a', primary: '#22d3ee', glow: 'rgba(34,211,238,.5)' } },
+    tokens: { bg: '#0d0718', bg2: '#1e1136', surface: 'rgba(160,150,255,.05)', surface2: 'rgba(160,150,255,.09)', line: 'rgba(170,160,255,.16)', text: '#f0ecff', muted: '#7a6f9a', primary: '#a78bfa', glow: 'rgba(167,139,250,.5)' }, accent: 'violet' },
   { id: 'forest', label: '深緑', css: 'radial-gradient(circle at 50% -10%, #0d2a1b 0%, #061009 60%)', swatch: '#0c2418',
-    tokens: { bg: '#061009', bg2: '#0d2a1b', surface: 'rgba(120,220,180,.05)', surface2: 'rgba(120,220,180,.09)', line: 'rgba(120,220,180,.15)', text: '#e6fff2', muted: '#5f8672', primary: '#22d3ee', glow: 'rgba(34,211,238,.5)' } },
+    tokens: { bg: '#061009', bg2: '#0d2a1b', surface: 'rgba(120,220,180,.05)', surface2: 'rgba(120,220,180,.09)', line: 'rgba(120,220,180,.15)', text: '#e6fff2', muted: '#5f8672', primary: '#a3e635', glow: 'rgba(163,230,53,.45)' }, accent: 'lime' },
   { id: 'sunset', label: '黄昏', css: 'radial-gradient(circle at 50% -10%, #2e1a0c 0%, #140a05 60%)', swatch: '#2a160a',
-    tokens: { bg: '#140a05', bg2: '#2e1a0c', surface: 'rgba(255,200,140,.05)', surface2: 'rgba(255,200,140,.09)', line: 'rgba(255,200,150,.15)', text: '#fff0dc', muted: '#93795a', primary: '#22d3ee', glow: 'rgba(34,211,238,.5)' } },
+    tokens: { bg: '#140a05', bg2: '#2e1a0c', surface: 'rgba(255,200,140,.05)', surface2: 'rgba(255,200,140,.09)', line: 'rgba(255,200,150,.15)', text: '#fff0dc', muted: '#93795a', primary: '#fb923c', glow: 'rgba(251,146,60,.5)' }, accent: 'orange' },
   { id: 'mono', label: '漆黒', css: '#000000', swatch: '#000000',
-    tokens: { bg: '#000000', bg2: '#070707', surface: 'rgba(255,255,255,.04)', surface2: 'rgba(255,255,255,.07)', line: 'rgba(255,255,255,.13)', text: '#f4f8ff', muted: '#6a6a6a', primary: '#22d3ee', glow: 'rgba(34,211,238,.5)' } },
+    tokens: { bg: '#000000', bg2: '#070707', surface: 'rgba(255,255,255,.04)', surface2: 'rgba(255,255,255,.07)', line: 'rgba(255,255,255,.13)', text: '#f4f8ff', muted: '#6a6a6a', primary: '#22d3ee', glow: 'rgba(34,211,238,.5)' }, accent: 'cyan' },
   { id: 'light', label: 'ライト', css: 'radial-gradient(circle at 50% -10%, #ffffff 0%, #dfe5ee 70%)', swatch: '#e8edf4', light: true,
-    tokens: { bg: '#eef2f6', bg2: '#e4eaf0', surface: 'rgba(2,20,40,.04)', surface2: 'rgba(2,20,40,.07)', line: 'rgba(2,40,70,.16)', text: '#0c1a26', muted: '#5a6b7a', primary: '#0891b2', glow: 'rgba(8,145,178,.26)' } },
+    tokens: { bg: '#eef2f6', bg2: '#e4eaf0', surface: 'rgba(2,20,40,.04)', surface2: 'rgba(2,20,40,.07)', line: 'rgba(2,40,70,.16)', text: '#0c1a26', muted: '#5a6b7a', primary: '#0891b2', glow: 'rgba(8,145,178,.26)' }, accent: 'cyan' },
 ];
 
 const KEY = 'typeRoyale.theme';
@@ -90,6 +108,7 @@ function applyTokens(t: ColorTheme): void {
   for (const [k, v] of Object.entries(t.tokens)) {
     body.style.setProperty(`--${k}`, v);
   }
+  PALETTES[t.accent].forEach((hex, i) => body.style.setProperty(`--ac-${ACCENT_SHADES[i]}`, rgbTriplet(hex)));
 }
 
 // body 背景にテーマ（または背景画像）を適用。light 系は theme-light クラスを付与。

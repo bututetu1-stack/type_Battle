@@ -1434,7 +1434,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       {parryFx && (
         <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
           <div className="parry-ring rounded-full border-4 border-cyan-300" />
-          <div className="absolute parry-label text-4xl font-black italic text-cyan-200 drop-shadow-[0_0_18px_rgba(34,211,238,0.9)]">
+          <div className="absolute parry-label text-4xl font-black italic text-cyan-200 drop-shadow-[0_0_18px_rgb(var(--ac-400)/0.9)]">
             PARRY!
           </div>
         </div>
@@ -1616,7 +1616,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
               className="absolute inset-0 rounded-2xl pointer-events-none z-0 transition-[box-shadow] duration-200"
               style={{
                 boxShadow: `inset 0 0 ${Math.min(30 + combo * 6, 130)}px ${Math.min(6 + combo * 1.4, 34)}px ${
-                  combo >= 10 ? 'rgba(255,171,46,0.16)' : 'rgba(34,211,238,0.13)'
+                  combo >= 10 ? 'rgba(255,171,46,0.16)' : 'rgb(var(--ac-400)/0.13)'
                 }`,
               }}
             />
@@ -1778,8 +1778,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   className="tr-combo-punch font-black italic flex items-center gap-2"
                   style={{
                     fontSize: `${Math.min(1.875 + (combo - 3) * 0.09, 3.4)}rem`,
-                    color: combo >= 10 ? 'var(--charge)' : combo >= 6 ? '#ffd23e' : '#22d3ee',
-                    textShadow: `0 0 ${Math.min(10 + combo * 2, 44)}px ${combo >= 10 ? 'rgba(255,171,46,0.8)' : 'rgba(34,211,238,0.7)'}`,
+                    color: combo >= 10 ? 'var(--charge)' : combo >= 6 ? '#ffd23e' : 'var(--primary)',
+                    textShadow: `0 0 ${Math.min(10 + combo * 2, 44)}px ${combo >= 10 ? 'rgba(255,171,46,0.8)' : 'rgb(var(--ac-400)/0.7)'}`,
                   }}
                 >
                   <Zap className="w-8 h-8" style={{ fill: 'currentColor' }} /> {combo} COMBO!
@@ -1873,7 +1873,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                         key={c.key}
                         onClick={() => (direct ? fireSlot(c.key) : setSelectedSlot(c.key))}
                         className={`min-w-[5.5rem] rounded-lg border px-2 py-1 flex flex-col items-center transition-colors ${
-                          sel ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_8px_rgba(34,211,238,0.4)]' : 'border-white/10 bg-neutral-900/80'
+                          sel ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_8px_rgb(var(--ac-400)/0.4)]' : 'border-white/10 bg-neutral-900/80'
                         }`}
                       >
                         <span className={`text-[9px] font-bold ${c.color}`}>
@@ -2002,7 +2002,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
         }
         .screen-shake { animation: screenShake 0.45s ease-in-out; }
         @keyframes parryRing { 0% { width: 40px; height: 40px; opacity: 0.9; } 100% { width: 360px; height: 360px; opacity: 0; } }
-        .parry-ring { width: 40px; height: 40px; animation: parryRing 0.5s ease-out forwards; box-shadow: 0 0 24px rgba(34,211,238,0.8); }
+        .parry-ring { width: 40px; height: 40px; animation: parryRing 0.5s ease-out forwards; box-shadow: 0 0 24px rgb(var(--ac-400)/0.8); }
         @keyframes parryLabel { 0% { transform: scale(0.6); opacity: 0; } 30% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
         .parry-label { animation: parryLabel 0.5s ease-out forwards; }
         @keyframes boardFxBanner { 0% { transform: scale(0.6); opacity: 0; } 18% { transform: scale(1.12); opacity: 1; } 80% { transform: scale(1); opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
