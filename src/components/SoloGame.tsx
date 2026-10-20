@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, ArrowLeft,
   Volume2, VolumeX, Crown, Target, Settings, RotateCcw, Timer,
@@ -1997,9 +1998,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             </div>
           </div>
 
-          {(gameState === 'start' || settingsOpen) && (
+          {(gameState === 'start' || settingsOpen) && createPortal(
             // ヘッダー(h-16)の下を画面いっぱいに使う固定オーバーレイ。
-            // 画面サイズに合わせてスクロール領域が広がる（収まる時は中央／はみ出す時は上からスクロール）。
+            // <main> は画面揺れ演出のため transform を持ち、fixed の基準が <main> になって
+            // 64px 下にずれる（後ろのバトル画面が上に見えていた）。body 直下に出して画面基準にする。
             <div className="fixed left-0 right-0 top-16 bottom-0 bg-neutral-950/90 backdrop-blur-sm z-30 overflow-y-auto">
               <div className="min-h-full flex flex-col items-center justify-center w-full py-8 px-2">
               <Swords className="w-20 h-20 text-cyan-500 mb-6" />
@@ -2310,7 +2312,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 </div>
               </div>
               </div>
-            </div>
+            </div>,
+            document.body,
           )}
 
           {gameState === 'gameover' && (
