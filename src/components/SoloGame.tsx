@@ -30,7 +30,7 @@ import { expectedNextChar, bump, kpsSeries, type Tally } from '../lib/analytics'
 import ResultInsights from './ResultInsights';
 import { submitGlobalScore } from '../lib/leaderboard';
 import { DIFFICULTY_PRESETS, DIFFICULTY_KEYS, accelFromSpeed, speedFromAccel, migrateDifficulty, type DifficultyPreset } from '../lib/difficulty';
-import { makeCpu, stepCpu, mergeCpuStep, cpuKps } from '../lib/cpu';
+import { makeCpu, stepCpu, mergeCpuStep, cpuKps, pickCpuTarget } from '../lib/cpu';
 
 // --- 定数 ---
 // 初めて遊ぶ人の設定は難易度「ふつう」。
@@ -1064,15 +1064,15 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       const alive = steps.map((s) => s.next).filter((d) => !d.isKO);
       if (alive.length === 0) return;
 
-      // 攻撃の行き先は、自分（プレイヤー）を含む生存者からランダム。
+      // 攻撃の行き先は、自分（プレイヤー）を含む生存者から。自分は狙われやすい（lib/cpu.ts の pickCpuTarget）。
       // フリーズ中や、予告が溜まっている間（MAX_INCOMING 以上）はプレイヤーには撃たれない。
       for (const s of steps) {
         for (const amount of s.attacks) {
           const from = s.next;
           if (from.isKO) continue;
           const others = alive.filter((d) => d.id !== from.id);
-          const pick = Math.floor(Math.random() * (others.length + 1));
-          if (pick === others.length) {
+          const pick = pickCpuTarget(others.length, Math.random);
+          if (pick === 'player') {
             const incomingNow = pendingRef.current.reduce((sum, e) => sum + e.amount, 0);
             if (Date.now() < freezeUntilRef.current || incomingNow >= MAX_INCOMING) continue;
             lastAttackerRef.current = from.id;

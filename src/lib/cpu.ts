@@ -60,6 +60,16 @@ export function stepCpu(d: Dummy, supplyPerSec: number, maxH: number, rnd: () =>
   return { next: { ...d, height, combo, feed, prog, gauge }, attacks, overflow: false };
 }
 
+// CPU の攻撃の行き先を決める。自分（プレイヤー）は CPU 1体の playerWeight 倍狙われやすい
+// （バトルロワイヤルの主役として集中砲火を受ける）。均等に選ぶと自分への攻撃が以前の約4分の1になり、
+// 着弾予告・相殺・防御アイテムの出番がほとんど無くなったため。
+// 戻り値は 'player' か、相手の CPU の添字（others の中の位置）。
+export const CPU_PLAYER_WEIGHT = 3;
+export function pickCpuTarget(othersCount: number, rnd: () => number, playerWeight = CPU_PLAYER_WEIGHT): number | 'player' {
+  const r = rnd() * (othersCount + playerWeight);
+  return r >= othersCount ? 'player' : Math.floor(r);
+}
+
 // stepCpu の結果（before→after の変化）を最新の状態 latest に重ねる。
 // 画面では step を計算している間にプレイヤーの攻撃が入ることがあり、after で丸ごと
 // 置き換えるとその攻撃が消えてしまうため、高さは差分だけを足す。

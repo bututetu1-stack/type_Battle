@@ -1,10 +1,11 @@
 // ソロ（バトル）の難易度プリセット。SoloGame と scripts/balance-sim.ts（調整用の模擬対戦）が同じ値を使う。
 // 数値を変えたら `npm run balancesim` で、打鍵の速さ別の勝率・試合時間を確かめること。
 //
-// 狙い（2026-10-21 の模擬対戦。ミス率5%・アイテムは拾ったら使用・狙いはランダム）:
-//   かんたん   … 2打/秒の初心者も4回に1回は勝てる。3打/秒ならほぼ勝つ。1試合 約3分
-//   ふつう     … 4打/秒で勝率 約5割、5打/秒でほぼ勝つ。1試合 約3分
-//   むずかしい … 6打/秒で勝率 約5割、8打/秒でほぼ勝つ。1試合 約2分半
+// 狙い（2026-10-21 の模擬対戦。ミス率5%・読む時間0.3秒・アイテムは拾ったら使用・狙いはランダム）:
+//   かんたん   … 2打/秒の初心者でも半分くらい勝てる。3打/秒ならほぼ勝つ。1試合 約2分半
+//   ふつう     … 4打/秒で勝率 約7割、5打/秒でほぼ勝つ。1試合 約3分
+//   むずかしい … 6打/秒で勝率 約6割、8打/秒でほぼ勝つ。1試合 約2分
+// CPU は自分を少し優先して狙う（lib/cpu.ts の CPU_PLAYER_WEIGHT）。被弾は1分あたり およそ 3 / 9 / 17 語。
 
 export interface DifficultyPreset {
   label: string;
@@ -17,9 +18,9 @@ export interface DifficultyPreset {
 }
 
 export const DIFFICULTY_PRESETS = {
-  easy: { label: 'かんたん', initial: 4600, min: 1600, accelSpeed: 1, hp: 14, enemies: 6, cpuStr: 1 },
-  normal: { label: 'ふつう', initial: 3600, min: 1100, accelSpeed: 1, hp: 12, enemies: 10, cpuStr: 4 },
-  hard: { label: 'むずかしい', initial: 2800, min: 900, accelSpeed: 1, hp: 10, enemies: 14, cpuStr: 8 },
+  easy: { label: 'かんたん', initial: 5000, min: 1600, accelSpeed: 1, hp: 14, enemies: 6, cpuStr: 0 },
+  normal: { label: 'ふつう', initial: 3600, min: 1100, accelSpeed: 1, hp: 14, enemies: 10, cpuStr: 3 },
+  hard: { label: 'むずかしい', initial: 2800, min: 900, accelSpeed: 1, hp: 10, enemies: 14, cpuStr: 6 },
 } as const satisfies Record<string, DifficultyPreset>;
 
 export type DifficultyKey = keyof typeof DIFFICULTY_PRESETS;

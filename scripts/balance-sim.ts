@@ -11,7 +11,7 @@
 // 実ゲームとの照合（2026-10-21）: ふつう・4.7KPS・ノーミス・アイテムなしで、旧CPUの実プレイが 55〜90秒で
 // 7〜10位、模擬が中央 77秒・9位。
 import { DIFFICULTY_PRESETS, DIFFICULTY_KEYS, accelFromSpeed, type DifficultyPreset } from '../src/lib/difficulty';
-import { makeCpu, stepCpu } from '../src/lib/cpu';
+import { makeCpu, stepCpu, pickCpuTarget, CPU_PLAYER_WEIGHT } from '../src/lib/cpu';
 import { generateWord, newWordBag } from '../src/lib/words';
 import { mulberry32 } from '../src/lib/rng';
 import type { Dummy, Word } from '../src/lib/types';
@@ -24,6 +24,7 @@ const WORD_OVERHEAD = Number(process.env.OVERHEAD ?? 300); // お題を読んで
 const ITEMS_ON = process.env.ITEMS !== '0';
 const MAX_TIME = 10 * 60 * 1000; // 10分で打ち切り
 const SPREAD = process.env.SPREAD ? Number(process.env.SPREAD) : undefined; // CPUの強さのばらつき（調整用）
+const PLAYER_WEIGHT = Number(process.env.PW ?? CPU_PLAYER_WEIGHT); // 自分の狙われやすさ（調整用）
 
 // SoloGame と同じ値
 const TELEGRAPH_DELAY = 2500;
@@ -44,7 +45,7 @@ const ITEMS: { item: Item; w: number }[] = [
   { item: 'shrink', w: 1 }, { item: 'rapid', w: 1 }, { item: 'keep', w: 1 }, { item: 'goldify', w: 0.8 },
 ];
 
-interface Result { win: boolean; ms: number; rank: number; kos: number }
+interface Result { win: boolean; ms: number; rank: number; kos: number; incoming: number } // incoming = CPU から自分へ撃たれたおじゃまの数
 
 function play(p: DifficultyPreset, kps: number, seed: number): Result {
   const R = mulberry32(seed);
@@ -103,7 +104,8 @@ function play(p: DifficultyPreset, kps: number, seed: number): Result {
     let acc = R() * total;
     for (const x of ITEMS) { acc -= x.w; if (acc <= 0) { applyItem(x.item, now); return; } }
   };
-  const lose = (now: number): Result => ({ win: false, ms: now, rank: alive().length + 1, kos });
+  let incoming = 0;
+  const lose = (now: number): Result => ({ win: false, ms: now, rank: alive().length + 1, kos, incoming });
 
   for (let now = 0; now <= MAX_TIME; now += 50) {
     // 打鍵: 山の先頭を打ち始め、時間が来たらクリア
@@ -133,7 +135,7 @@ function play(p: DifficultyPreset, kps: number, seed: number): Result {
       }
       if (now < rapidUntil) fireAttack(1);
       if (cleared.type === 'treasure') grantItem(now);
-      if (alive().length === 0) return { win: true, ms: now, rank: 1, kos };
+      if (alive().length === 0) return { win: true, ms: now, rank: 1, kos, incoming };
     }
     if (backlog.length === 0 && pending.length > 0) backlog = [shortWord()]; // 迎撃
 
@@ -161,7 +163,7 @@ function play(p: DifficultyPreset, kps: number, seed: number): Result {
       }
     }
 
-    // CPU（1秒ごと）: SoloGame と同じ stepCpu。攻撃の行き先は自分を含む生存者からランダム。
+    // CPU（1秒ごと）: SoloGame と同じ stepCpu と pickCpuTarget。
     if (now >= nextCpuTick) {
       nextCpuTick += 1000;
       const supply = 1000 / interval;
@@ -176,15 +178,15 @@ function play(p: DifficultyPreset, kps: number, seed: number): Result {
         const others = alive().filter((c) => c.id !== from.id);
         const incomingNow = pending.reduce((s, e) => s + e.amount, 0);
         const canHitMe = now >= freezeUntil && incomingNow < MAX_INCOMING;
-        const pick = Math.floor(R() * (others.length + 1));
-        if (pick === others.length) {
-          if (canHitMe) pending.push({ amount, at: now + TELEGRAPH_DELAY });
+        const pick = pickCpuTarget(others.length, R, PLAYER_WEIGHT);
+        if (pick === 'player') {
+          if (canHitMe) { pending.push({ amount, at: now + TELEGRAPH_DELAY }); incoming += amount; }
         } else hit(others[pick], amount, false);
       }
-      if (alive().length === 0) return { win: true, ms: now, rank: 1, kos };
+      if (alive().length === 0) return { win: true, ms: now, rank: 1, kos, incoming };
     }
   }
-  return { win: false, ms: MAX_TIME, rank: alive().length + 1, kos };
+  return { win: false, ms: MAX_TIME, rank: alive().length + 1, kos, incoming };
 }
 
 const pct = (x: number) => `${Math.round(x * 100)}%`.padStart(4);
@@ -197,12 +199,12 @@ for (const key of DIFFICULTY_KEYS) {
   if (process.env.ONLY && process.env.ONLY !== key) continue;
   const p: DifficultyPreset = { ...DIFFICULTY_PRESETS[key], ...(override ?? {}) };
   console.log(`\n■ ${p.label}  初速${p.initial / 1000}s 最短${p.min / 1000}s 加速${p.accelSpeed} HP${p.hp} 敵${p.enemies} CPU${p.cpuStr}`);
-  console.log('  KPS  勝率  試合時間(中央)  負けた時の順位(中央)  撃破(平均)');
+  console.log('  KPS  勝率  試合時間(中央)  負けた時の順位(中央)  撃破(平均)  被弾/分(平均)');
   for (const kps of KPS_LEVELS) {
     const rs = Array.from({ length: GAMES }, (_, i) => play(p, kps, 1000 + i * 7919));
     const wins = rs.filter((r) => r.win);
     const losses = rs.filter((r) => !r.win);
     const lossRank = losses.length ? `${median(losses.map((r) => r.rank))}位/${p.enemies + 1}人` : '-';
-    console.log(`  ${String(kps).padStart(3)}  ${pct(wins.length / GAMES)}  ${mmss(median(rs.map((r) => r.ms))).padStart(8)}        ${lossRank.padEnd(12)}  ${(rs.reduce((s, r) => s + r.kos, 0) / GAMES).toFixed(1)}`);
+    console.log(`  ${String(kps).padStart(3)}  ${pct(wins.length / GAMES)}  ${mmss(median(rs.map((r) => r.ms))).padStart(8)}        ${lossRank.padEnd(12)}  ${(rs.reduce((s, r) => s + r.kos, 0) / GAMES).toFixed(1).padEnd(10)}  ${(rs.reduce((s, r) => s + r.incoming / (r.ms / 60000), 0) / GAMES).toFixed(1)}`);
   }
 }
