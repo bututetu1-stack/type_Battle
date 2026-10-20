@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Trophy, X, Globe, Smartphone, Loader2, RefreshCw } from 'lucide-react';
-import { topScores, type ScoreMode } from '../lib/scores';
+import { topScores, loadScores, type ScoreMode, type ScoreRecord } from '../lib/scores';
 import { fetchGlobalTop, currentUid, LEADERBOARD_BUCKETS, type GlobalEntry } from '../lib/leaderboard';
 
 interface RecordsBoardProps {
@@ -24,9 +24,14 @@ function tab(active: boolean): string {
 }
 
 // 端末ローカル＋グローバル（オンライン）のハイスコア表。
-export default function RecordsBoard({ initialMode = 'timeattack', initialView = 'local', onClose }: RecordsBoardProps) {
+export default function RecordsBoard({ initialMode, initialView = 'local', onClose }: RecordsBoardProps) {
   const [view, setView] = useState<'local' | 'online'>(initialView);
-  const [mode, setMode] = useState<ScoreMode>(initialMode);
+  // 指定が無ければ、最後に遊んだモードのタブで開く（記録の無いタブが空で出ないように）。
+  const [mode, setMode] = useState<ScoreMode>(() => {
+    if (initialMode) return initialMode;
+    const latest = loadScores().reduce<ScoreRecord | null>((a, r) => (!a || r.ts > a.ts ? r : a), null);
+    return latest?.mode ?? 'timeattack';
+  });
   const [bucket, setBucket] = useState<number>(60);
 
   return (
