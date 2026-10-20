@@ -116,3 +116,18 @@ export function savePlayerName(name: string): void {
     /* 失敗は無視 */
   }
 }
+
+// 今回の記録（excludeTs）を除いた、同じモード（タイムアタックは同じ秒数）での自己ベスト。
+// スコアと KPS はそれぞれの最大値。記録が無ければ null（＝初記録）。
+export function previousBest(
+  mode: ScoreMode,
+  taSeconds: number | undefined,
+  excludeTs: number | null,
+  records: ScoreRecord[] = loadScores(),
+): { score: number; kps: number } | null {
+  const same = records.filter(
+    (r) => r.mode === mode && r.ts !== excludeTs && (mode !== 'timeattack' || r.taSeconds === taSeconds),
+  );
+  if (same.length === 0) return null;
+  return { score: Math.max(...same.map((r) => r.score)), kps: Math.max(...same.map((r) => r.kps || 0)) };
+}

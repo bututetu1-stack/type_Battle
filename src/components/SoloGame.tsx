@@ -23,7 +23,9 @@ import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
 import RecordsBoard from './RecordsBoard';
 import TrCorners from './TrCorners';
-import { computeScore, accuracyOf, addScore, renameScore, loadPlayerName, savePlayerName, type ScoreRecord } from '../lib/scores';
+import { computeScore, accuracyOf, addScore, renameScore, loadPlayerName, savePlayerName, previousBest, type ScoreRecord } from '../lib/scores';
+import { expectedNextChar, bump, kpsSeries, type Tally } from '../lib/analytics';
+import ResultInsights from './ResultInsights';
 import { submitGlobalScore } from '../lib/leaderboard';
 
 // --- 定数 ---
@@ -380,6 +382,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // 袋方式に加え、テーマを絞った時・巡の境目・アイテム系のどの経路でも近接重複を防ぐ。
   // ソロ専用のローカル処理（オンラインのシード同期には一切影響しない）。
   const recentRef = useRef<string[]>([]);
+  // リザルト分析用: ミスの帰属（打つべきだった文字／音）と、正しく打った時刻の列。
+  const missKeysRef = useRef<Tally>({});
+  const missKanaRef = useRef<Tally>({});
+  const keyTimesRef = useRef<number[]>([]);
   const themeRef = useRef(theme);
   useEffect(() => { themeRef.current = theme; }, [theme]);
   const targetModeRef = useRef(targetMode);
@@ -814,6 +820,9 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setSeed(newSeed);
     bagRef.current = newWordBag(); // 出題バッグを新しい1巡でリセット
     recentRef.current = []; // 近接重複ガードの直近履歴もリセット
+    missKeysRef.current = {};
+    missKanaRef.current = {};
+    keyTimesRef.current = [];
     setBacklog([nextWord(), nextWord(), nextWord()]);
     setTokenIndex(0);
     setCurrentTyping('');
@@ -921,9 +930,16 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       if (gameState !== 'playing' || e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
       e.preventDefault();
       const key = e.key.toLowerCase();
-      const result = processKey(key, stateRef.current);
+      const before = stateRef.current;
+      const result = processKey(key, before);
 
       if (result.miss) {
+        // 苦手キー分析: その瞬間ガイドに出ていた次の1文字と、その音を数える。
+        const cur = before.backlog[0];
+        if (cur) {
+          bump(missKeysRef.current, expectedNextChar(cur, before.tokenIndex, before.currentTyping));
+          bump(missKanaRef.current, cur.tokens[before.tokenIndex]?.kana);
+        }
         // 連鎖キープ中はミスしても連鎖（＝アタック数）を維持する。
         if (Date.now() >= keepUntilRef.current) setCombo(0);
         setMissCount((m) => m + 1);
@@ -934,6 +950,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         // タイムアタック: ノーミス連続でないと時間が伸びない。ミスで連打メーターをリセット。
         if (soloModeRef.current === 'timeattack') { timeStreakRef.current = 0; setTimeGauge(0); }
       } else if (result.wordCleared && result.nextState) {
+        keyTimesRef.current.push(Date.now());
         const newCombo = result.nextState.combo;
         // 寿司打式タイムアタックは時限供給を使わないので、クリアごとに山を3件へ補充して
         // 「次々お題が流れてくる」状態を保つ（プレビュー込みで途切れない）。
@@ -994,6 +1011,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         setCurrentTyping(result.nextState.currentTyping);
         if (result.typed) setTypedRomaji((tr) => { const n = [...tr]; for (const x of result.typed!) n[x.index] = x.romaji; return n; });
         setKeysTyped((prev) => prev + 1);
+        keyTimesRef.current.push(Date.now());
         taType(); // ノーミス打鍵を連打メーターへ加算
         sfx.type();
       }
@@ -1320,6 +1338,22 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   };
 
   // 結果画面に共通で出す「総合スコア＋記録保存」UI。
+  // リザルトの分析パネル（ランク・自己ベスト比較・速度推移・苦手キー）。
+  const renderInsights = () => {
+    const mode = soloMode === 'timeattack' ? 'timeattack' : 'royale';
+    return (
+      <ResultInsights
+        kps={calculateKPS()}
+        acc={accuracyOf(keysTyped, missCount)}
+        score={currentScore()}
+        prev={previousBest(mode, mode === 'timeattack' ? cfgTaSeconds : undefined, savedTsRef.current)}
+        series={startTime ? kpsSeries(keyTimesRef.current, startTime, endTime ?? Date.now()) : []}
+        missKeys={missKeysRef.current}
+        missKana={missKanaRef.current}
+      />
+    );
+  };
+
   const renderResultExtras = () => (
     <div className="flex flex-col items-center gap-3 mb-6 w-full max-w-sm">
       <div className="text-center">
@@ -2280,7 +2314,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           )}
 
           {gameState === 'gameover' && (
-            <div className="absolute inset-0 bg-red-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
+            <div className="absolute inset-0 bg-red-950/90 backdrop-blur-md overflow-y-auto z-20 rounded-2xl flex">
+              <div className="m-auto flex flex-col items-center py-6 px-4 w-full">
               <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(220,38,38,0.8)]">TOP OUT</h2>
               <p className="text-red-300 mb-6">おじゃまブロックがあふれました</p>
               {renderBattleStanding()}
@@ -2293,16 +2328,19 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <Stat label="ミス" value={missCount} />
                 <Stat label="SEED" value={seed} small />
               </div>
+              {renderInsights()}
               {renderResultExtras()}
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
               <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-amber-300" /> カスタム設定を変更
               </button>
+              </div>
             </div>
           )}
 
           {gameState === 'win' && (
-            <div className="absolute inset-0 bg-emerald-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
+            <div className="absolute inset-0 bg-emerald-950/90 backdrop-blur-md overflow-y-auto z-20 rounded-2xl flex">
+              <div className="m-auto flex flex-col items-center py-6 px-4 w-full">
               <Crown className="w-16 h-16 text-yellow-400 mb-3" />
               <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]">YOU WIN!</h2>
               <p className="text-emerald-300 mb-3">全ての敵を倒した！</p>
@@ -2316,16 +2354,19 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <Stat label="ミス" value={missCount} />
                 <Stat label="SEED" value={seed} small />
               </div>
+              {renderInsights()}
               {renderResultExtras()}
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
               <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-amber-300" /> カスタム設定を変更
               </button>
+              </div>
             </div>
           )}
 
           {gameState === 'timeup' && (
-            <div className="absolute inset-0 bg-indigo-950/90 backdrop-blur-md flex flex-col items-center justify-center z-20 rounded-2xl">
+            <div className="absolute inset-0 bg-indigo-950/90 backdrop-blur-md overflow-y-auto z-20 rounded-2xl flex">
+              <div className="m-auto flex flex-col items-center py-6 px-4 w-full">
               <Timer className="w-16 h-16 text-cyan-300 mb-3" />
               <h2 className="font-tech text-5xl font-bold text-white mb-2 tracking-[0.14em] drop-shadow-[0_0_15px_rgba(99,102,241,0.8)]">TIME UP</h2>
               <p className="text-indigo-200 mb-8">{cfgTaSeconds}秒タイムアタック終了！</p>
@@ -2337,11 +2378,13 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <Stat label="正確率" value={keysTyped + missCount > 0 ? Math.round((keysTyped / (keysTyped + missCount)) * 100) : 100} suffix="%" />
                 <Stat label="ミス" value={missCount} />
               </div>
+              {renderInsights()}
               {renderResultExtras()}
               <p className="text-gray-400 font-mono animate-pulse">Press [SPACE] to Retry</p>
               <button onClick={() => setSettingsOpen(true)} className="mt-4 bg-neutral-800 hover:bg-neutral-700 border border-white/10 rounded-lg px-4 py-2 font-bold text-sm flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-amber-300" /> カスタム設定を変更
               </button>
+              </div>
             </div>
           )}
         </div>
