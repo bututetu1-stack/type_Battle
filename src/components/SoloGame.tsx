@@ -30,7 +30,7 @@ import { expectedNextChar, bump, kpsSeries, type Tally } from '../lib/analytics'
 import ResultInsights from './ResultInsights';
 import { submitGlobalScore } from '../lib/leaderboard';
 import { DIFFICULTY_PRESETS, DIFFICULTY_KEYS, accelFromSpeed, speedFromAccel, migrateDifficulty, type DifficultyPreset } from '../lib/difficulty';
-import { makeCpu, stepCpu, mergeCpuStep } from '../lib/cpu';
+import { makeCpu, stepCpu, mergeCpuStep, cpuKps } from '../lib/cpu';
 
 // --- 定数 ---
 // 初めて遊ぶ人の設定は難易度「ふつう」。
@@ -2253,7 +2253,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                           <CfgSlider label="加速の速さ" hint="大きいほど早く速くなる／0で加速なし" value={accelSpeed} display={accelSpeed.toFixed(1)} min={0} max={10} step={0.5} onChange={setAccelFromSpeed} />
                           <CfgSlider label="自分のHP（積める量）" value={cfgHp} display={String(cfgHp)} min={HP_MIN} max={HP_MAX} step={1} onChange={setCfgHp} />
                           <CfgSlider label="敵の数" value={cfgEnemies} display={`${cfgEnemies}人`} min={1} max={MAX_DUMMIES} step={1} onChange={setCfgEnemies} />
-                          <CfgSlider label="CPUの強さ（平均）" hint="強いCPUと弱いCPUが混ざり、平均がこの値" value={cfgCpuStr} display={String(cfgCpuStr)} min={0} max={10} step={1} onChange={setCfgCpuStr} />
+                          <CfgSlider label="CPUの強さ（平均）" hint="速いCPUと遅いCPUが混ざり、平均がこの値（右は打つ速さの目安）" value={cfgCpuStr} display={`${cfgCpuStr}（約${cpuKps(cfgCpuStr / 10).toFixed(1)}打/秒）`} min={0} max={10} step={1} onChange={setCfgCpuStr} />
                         </div>
                       </CfgSection>
 

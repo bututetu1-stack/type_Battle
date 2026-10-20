@@ -22,7 +22,8 @@ import {
 import ItemIcon from './ItemIcon';
 import { loadKeyConfig, keyLabel, type KeyConfig } from '../lib/keyconfig';
 import PlayerSettings from './PlayerSettings';
-import type { GameMode, ItemType, TargetMode, Word } from '../lib/types';
+import type { Dummy, GameMode, ItemType, TargetMode, Word } from '../lib/types';
+import { makeCpu, stepCpu, cpuKps } from '../lib/cpu';
 import MiniBoard from './MiniBoard';
 import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
@@ -172,7 +173,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   const scoreWrittenRef = useRef(false); // 総合スコアの二重書込ガード（1試合1回）
   const playersRef = useRef(players);
   // CPU（擬似プレイヤー）のシミュレーション状態（ホストのみ使用）。
-  const cpuSimRef = useRef<Record<string, { backlog: number; combo: number; alive: boolean; rank: number; progress: number; koBy: string }>>({});
+  const cpuSimRef = useRef<Record<string, { d: Dummy; rank: number; koBy: string }>>({});
   const slotsRef = useRef(slots);
   const selectedSlotRef = useRef(selectedSlot);
   const targetModeRef = useRef(targetMode);
@@ -1144,89 +1145,72 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     if (aliveCount === 0 || (total >= 2 && aliveCount <= 1)) finishGame(roomId);
   }, [players, status, uid, hostUid, roomId, started, bossMode, bossUid]);
 
-  // ホスト: CPU（擬似プレイヤー）をシミュレートする。
-  // CPUごとに backlog/combo を管理し、攻撃の送受信・撃破・サマリ書込みを host が代行する。
+  // ホスト: CPU（擬似プレイヤー）をシミュレートする。動きはソロと同じ lib/cpu.ts
+  // （打つ速さを持ったプレイヤー。人と同じペースで単語が積まれ、遅いCPUから脱落する）。
+  // 以前は片付ける速さを「1秒あたりの語数」で持ちながら KPS として扱っていて（強さ5で約1.9語/秒＝
+  // 人なら17打/秒相当）、連鎖も切れなかったため、CPU がほぼ倒せなかった。
+  // CPUごとの盤面・攻撃の送受信・撃破・サマリ書込みを host が代行する。
   useEffect(() => {
     if (uid !== hostUid || !started || status !== 'playing') return;
     const cpuIds = Object.entries(playersRef.current).filter(([, p]) => p.isCpu).map(([id]) => id);
     if (cpuIds.length === 0) return;
     const cpuMax = playerHp;
     const baseSpawn = typeof spawnMs === 'number' ? spawnMs : INITIAL_SPAWN_INTERVAL;
-    const DT = 250;
-    // 初期化（新規ゲームのたびに alive を立て直す）。
+    const attackOpts = { attackEvery: atkGauge, comboStep: cStep, attackCap: Math.min(atkCap, 3) };
+    // 初期化（新規ゲームのたびに alive を立て直す）。強さは部屋で決めた値そのまま（ばらつかせない）。
     for (const id of cpuIds) {
-      cpuSimRef.current[id] = { backlog: 3, combo: 0, alive: true, rank: 0, progress: 0, koBy: '' };
+      const d = makeCpu(0, id, playersRef.current[id]?.str ?? 0.5, Math.random, 0);
+      cpuSimRef.current[id] = { d: { ...d, height: 3 }, rank: 0, koBy: '' };
       writePlayerSummary(roomId, id, { alive: true, rank: 0, backlog: 3, combo: 0, koBy: '', kpm: 0 });
     }
-    // 被弾の購読（CPUごと）。
+    // 被弾の購読（CPUごと）。脱落の判定は次の1秒の stepCpu で行う。
     const unsubs = cpuIds.map((id) =>
       subscribeAttacks(roomId, id, (ev) => {
         const s = cpuSimRef.current[id];
-        if (!s || !s.alive) return;
-        s.backlog += ev.word ? 2 : ev.amount;
+        if (!s || s.d.isKO) return;
+        s.d = { ...s.d, height: s.d.height + (ev.word ? 2 : ev.amount) };
         if (ev.from) s.koBy = ev.from;
       }),
     );
     const tick = () => {
-      const elapsedSec = Math.max(0, (Date.now() - startTimeRef.current) / 1000);
-      // 供給は時間とともに少しずつ速くなる（人間側の加速に合わせる）。
-      const spawnMsNow = Math.max(MIN_SPAWN_INTERVAL, baseSpawn * Math.pow(0.985, elapsedSec));
+      const elapsedMs = Math.max(0, Date.now() - startTimeRef.current);
+      // 人と同じ供給ペース（1語ごとに間隔×0.98 ＝ 経過時間に対してほぼ直線で短くなる）。
+      const spawnMsNow = Math.max(MIN_SPAWN_INTERVAL, baseSpawn - 0.02 * elapsedMs);
       for (const id of cpuIds) {
         const s = cpuSimRef.current[id];
-        if (!s || !s.alive) continue;
-        const str = playersRef.current[id]?.str ?? 0.5;
-        // 供給。
-        if (Math.random() < Math.min(0.9, DT / spawnMsNow)) s.backlog += 1;
-        // クリア（強いほど速い）。期待クリア数ぶん試行。
-        let chances = (0.7 + str * 2.4) * (DT / 1000);
-        while (chances > 0 && s.backlog > 0) {
-          if (Math.random() < Math.min(1, chances)) {
-            s.backlog -= 1;
-            s.combo += 1;
-            s.progress += 1;
-            if (s.progress >= atkGauge) {
-              s.progress -= atkGauge;
-              const targets = Object.entries(playersRef.current).filter(([tid, tp]) => tid !== id && isLive(tp));
-              if (targets.length > 0) {
-                const t = targets[Math.floor(Math.random() * targets.length)];
-                const amt = Math.min(atkCap, 1 + Math.floor(s.combo / cStep));
-                // アイテムON時は低確率でCPUもアイテムを使用（無効化アイテムは送らない）。
-                const canDazzle = itemsOnRef.current && !disabledItemsRef.current.has('dazzle');
-                const roll = Math.random();
-                if (canDazzle && roll < 0.06) {
-                  sendAttack(roomId, t[0], id, 0, undefined, 'dazzle'); // 視認性低下
-                } else {
-                  sendAttack(roomId, t[0], id, amt);
-                }
-              }
-            }
-          }
-          chances -= 1;
+        if (!s || s.d.isKO) continue;
+        const step = stepCpu(s.d, 1000 / spawnMsNow, cpuMax, Math.random, attackOpts);
+        s.d = step.next;
+        for (const amt of step.attacks) {
+          const targets = Object.entries(playersRef.current).filter(([tid, tp]) => tid !== id && isLive(tp));
+          if (targets.length === 0) break;
+          const t = targets[Math.floor(Math.random() * targets.length)];
+          // アイテムON時は低確率でCPUもアイテムを使用（無効化アイテムは送らない）。
+          const canDazzle = itemsOnRef.current && !disabledItemsRef.current.has('dazzle');
+          if (canDazzle && Math.random() < 0.06) sendAttack(roomId, t[0], id, 0, undefined, 'dazzle'); // 視認性低下
+          else sendAttack(roomId, t[0], id, amt);
         }
-        // CPU の表示用 KPS / 総打鍵 / 総合スコア（強さから合成。ランキング表示用）。
-        const cpuKps = Math.round((0.7 + str * 2.4) * 10) / 10;
-        const cpuKeys = Math.round(cpuKps * Math.max(1, elapsedSec));
-        const cpuAcc = Math.min(1, 0.9 + str * 0.08);
-        const cpuScore = Math.round(cpuKeys * cpuAcc * cpuAcc * cpuKps);
-        // 撃破判定。
-        if (s.backlog >= cpuMax) {
-          s.alive = false;
+        // ランキング表示用の KPS・総打鍵・総合スコア（人と同じ計算式。速さから合成）。
+        const str = s.d.str ?? 0.5;
+        const seconds = Math.max(1, elapsedMs / 1000);
+        const kps = Math.round(cpuKps(str) * 10) / 10;
+        const keys = Math.round(kps * seconds);
+        const acc = Math.min(1, 0.9 + str * 0.08);
+        const score = computeScore({ keys, miss: Math.round(keys * (1 - acc)), seconds, maxCombo: s.d.combo ?? 0 });
+        const stats = { kpm: Math.round(kps * 60), kps, keys, acc, score };
+        if (s.d.isKO) {
           const aliveCount = Object.values(playersRef.current).filter(isLive).length;
           s.rank = Math.max(1, aliveCount);
-          writePlayerSummary(roomId, id, {
-            alive: false, rank: s.rank, backlog: cpuMax, combo: 0, koBy: s.koBy,
-            kpm: Math.round(cpuKps * 60), kps: cpuKps, keys: cpuKeys, acc: cpuAcc, score: cpuScore,
-          });
+          writePlayerSummary(roomId, id, { alive: false, rank: s.rank, backlog: cpuMax, combo: 0, koBy: s.koBy, ...stats });
           continue;
         }
         writePlayerSummary(roomId, id, {
-          alive: true, backlog: s.backlog, combo: s.combo,
-          kpm: Math.round(cpuKps * 60), kps: cpuKps, keys: cpuKeys, acc: cpuAcc, score: cpuScore,
+          alive: true, backlog: s.d.height, combo: s.d.combo ?? 0, ...stats,
           curDisplay: '🤖', curReading: '', curIdx: 0, curTyping: '',
         });
       }
     };
-    const interval = setInterval(tick, DT);
+    const interval = setInterval(tick, 1000);
     return () => {
       clearInterval(interval);
       unsubs.forEach((u) => u());

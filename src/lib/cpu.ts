@@ -25,6 +25,13 @@ export function makeCpu(id: number, name: string, avgStr: number, rnd: () => num
   return { id, name, height: 2 + Math.floor(rnd() * 3), isKO: false, combo: 0, atk: 0, str, feed: rnd(), prog: rnd() * 0.5, gauge: 0 };
 }
 
+// 攻撃の出し方。ソロは既定値、オンラインは部屋の設定（何語で攻撃・何連鎖で+1）を渡す。
+export interface CpuAttackOpts {
+  attackEvery?: number; // 何語クリアごとに攻撃するか
+  comboStep?: number; // 何連鎖ごとに攻撃量が+1されるか
+  attackCap?: number; // 1回の攻撃量の上限（CPU は人より控えめに 3 まで）
+}
+
 export interface CpuStep {
   next: Dummy;
   attacks: number[]; // この1秒で放った攻撃（おじゃまの数）
@@ -32,7 +39,8 @@ export interface CpuStep {
 }
 
 // 1秒ぶん進める。supplyPerSec = いまの供給ペース（1秒あたりの語数＝プレイヤーと同じ）。
-export function stepCpu(d: Dummy, supplyPerSec: number, maxH: number, rnd: () => number): CpuStep {
+export function stepCpu(d: Dummy, supplyPerSec: number, maxH: number, rnd: () => number, opts: CpuAttackOpts = {}): CpuStep {
+  const { attackEvery = CPU_ATTACK_EVERY, comboStep = 5, attackCap = 3 } = opts;
   if (d.isKO) return { next: d, attacks: [], overflow: false };
   const str = d.str ?? 0.5;
   let height = d.height;
@@ -45,7 +53,7 @@ export function stepCpu(d: Dummy, supplyPerSec: number, maxH: number, rnd: () =>
   while (prog >= 1 && height > 0) {
     height--; prog--;
     combo = rnd() < cpuMissPerWord(str) ? 0 : combo + 1;
-    if (++gauge >= CPU_ATTACK_EVERY) { gauge = 0; attacks.push(Math.min(1 + Math.floor(combo / 5), 3)); }
+    if (++gauge >= attackEvery) { gauge = 0; attacks.push(Math.min(1 + Math.floor(combo / comboStep), attackCap)); }
   }
   if (height === 0) prog = Math.min(prog, 0.5); // 山が空の間は先に進めない（手が空く）
   if (height > maxH) return { next: { ...d, height: 0, isKO: true, combo: 0, feed, prog, gauge }, attacks, overflow: true };

@@ -38,6 +38,7 @@ import { loadCustomWords } from '../lib/customwords';
 import { loadItemPrefs, saveItemPrefs, CAT_META, USE_MODES, ITEM_CAT, ONLINE_ITEM_META as ITEM_META, ITEM_EMOJI, type ItemPrefs } from '../lib/items';
 import type { ItemType } from '../lib/types';
 import OnlineGame from './OnlineGame';
+import { cpuKps } from '../lib/cpu';
 
 interface OnlineRoomProps {
   roomId: string;
@@ -254,7 +255,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                   />
                   <span className={`truncate text-[15px] ${id === uid ? 'font-bold text-text' : 'text-text'}`}>{p.name}</span>
                   {id === uid && <span className="text-xs text-muted shrink-0">あなた</span>}
-                  {p.isCpu && <span className="font-tech text-xs text-muted shrink-0">強さ {Math.round((p.str ?? 0.5) * 10)}</span>}
+                  {p.isCpu && <span className="font-tech text-xs text-muted shrink-0" title={`約${cpuKps(p.str ?? 0.5).toFixed(1)}打/秒`}>強さ {Math.round((p.str ?? 0.5) * 10)}</span>}
                   <span className="ml-auto flex items-center gap-2 shrink-0">
                     {id === meta.hostUid && <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: 'var(--charge)' }}><Crown className="w-3.5 h-3.5" />ホスト</span>}
                     {mode === 'boss' && id === (meta.bossUid || meta.hostUid) && <span className="text-xs font-semibold text-incoming">ボス</span>}
@@ -471,7 +472,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                 aside={cpuPlayers.length > 0 ? <span className="font-tech text-xs tabular-nums text-muted">{cpuPlayers.length}体</span> : undefined}>
                 <p className="text-sm text-muted leading-relaxed -mt-1">人数が少ない時の相手に。CPU はホストの端末で動きます（バトルロワイヤル向け）。外す時は参加者一覧の × から。</p>
                 <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] items-end">
-                  <CfgSlider label="追加するCPUの強さ" value={cpuStr} display={String(cpuStr)} min={0} max={10} step={1} onChange={setCpuStr} />
+                  <CfgSlider label="追加するCPUの強さ" hint="右は打つ速さの目安" value={cpuStr} display={`${cpuStr}（約${cpuKps(cpuStr / 10).toFixed(1)}打/秒）`} min={0} max={10} step={1} onChange={setCpuStr} />
                   <button
                     type="button"
                     onClick={() => addCpuPlayer(roomId, cpuStr / 10).catch(() => {})}
