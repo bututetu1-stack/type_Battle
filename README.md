@@ -3,7 +3,9 @@
 テトリス99型の「つぶし合い」をタイピングで実現するオンライン対戦ゲーム。
 速く正確に打つほど相手に「おじゃま単語」を送り込み、バックログ上限を超えた者から脱落、最後の1人が勝利する。
 
-**Phase 0（ソロ基盤）** に加え、**Phase 1（オンライン接続）** まで実装済み。匿名認証 + Firebase Realtime Database でルームを作成/参加し、共通シードと `startAt` による同期スタート、全プレイヤーのミニボード一覧をリアルタイム表示します。
+**ソロ**（CPU とのバトル・タイムアタック）と **オンライン対戦**（最大16人・ボス戦・CPU の参加）を実装済み。
+オンラインは匿名認証 + Firebase Realtime Database でルームを作成/参加し、共通シードと `startAt` による同期スタート、全プレイヤーのミニボード一覧をリアルタイム表示します。
+公開URL: https://bututetu1-stack.github.io/type_Battle/
 
 > 詳細仕様は [`docs/spec-v0.2.md`](docs/spec-v0.2.md) を参照。
 
@@ -12,7 +14,8 @@
 - [Vite](https://vitejs.dev/) + [React 18](https://react.dev/) + TypeScript
 - [Tailwind CSS](https://tailwindcss.com/) v3（+ `tailwindcss-animate`）
 - アイコン: [lucide-react](https://lucide.dev/)
-- 将来のオンライン同期: Firebase Realtime Database（Phase 1 以降）
+- オンライン: Firebase Realtime Database ＋ 匿名認証
+- テスト: [Vitest](https://vitest.dev/)
 - ホスティング: GitHub Pages（GitHub Actions による自動デプロイ）
 
 ## 開発
@@ -23,6 +26,8 @@ npm run dev      # 開発サーバ起動（http://localhost:5173）
 npm run build    # 型チェック + 本番ビルド（dist/）
 npm run preview  # ビルド結果をローカルプレビュー
 npm run lint     # 型チェックのみ
+npm test         # テスト（Vitest）
+npm run balancesim  # ソロの難易度バランスの模擬対戦
 ```
 
 ## 遊び方（ソロ）
@@ -103,24 +108,48 @@ npm run lint     # 型チェックのみ
 
 ```
 src/
-  App.tsx              ルーター（ホーム / ソロ / ロビー / ルーム）+ 匿名認証
-  main.tsx             エントリポイント
-  index.css            Tailwind 読み込み
+  App.tsx              ホーム＋画面の切替（各画面と辞書・Firebase はホーム表示後に後読み）
+  main.tsx             エントリポイント（ビルド識別子・古い版の自動読み直し）
+  index.css            色のトークン・共通部品（ui-*）・演出
   components/
-    SoloGame.tsx       ソロ練習（お題・判定・連鎖・攻撃・アイテム）
-    Lobby.tsx          オンラインのロビー（作成 / コード参加）
-    OnlineRoom.tsx     ルーム購読 + 待機画面 + presence
-    OnlineGame.tsx     オンライン対戦本体（同期スタート・サマリ書込・観戦・結果）
-    MiniBoard.tsx      ミニボード（ソロのダミー / オンラインの他プレイヤー共通）
+    SoloGame.tsx       ソロ（バトル / タイムアタック。開始・設定・プレイ・結果）
+    Lobby.tsx          オンラインのロビー（ルーム作成 / コードで参加）
+    OnlineRoom.tsx     ルーム購読 + 待機室（ルール・出題・CPU 追加）+ presence
+    OnlineGame.tsx     オンライン対戦本体（同期スタート・攻撃送受信・観戦・結果・ホストの CPU）
+    MiniBoard.tsx      相手の小さな盤面（ソロの CPU / オンラインの他プレイヤー共通）
+    CurrentWord.tsx    お題カードの中身（漢字・ふりがな・ローマ字の進捗）
+    AttackGauge.tsx    攻撃ゲージ
+    ResultInsights.tsx ソロ結果の分析（ランク・速度推移・苦手キー）
+    RecordsBoard.tsx   記録・ランキング
+    PlayerSettings.tsx プレイヤー設定（キー・テーマ・表示）
+    WordEditor.tsx     追加語句の編集
+    ui.tsx             共通部品（Seg / Field / Panel / Kbd / IconBtn / Hud / CfgSlider / CfgSection）
   lib/
-    rng.ts             決定論 PRNG（mulberry32）
-    words.ts           お題プール・ローマ字マップ・トークナイザ・単語生成
     engine.ts          打鍵判定コア（純粋関数 processKey）
-    types.ts           共有型定義
+    romaji.ts          ローマ字表・読みのトークン化・ふりがな
+    words.ts           お題の辞書・テーマ・出題（共通シードから全員同じ並び）
+    cpu.ts             ソロ / オンラインの CPU の動き（打つ速さを持ったプレイヤー）
+    difficulty.ts      ソロの難易度プリセット
+    items.ts           アイテムの定義（名前・説明・効果時間。ソロ / オンライン共通）
+    analytics.ts       結果の分析（純粋関数）
+    scores.ts          スコア計算・端末内の記録
+    keyconfig.ts       キー設定
+    theme.ts           カラーテーマ
+    sfx.ts             効果音
+    firebaseEnv.ts     Firebase の設定値と「設定されているか」の判定（SDK を読まない）
     firebase.ts        Firebase 初期化 + 匿名認証
     room.ts            ルーム CRUD / presence / サーバ時刻同期 / 攻撃送受信
+    leaderboard.ts     タイムアタックのオンラインランキング
+    rng.ts / types.ts  決定論 PRNG（mulberry32）/ 共有型定義
+    *.test.ts          Vitest のテスト
+scripts/
+  balance-sim.ts       難易度の模擬対戦（npm run balancesim）
+  wordbag-test.ts      出題の近接重複の確認（npm run wordtest）
+  screenshots.mjs      ソロ画面を自動プレイして撮影
+  online-shots.mjs     オンライン画面を2人（＋CPU）で実際に対戦して撮影
 docs/
   spec-v0.2.md         仕様書
+  HANDOFF.md           次の作業者（AI）への引き継ぎ
 database.rules.json    Realtime Database セキュリティルール
 ```
 
