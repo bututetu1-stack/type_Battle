@@ -1,5 +1,5 @@
 import type { Word } from '../lib/types';
-import { buildRuby } from '../lib/words';
+import { buildRuby } from '../lib/romaji';
 import type { ReadingMode } from '../lib/keyconfig';
 
 interface CurrentWordProps {

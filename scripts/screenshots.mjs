@@ -3,24 +3,30 @@
 //
 // 準備（一度だけ。package.json は変えない）:
 //   npm i --no-save playwright && npx playwright install chromium
+//   （Windows で Chrome / Edge が入っていれば npm i --no-save playwright-core だけでよい。自動で使う）
 // 使い方:
 //   npm run build && npm run preview        # 別のターミナルで起動しておく
 //   node scripts/screenshots.mjs [出力先=shots] [テーマ=violet] [幅x高さ=1920x1080]
 //   例: node scripts/screenshots.mjs shots light 1366x768
 // 環境変数:
 //   APP_URL       … 既定 http://localhost:4173/type_Battle/（npm run dev なら http://localhost:5173/）
-//   CHROMIUM_PATH … 既存の Chromium を使う場合のパス（未指定なら playwright 付属のもの）
+//   CHROMIUM_PATH … 既存の Chromium を使う場合のパス（未指定なら playwright 付属のもの／Windows の Chrome・Edge）
 //
 // テーマ: midnight / abyss / crimson / violet / forest / sunset / mono / light
-import { mkdirSync } from 'node:fs';
-import { chromium } from 'playwright';
+import { existsSync, mkdirSync } from 'node:fs';
+// playwright（ブラウザ同梱）が無ければ playwright-core ＋ PC の Chrome / Edge を使う。
+const { chromium } = await import('playwright').catch(() => import('playwright-core'));
+const localBrowser = [
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+].find((p) => existsSync(p));
 
 const [out = 'shots', theme = 'violet', vp = '1920x1080'] = process.argv.slice(2);
 const [W, H] = vp.split('x').map(Number);
 const URL = process.env.APP_URL ?? 'http://localhost:4173/type_Battle/';
 mkdirSync(out, { recursive: true });
 
-const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || localBrowser || undefined });
 const page = await browser.newPage({ viewport: { width: W, height: H } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));

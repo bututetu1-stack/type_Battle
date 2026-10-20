@@ -1,16 +1,32 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Loader2, Swords, Users, Settings, BookPlus, Trophy, ChevronRight } from 'lucide-react';
-import { ensureSignedIn, firebaseReady } from './lib/firebase';
-import SoloGame from './components/SoloGame';
-import Lobby from './components/Lobby';
-import OnlineRoom from './components/OnlineRoom';
+import { firebaseReady, OFFLINE_MESSAGE } from './lib/firebaseEnv';
 import PlayerSettings from './components/PlayerSettings';
-import WordEditor from './components/WordEditor';
-import RecordsBoard from './components/RecordsBoard';
 import { applyColorTheme, loadThemeId } from './lib/theme';
 import { loadCustomWords, saveCustomWords, loadCustomGroups, saveCustomGroups, type CustomWord } from './lib/customwords';
-import { setExtraWords } from './lib/words';
 import { loadScores } from './lib/scores';
+
+// 初回表示を速くするため、重いものはホームを出した後で読み込む。
+//   単語辞書（words.ts 約270KB）… ソロ／オンラインの画面と一緒に
+//   Firebase SDK（約340KB）… オンライン・記録画面と匿名サインインの時に
+// ホームが出たら空き時間に先読みするので、ボタンを押した時はほぼ待たない。
+const loadSolo = () => import('./components/SoloGame');
+const loadLobby = () => import('./components/Lobby');
+const loadRoom = () => import('./components/OnlineRoom');
+const loadWordEditor = () => import('./components/WordEditor');
+const loadRecords = () => import('./components/RecordsBoard');
+const loadWords = () => import('./lib/words');
+const SoloGame = lazy(loadSolo);
+const Lobby = lazy(loadLobby);
+const OnlineRoom = lazy(loadRoom);
+const WordEditor = lazy(loadWordEditor);
+const RecordsBoard = lazy(loadRecords);
+
+// ブラウザが暇になったら実行（未対応のブラウザは少し待ってから）。
+const whenIdle = (fn: () => void) => {
+  if ('requestIdleCallback' in window) window.requestIdleCallback(fn, { timeout: 1500 });
+  else setTimeout(fn, 200);
+};
 
 type View = 'home' | 'solo' | 'lobby' | 'room';
 
@@ -28,50 +44,65 @@ export default function App() {
 
   // 起動時に保存済みカラーテーマを body 背景へ適用（全画面共通）。
   useEffect(() => { applyColorTheme(loadThemeId()); }, []);
-  // 起動時に端末の追加語句を出題プールへ反映（ソロや自分の出題に出る）。
-  useEffect(() => { setExtraWords(loadCustomWords()); }, []);
+  // 端末の追加語句を出題プールへ反映（ソロや自分の出題に出る）。辞書は後読みなので読めてから。
   const updateWords = (list: CustomWord[]) => {
-    setCustomWords(list); saveCustomWords(list); setExtraWords(list);
+    setCustomWords(list); saveCustomWords(list);
+    loadWords().then((m) => m.setExtraWords(list)).catch(() => {});
   };
   const updateGroups = (g: string[]) => { setCustomGroups(g); saveCustomGroups(g); };
 
-  // オンライン用に匿名サインイン（バックグラウンドで先行実行）。
+  // ホームを出した後の空き時間に、各画面と辞書を先読みし、オンライン用の匿名サインインも始める。
+  // 読み込みの失敗はここでは無視する（実際に開いた時にもう一度読みに行き、だめなら案内が出る）。
   useEffect(() => {
-    ensureSignedIn()
-      .then(setUid)
-      .catch((e) => setAuthError(e instanceof Error ? e.message : 'サインインに失敗しました'));
+    whenIdle(() => {
+      loadWords().then((m) => m.setExtraWords(loadCustomWords())).catch(() => {});
+      for (const load of [loadSolo, loadLobby, loadRoom, loadRecords, loadWordEditor]) load().catch(() => {});
+      if (!firebaseReady) { setAuthError(OFFLINE_MESSAGE); return; }
+      import('./lib/firebase')
+        .then((m) => m.ensureSignedIn())
+        .then(setUid)
+        .catch((e) => setAuthError(e instanceof Error ? e.message : 'サインインに失敗しました'));
+    });
   }, []);
 
   if (view === 'solo') {
-    return <SoloGame onExit={() => setView('home')} />;
+    return (
+      <Suspense fallback={<ScreenLoading />}>
+        <SoloGame onExit={() => setView('home')} />
+      </Suspense>
+    );
   }
 
   if (view === 'lobby') {
     if (!uid) return <AuthGate error={authError} onBack={() => setView('home')} />;
     return (
-      <Lobby
-        uid={uid}
-        name={name}
-        setName={setName}
-        onJoined={(id) => {
-          setRoomId(id);
-          setView('room');
-        }}
-        onBack={() => setView('home')}
-      />
+      <Suspense fallback={<ScreenLoading />}>
+        <Lobby
+          uid={uid}
+          name={name}
+          setName={setName}
+          onJoined={(id) => {
+            setRoomId(id);
+            setView('room');
+          }}
+          onBack={() => setView('home')}
+        />
+      </Suspense>
     );
   }
 
   if (view === 'room' && roomId && uid) {
     return (
-      <OnlineRoom
-        roomId={roomId}
-        uid={uid}
-        onLeave={() => {
-          setRoomId(null);
-          setView('lobby');
-        }}
-      />
+      <Suspense fallback={<ScreenLoading />}>
+        <OnlineRoom
+          roomId={roomId}
+          uid={uid}
+          onLeave={() => {
+            setRoomId(null);
+            setView('lobby');
+          }}
+        />
+      </Suspense>
     );
   }
 
@@ -163,21 +194,31 @@ export default function App() {
       {/* 未設定（firebaseReady=false）はカードに書いてあるので、ここでは本当の接続エラーだけ出す */}
       {authError && firebaseReady && <p className="text-incoming text-sm mt-6 relative z-10">{authError}</p>}
       {showSettings && <PlayerSettings onClose={() => setShowSettings(false)} />}
-      {showRecords && <RecordsBoard onClose={() => setShowRecords(false)} />}
-      {showWords && (
-        <WordEditor
-          words={customWords}
-          onChange={updateWords}
-          onClose={() => setShowWords(false)}
-          title="語句を追加（この端末）"
-          note="ここで追加した語句は、この端末のソロや自分の出題に出ます。自作テーマを作って語句を振り分けると、出題テーマとして個別に選べます。"
-          groups={customGroups}
-          onGroupsChange={updateGroups}
-        />
-      )}
+      <Suspense fallback={null}>
+        {showRecords && <RecordsBoard onClose={() => setShowRecords(false)} />}
+        {showWords && (
+          <WordEditor
+            words={customWords}
+            onChange={updateWords}
+            onClose={() => setShowWords(false)}
+            title="語句を追加（この端末）"
+            note="ここで追加した語句は、この端末のソロや自分の出題に出ます。自作テーマを作って語句を振り分けると、出題テーマとして個別に選べます。"
+            groups={customGroups}
+            onGroupsChange={updateGroups}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }
+
+// 画面の読み込み待ち（先読みが間に合わなかった時だけ一瞬出る）。
+const ScreenLoading = () => (
+  <div className="min-h-screen bg-transparent text-text flex flex-col items-center justify-center gap-4">
+    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+    <p className="text-muted text-sm">読み込み中…</p>
+  </div>
+);
 
 const HomeStat = ({ label, value }: { label: string; value: string }) => (
   <div className="text-center leading-none">

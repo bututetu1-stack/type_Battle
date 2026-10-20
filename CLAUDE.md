@@ -31,6 +31,11 @@ node scripts/screenshots.mjs [出力先] [テーマ] [幅x高さ]  # 自動プ�
 
 - **Firebase 設定（`.env.local`）が無くてもソロは動く。** `src/lib/firebase.ts` は設定が揃った時だけ
   初期化し、DB は `getDb()` で取る。未設定ならオンラインだけ案内を出して止まる。
+  設定の有無（`firebaseReady`）は SDK を読まない `src/lib/firebaseEnv.ts` で判定する。
+- **初回表示を軽く保つ。** `App.tsx`（ホーム）から単語辞書 `words.ts`・Firebase（`firebase.ts` / `room.ts` /
+  `leaderboard.ts`）・ゲーム画面を**静的に import しない**。各画面は `lazy()` で、ホーム表示後に空き時間で先読みする。
+  ローマ字表・判定・ルビなど軽い部分は `romaji.ts`（`words.ts` からも再公開）。
+  確認: `npm run build` で `dist/index.html` の modulepreload に `vendor-firebase` や `words` が出ないこと。
   本物の値は GitHub Secrets にある。ローカルは `.env.example` を写してダミー値でもよい。
 - `tsconfig` は `noUnusedLocals` / `noUnusedParameters` が有効。使わなくなった import は消す。
 - 型チェックが不自然に通る／落ちる時は `tsconfig*.tsbuildinfo`（増分キャッシュ、git 管理外）を消す。
@@ -46,7 +51,8 @@ node scripts/screenshots.mjs [出力先] [テーマ] [幅x高さ]  # 自動プ�
   （`ITEM_META` / `ONLINE_ITEM_META` / `ITEM_DURATION`）。アイコンは `components/ItemIcon.tsx`。
   アイテムを足す・消す時は `types.ts` の `ItemType`、`items.ts`、両ゲームの効果分岐とドロップ候補
   （Solo の `ALL_ITEMS`、Online の `grantItem` 内の配列）を直す。
-- 打鍵判定は `src/lib/engine.ts`（純粋関数）、ローマ字表と出題は `src/lib/words.ts`（約4600行の辞書込み）。
+- 打鍵判定は `src/lib/engine.ts`（純粋関数）、ローマ字表・ルビは `src/lib/romaji.ts`、
+  出題は `src/lib/words.ts`（約4400行の辞書込み）。
 - リザルトの分析（ランク・速度推移・苦手キー）は `src/lib/analytics.ts`（純粋関数）と
   `components/ResultInsights.tsx`。
 

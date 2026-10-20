@@ -1,5 +1,5 @@
 // 端末に保存するカスタム追加語句（ソロや自分の出題に反映）。
-import { isTypeableReading } from './words';
+import { isTypeableReading } from './romaji';
 
 // group … ユーザーが自由に作れる「自作テーマ」名。未設定＝未分類。
 export interface CustomWord { display: string; reading: string; group?: string }
