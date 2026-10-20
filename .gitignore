@@ -31,3 +31,6 @@ pnpm-debug.log*
 # tsc -b emit from config project
 vite.config.js
 vite.config.d.ts
+
+# 見た目確認のスクリーンショット（scripts/screenshots.mjs の出力）
+shots/

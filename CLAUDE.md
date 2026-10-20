@@ -14,6 +14,7 @@ npm test           # Vitest（打鍵判定・アイテム定義・分析・記�
 npm run build      # tsc -b（型チェック）+ 本番ビルド。コミット前に必ず
 npm run preview    # ビルド結果を http://localhost:4173/type_Battle/ で確認
 npm run wordtest   # 出題の近接重複を数値で確認
+node scripts/screenshots.mjs [出力先] [テーマ] [幅x高さ]  # 自動プレイしてスクショ（準備は docs/HANDOFF.md 5章）
 ```
 
 ## 公開（デプロイ）
