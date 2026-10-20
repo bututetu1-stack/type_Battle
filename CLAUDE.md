@@ -57,7 +57,7 @@ npm run wordtest   # 出題の近接重複を数値で確認
   してあるので、`text-cyan-300` はテーマのアクセント色で表示される（`tailwind.config.js`）。
 - 書体は Chakra Petch（見出し・数字 `font-tech`）と JetBrains Mono（ローマ字 `font-mono2`）を
   Google Fonts から読み込み。
-- 利用者の画面は横長で背が低い（実測 1907×649 前後）。低い画面で崩れないことを確認する。
+- 利用者の画面は一般的な比率。1920×1080（モニター）と 1366×768（ノートPC）で崩れないことを確認する。
 
 ## 進め方
 
