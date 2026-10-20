@@ -1,0 +1,65 @@
+# TYPE ROYALE — 開発メモ（Claude Code 向け）
+
+テトリス99型の「つぶし合い」をタイピングでやる日本語オンライン対戦ゲーム。
+React 18 + TypeScript + Vite + Tailwind 3、オンラインは Firebase Realtime Database（匿名認証）。
+
+**作業を始める前に `docs/HANDOFF.md` を読むこと**（進行中のタスクと経緯がある）。
+
+## コマンド
+
+```bash
+npm install        # 依存を入れる（package.json が変わったら再実行）
+npm run dev        # 開発サーバ http://localhost:5173/
+npm test           # Vitest（打鍵判定・アイテム定義・分析・記録）。コミット前に必ず
+npm run build      # tsc -b（型チェック）+ 本番ビルド。コミット前に必ず
+npm run preview    # ビルド結果を http://localhost:4173/type_Battle/ で確認
+npm run wordtest   # 出題の近接重複を数値で確認
+```
+
+## 公開（デプロイ）
+
+- `main` への push で GitHub Actions（`.github/workflows/deploy.yml`）が
+  `npm ci → npm test → npm run build` を実行し、`gh-pages` ブランチへ公開する。
+  テストが落ちたら公開されない。
+- 公開URL: https://bututetu1-stack.github.io/type_Battle/
+- 反映確認用に `src/main.tsx` の `BUILD` 定数を公開のたびに更新する（画面右下に出る）。
+- 作業ブランチで作って検証し、まとめて `main` へ反映する。`main` への push は公開になるので、
+  利用者の了承を取ってから。
+
+## ハマりどころ
+
+- **Firebase 設定（`.env.local`）が無くてもソロは動く。** `src/lib/firebase.ts` は設定が揃った時だけ
+  初期化し、DB は `getDb()` で取る。未設定ならオンラインだけ案内を出して止まる。
+  本物の値は GitHub Secrets にある。ローカルは `.env.example` を写してダミー値でもよい。
+- `tsconfig` は `noUnusedLocals` / `noUnusedParameters` が有効。使わなくなった import は消す。
+- 型チェックが不自然に通る／落ちる時は `tsconfig*.tsbuildinfo`（増分キャッシュ、git 管理外）を消す。
+- `vite.config.js` は `vite.config.ts` のコンパイル結果（git 管理外）。編集するのは `.ts`。
+- オンラインは**全員が共通シードから同じお題列を生成**して同期している。`generateWord` の
+  乱数の消費順を変えるとズレる。ソロ専用の工夫（直近重複ガード等）は SoloGame 側でやる。
+
+## 構成の要点
+
+- `src/components/SoloGame.tsx`（約2500行）/ `OnlineGame.tsx`（約2000行）がゲーム本体。
+  効果の分岐（アイテムを使った時の処理）はモードごとに違うので各ファイルにある。
+- アイテムの名前・アイコン・説明・効果時間は **`src/lib/items.ts` が唯一の定義**
+  （`ITEM_META` / `ONLINE_ITEM_META` / `ITEM_DURATION`）。アイコンは `components/ItemIcon.tsx`。
+  アイテムを足す・消す時は `types.ts` の `ItemType`、`items.ts`、両ゲームの効果分岐とドロップ候補
+  （Solo の `ALL_ITEMS`、Online の `grantItem` 内の配列）を直す。
+- 打鍵判定は `src/lib/engine.ts`（純粋関数）、ローマ字表と出題は `src/lib/words.ts`（約4600行の辞書込み）。
+- リザルトの分析（ランク・速度推移・苦手キー）は `src/lib/analytics.ts`（純粋関数）と
+  `components/ResultInsights.tsx`。
+
+## デザインの仕組み
+
+- 色は CSS 変数のトークン（`src/index.css` の `:root`）。テーマ切替は `src/lib/theme.ts` が
+  `body` に変数を流し込む。Tailwind では `bg-surface` `text-muted` `border-line` `text-primary` など。
+- アクセント色は `--ac-50`〜`--ac-950`（RGB 三つ組）。**Tailwind の `cyan-*` はアクセントの別名**に
+  してあるので、`text-cyan-300` はテーマのアクセント色で表示される（`tailwind.config.js`）。
+- 書体は Chakra Petch（見出し・数字 `font-tech`）と JetBrains Mono（ローマ字 `font-mono2`）を
+  Google Fonts から読み込み。
+- 利用者の画面は横長で背が低い（実測 1907×649 前後）。低い画面で崩れないことを確認する。
+
+## 進め方
+
+- 機能ごとにコミットし、毎回 `npm test` と `npm run build` を通してから。
+- 見た目の変更は実際に画面を開いて（スクリーンショットで）確認してから完了とする。
