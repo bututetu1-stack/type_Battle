@@ -1843,9 +1843,10 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
             {/* 狙いの切替（キーでも切替） */}
             {gameState === 'playing' && soloMode !== 'timeattack' && (
-              <div className="absolute top-1 left-0 flex flex-col items-start gap-1.5">
+              <div className="absolute top-1 left-0 z-20 flex flex-col items-start gap-1.5">
                 <div className="flex items-center gap-1.5 text-xs text-muted"><Target className="w-3.5 h-3.5" /> 狙い <Kbd>{keyLabel(keyCfg.target)}</Kbd></div>
-                <div className="ui-seg ui-seg-sm" role="radiogroup" aria-label="狙う相手">
+                {/* 背景を不透明に: 大きな連鎖表示が後ろに重なっても読める */}
+                <div className="ui-seg ui-seg-sm" role="radiogroup" aria-label="狙う相手" style={{ background: 'rgb(var(--n-950) / 0.96)' }}>
                   {TARGET_MODES.map((t) => (
                     <button key={t.mode} type="button" role="radio" aria-checked={targetMode === t.mode} data-on={targetMode === t.mode}
                       onClick={() => setTargetMode(t.mode)} className="ui-seg-btn">

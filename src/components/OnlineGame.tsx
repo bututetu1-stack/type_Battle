@@ -1405,7 +1405,8 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                     <li key={p.name + i} className="flex items-center gap-3 py-2.5 px-2 -mx-2 rounded-lg border-t first:border-t-0"
                       style={{ borderColor: 'var(--line)', background: mine ? 'rgb(var(--ac-400) / 0.1)' : undefined }}>
                       <span className="font-tech text-sm tabular-nums text-muted w-7 shrink-0">#{i + 1}</span>
-                      {i === 0 && <Crown className="w-4 h-4 shrink-0" style={{ color: 'var(--charge)' }} />}
+                      {/* 王冠は並べ方に関係なく、実際の勝者（ボス戦は勝った側の代表）にだけ付ける */}
+                      {p === winner && <Crown className="w-4 h-4 shrink-0" style={{ color: 'var(--charge)' }} aria-label="勝者" />}
                       <span className={`truncate text-[15px] ${mine ? 'font-bold text-text' : 'text-text'}`}>{p.name}</span>
                       {mine && <span className="text-xs text-muted shrink-0">あなた</span>}
                       <span className="ml-auto text-right shrink-0">
@@ -1603,6 +1604,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           <span className="font-tech text-xs font-semibold tracking-[0.2em] text-muted mt-0.5 whitespace-nowrap">
             {bossMode ? 'BOSS' : 'ONLINE'} · ROOM {roomId}
           </span>
+          {isBoss && (
+            <span className="flex items-center gap-1 text-xs font-semibold rounded-full px-2.5 py-0.5 whitespace-nowrap"
+              style={{ color: 'var(--charge)', background: 'rgb(255 171 46 / 0.12)' }}>
+              <Crown className="w-3.5 h-3.5" /> あなたがボス
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-5">
           <div className="flex items-center gap-6 pr-5 border-r" style={{ borderColor: 'var(--line)' }}>
@@ -1729,34 +1736,31 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
           })()}
           <div className="flex-1 min-h-0 flex flex-col items-center pt-4 relative z-10">
             {/* ボスモードの状況表示（挑戦者にはボスHP、ボスには自分のHP）。 */}
-            {bossMode && started && (
-              isBoss ? (
-                <div className="absolute top-1 left-1/2 -translate-x-1/2 z-20 bg-red-900/80 border border-red-500/50 rounded-full px-4 py-1 text-sm font-black text-red-100 flex items-center gap-2 shadow-lg">
-                  <Crown className="w-4 h-4 text-yellow-300" /> あなたはBOSS · HP {Math.max(0, selfMax - backlog.length)}/{selfMax}
-                </div>
-              ) : (
-                <div className="absolute top-1 left-1/2 -translate-x-1/2 z-20 w-56">
-                  <div className="flex items-center justify-between text-xs mb-0.5">
-                    <span className="font-bold text-red-300 flex items-center gap-1">
-                      <Crown className="w-3.5 h-3.5 text-yellow-400" /> BOSS {bossPlayer?.name ?? ''}
+            {/* ボス戦の状況（挑戦者だけ）。中央上は連鎖の大きな文字が出る場所なので避け、
+                狙いの切替が無い挑戦者の左上に置く。ボス自身にはヘッダーに「あなたがボス」、HP は下の山の欄に出る。 */}
+            {bossMode && started && !isBoss && (
+                <div className="absolute top-1 left-0 z-20 w-40">
+                  <div className="flex items-center justify-between text-xs mb-1.5">
+                    <span className="font-semibold text-text flex items-center gap-1.5 min-w-0">
+                      <Crown className="w-3.5 h-3.5 shrink-0" style={{ color: 'var(--charge)' }} /> <span className="truncate">ボス {bossPlayer?.name ?? ''}</span>
                     </span>
-                    <span className="font-mono text-red-200">{bossHp}/{BOSS_MAX_BACKLOG}</span>
+                    <span className="font-tech tabular-nums text-muted shrink-0">HP {bossHp}/{BOSS_MAX_BACKLOG}</span>
                   </div>
-                  <div className="w-full h-3 rounded-full bg-neutral-800 border border-red-900/60 overflow-hidden">
+                  <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ background: 'rgb(var(--n-50) / 0.06)' }}>
                     <div
-                      className="h-full bg-gradient-to-r from-red-600 to-red-400 transition-[width] duration-200"
-                      style={{ width: `${(bossHp / BOSS_MAX_BACKLOG) * 100}%` }}
+                      className="h-full rounded-full transition-[width] duration-200"
+                      style={{ width: `${(bossHp / BOSS_MAX_BACKLOG) * 100}%`, background: 'var(--incoming)' }}
                     />
                   </div>
                 </div>
-              )
             )}
 
             {/* 狙いの切替（キーでも切替）。ボスモードの挑戦者は常にボスを狙うため非表示。 */}
             {!(bossMode && !isBoss) && (
-              <div className="absolute top-1 left-0 flex flex-col items-start gap-1.5">
+              <div className="absolute top-1 left-0 z-20 flex flex-col items-start gap-1.5">
                 <div className="flex items-center gap-1.5 text-xs text-muted"><Target className="w-3.5 h-3.5" /> 狙い <Kbd>{keyLabel(keyCfg.target)}</Kbd></div>
-                <div className="ui-seg ui-seg-sm" role="radiogroup" aria-label="狙う相手">
+                {/* 背景を不透明に: 大きな連鎖表示が後ろに重なっても読める */}
+                <div className="ui-seg ui-seg-sm" role="radiogroup" aria-label="狙う相手" style={{ background: 'rgb(var(--n-950) / 0.96)' }}>
                   {TARGET_MODES.map((t) => (
                     <button key={t.mode} type="button" role="radio" aria-checked={targetMode === t.mode} data-on={targetMode === t.mode}
                       onClick={() => setTargetMode(t.mode)} className="ui-seg-btn">

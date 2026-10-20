@@ -1,4 +1,4 @@
-# 引き継ぎ資料（2026-10-20 時点・利用者のPCへ移行）
+# 引き継ぎ資料（2026-10-21 更新）
 
 クラウド上の Claude Code セッションから、**利用者のPCで動く Claude Code** への引き継ぎ。
 次のセッションは、まずこのファイルと `CLAUDE.md`（コマンド・仕組み・ハマりどころ）を読んでから作業すること。
@@ -30,14 +30,17 @@ git pull
 
 ```bash
 npm install
-npm test          # 40件すべて通ればOK
+npm test          # 49件すべて通ればOK
 npm run dev       # http://localhost:5173/ でゲームが開く
 ```
 
 - `.env.local` が無くても**ソロは遊べる**（オンライン対戦だけ「未設定」と出る）。
-- オンライン対戦も手元で試すなら `.env.example` を `.env.local` に写し、Firebase の値を入れる。
+- オンライン対戦も手元で試すなら `.env.example` を **`.env.online.local`** に写して Firebase の値を入れ、
+  `npm run dev -- --mode online` で起動する（`.env.local` に書くと、ソロのタイムアタックの確認でも
+  本物のオンラインランキングに記録が送られてしまうため）。
   本物の値は GitHub Secrets に入っているが、**Secrets は後から読み出せない**ので、
-  Firebase コンソール →「プロジェクトの設定」→「マイアプリ」の構成（`firebaseConfig`）から写す。
+  Firebase コンソール →「プロジェクトの設定」→「マイアプリ」の構成（`firebaseConfig`）から写す
+  （公開中のビルドの JS にも入っている公開値）。
 
 ### 0-2. Claude Code をこのPCで起動する
 
@@ -55,7 +58,7 @@ npm run dev       # http://localhost:5173/ でゲームが開く
   ただし Windows 側に Node.js が無いと `npm` が動かないので、その時は Node.js（LTS）を Windows にも入れる。
 
 最初のメッセージの例:
-> `docs/HANDOFF.md` を読んで、4章の「次の候補」から続けて。
+> `docs/HANDOFF.md` と `docs/NIGHT-LOG-2026-10-21.md` を読んで、2章の「確認待ち」から続けて。
 
 > 学校のPCなら、アプリや拡張機能を入れてよいか学校のルールを確認すること。共用PCなら使い終わったらサインアウト。
 
@@ -73,9 +76,18 @@ npm run dev       # http://localhost:5173/ でゲームが開く
 
 ## 2. 現在の状態
 
-- **すべて公開済み。** `main` と作業ブランチ `claude/modest-tesla-qutos1` は同じ位置（ドキュメントの更新を除く）。
-- 公開URL: https://bututetu1-stack.github.io/type_Battle/ 　ビルド識別子 `2026-10-20-b`（画面右下）。
+- 公開中（`main`）はビルド識別子 `2026-10-20-b`。公開URL: https://bututetu1-stack.github.io/type_Battle/
+- **作業ブランチ `claude/modest-tesla-qutos1` に、2026-10-21 夜の作業（下の表の「10-21」）がある。まだ公開していない。**
+  利用者がスクショ（または `npm run dev`）で確認して了承したら `main` へ反映する（`src/main.tsx` の `BUILD` を更新してから）。
+  夜の作業の中身・採点・数値は `docs/NIGHT-LOG-2026-10-21.md` にまとめてある。
 - `main` への push で自動デプロイ（テスト → ビルド → gh-pages）。**push は公開になるので利用者の了承を取ってから。**
+
+### 確認待ち（利用者に見てもらうこと）
+
+1. 難易度のバランス（CPU の動きを変えた）。「ふつう」で遊んでみて、手応えが良いか。
+   初めて遊ぶ人は「ふつう」から始まる（以前は「カスタム」・敵20人だった）。
+2. オンラインのロビー／待機室／対戦／結果の新しい見た目。
+3. アイテム「なし」にすると急に難しくなる（勝ちにくい）点を、どうするか（案は夜間ログ参照）。
 
 ## 3. これまでにやったこと
 
@@ -93,17 +105,18 @@ npm run dev       # http://localhost:5173/ でゲームが開く
 | デザインの作り直し: 和文書体、最小12px、共通部品、開始画面・結果画面・プレイ画面・ホーム・敵の盤面 | `ui.tsx` `index.css` `SoloGame.tsx` `App.tsx` `MiniBoard.tsx` |
 | 記録画面は最後に遊んだモードのタブで開く | `RecordsBoard.tsx` |
 | 見た目確認用の自動プレイ＋スクショ | `scripts/screenshots.mjs` |
+| 10-21: CPU名から紛らわしい名前（ブレーキ等）を外す、削除済みアイテムの名残の整理、README 更新 | `SoloGame.tsx` `README.md` |
+| 10-21: 初回表示の高速化（辞書・Firebase・各画面を後読み。ホームまでの JS 252KB→67KB、表示 1.46秒→0.96秒） | `App.tsx` `romaji.ts` `firebaseEnv.ts` `main.tsx` |
+| 10-21: 難易度バランス（CPU を「打つ速さ」で動かす、プリセットを打鍵速度で調整、既定を「ふつう」に、模擬対戦 `npm run balancesim`） | `cpu.ts` `difficulty.ts` `SoloGame.tsx` `scripts/balance-sim.ts` |
+| 10-21: オンライン画面の作り直し（ロビー・待機室・対戦・結果）＋不具合修正（再接続で脱落扱いのまま／結果の順位の食い違い／狙いキーの表示／他人の盤面の高さ／ボス戦の表示の重なり） | `Lobby.tsx` `OnlineRoom.tsx` `OnlineGame.tsx` `room.ts` |
+| 10-21: オンライン画面の確認用スクリプト（2人＋CPU で実際に対戦して撮る） | `scripts/online-shots.mjs` |
 
 ## 4. 次の候補（利用者とまだ合意していないもの）
 
-1. **オンラインのロビー／ルーム／対戦画面のデザイン**（`Lobby.tsx` `OnlineRoom.tsx` `OnlineGame.tsx`）。
-   色・書体・敵の盤面は共通なので揃っているが、配置と小さな色付きボタン群は旧来のまま。
-   ソロで作った部品（`ui.tsx` / `ui-*` クラス）と、ソロの結果画面・開始画面の作りに合わせるとよい。
-   **Firebase の設定が無いと対戦画面は開けない**ので、`.env.local` を用意してから。
-2. リザルト分析をオンラインの結果画面にも出す。
-3. CPU の名前の候補に「ブレーキ」が残っている（アイテムではなく名前）。紛らわしければ消す。
-4. スマホ表示の対応（ホーム・記録・結果だけでも）。ゲーム画面は「物理キーボードが必要」と案内する。
-5. 単語辞書（`words.ts` 約270KB）の遅延読み込みで初回表示を速くする。
+1. リザルト分析（ランク・速度推移・苦手キー）をオンラインの結果画面にも出す。
+2. スマホ表示の対応（ホーム・記録・結果だけでも）。ゲーム画面は「物理キーボードが必要」と案内する。
+3. オンラインの CPU（ホストの端末で動く）も、ソロと同じ「打つ速さ」の動き（`lib/cpu.ts`）に揃える。
+4. アイテム「なし」の時のバランス（夜間ログの案を参照）。
 
 ## 5. 確認のしかた
 
@@ -117,6 +130,12 @@ npm run dev       # http://localhost:5173/ でゲームが開く
   ```
   ホーム・ソロ開始・プレイ中・結果（タイムアタック）の4枚が `shots/` に出る（git 管理外）。
   ボットはローマ字ガイドの「次の1文字」（`.font-mono2 .text-primary.font-bold`）を読んで打ち、時々わざとミスする。
+- オンラインの見た目: 2人（＋CPU）で実際に部屋を作って対戦し、各画面を撮る（本物の Firebase に部屋ができ、最後に退室して片付ける）。
+  ```bash
+  npm run dev -- --mode online --port 5174   # 別のターミナル（.env.online.local が必要）
+  CPU=1 node scripts/online-shots.mjs shots violet 1366x768
+  ```
+- 難易度: `npm run balancesim`（打鍵の速さ別の勝率・試合時間。1分ほどかかる）。
 - デスクトップアプリで作業している場合は、アプリ内のブラウザで `localhost:5173` を直接開いて見てもよい。
 - テーマは `localStorage` の `typeRoyale.theme`、ソロの設定は `typeRoyale.custom`
   （例: `{"soloMode":"timeattack","taSeconds":15}`）、キー設定は `typeRoyale.keys` で切り替えられる。
