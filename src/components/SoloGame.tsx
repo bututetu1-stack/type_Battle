@@ -16,7 +16,7 @@ import {
   RAPID_DURATION, KEEP_DURATION, PARRY_DURATION, FREEZE_DURATION, DAZZLE_DURATION,
 } from '../lib/items';
 import ItemIcon from './ItemIcon';
-import { loadKeyConfig, keyLabel, type KeyConfig } from '../lib/keyconfig';
+import { loadKeyConfig, keyLabel, RESTART_CODE, type KeyConfig } from '../lib/keyconfig';
 import PlayerSettings from './PlayerSettings';
 import type { Dummy, GameStatus, ItemType, TargetMode, Word } from '../lib/types';
 import MiniBoard from './MiniBoard';
@@ -805,7 +805,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     });
   }, []);
 
-  const startGame = useCallback(() => {
+  // 盤面と状態を新しい試合用にそろえる（まだ打てない・計測もしない）。
+  const setupGame = useCallback(() => {
     setSettingsOpen(false); // 設定オーバーレイを閉じる（結果画面から開いていた場合）
     setExtraWords(loadCustomWords()); // 端末の追加語句を出題プールへ（オンラインで上書きされていても戻す）
     setExcludedThemes(cfgExcluded); // OFFにしたテーマを「すべて」出題から除外
@@ -848,7 +849,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     setSlots({ attack: null, defense: null, timed: null });
     setSelectedSlot('attack');
     slotsRef.current = { attack: null, defense: null, timed: null };
-    setStartTime(Date.now());
+    setStartTime(null); // 計測はカウントダウン後の GO から
     setEndTime(null);
     // カスタム設定を反映（HP＝積載限界、敵数、CPUの強さ）。
     maxBacklogRef.current = cfgHp;
@@ -868,7 +869,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     attackProgressRef.current = 0;
     setAttackProgress(0);
     setSpawnInterval(cfgInitial);
-    setGameState('playing');
+    setGameState('countdown');
     soloModeRef.current = soloMode;
     if (soloMode === 'timeattack') {
       // タイムアタック: 敵なし・被攻撃なし。制限時間だけで終了。
@@ -887,8 +888,36 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         }),
       );
     }
-    sfx.start();
   }, [cfgInitial, cfgMin, cfgAccel, cfgHp, cfgEnemies, cfgCpuStr, cfgAttackGauge, cfgExcluded, soloMode, cfgTaSeconds, updatePending, nextWord]);
+
+  // 開始前のカウントダウン（3・2・1・GO）。最初のお題は見せておき、心の準備をさせる。
+  // 表示中は打鍵を受け付けず、KPS や制限時間の計測は GO の瞬間から始める。
+  const [countdown, setCountdown] = useState<number | null>(null); // 3,2,1 → 0 = GO
+  const countdownTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearCountdown = () => {
+    countdownTimers.current.forEach(clearTimeout);
+    countdownTimers.current = [];
+  };
+  useEffect(() => clearCountdown, []);
+
+  const startGame = useCallback(() => {
+    clearCountdown();
+    setupGame();
+    const step = 650;
+    [3, 2, 1, 0].forEach((n, i) => {
+      countdownTimers.current.push(setTimeout(() => {
+        setCountdown(n);
+        if (n > 0) {
+          sfx.countdown();
+        } else {
+          setStartTime(Date.now());
+          setGameState('playing');
+          sfx.start();
+        }
+      }, i * step));
+    });
+    countdownTimers.current.push(setTimeout(() => setCountdown(null), 4 * step + 250));
+  }, [setupGame]);
 
   const gameOver = useCallback(() => {
     setGameState('gameover');
@@ -907,6 +936,12 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'TEXTAREA')) return;
       const { gameState } = stateRef.current;
       resumeAudio();
+      // Tab: どこからでも即やり直し（Monkeytype 風）。ブラウザのフォーカス移動は止める。
+      if (e.code === RESTART_CODE) {
+        e.preventDefault();
+        startGame();
+        return;
+      }
       if ((gameState === 'start' || gameState === 'gameover' || gameState === 'win' || gameState === 'timeup') && e.key === ' ') {
         e.preventDefault();
         startGame();
@@ -1696,6 +1731,21 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
         </div>
 
         <div ref={centerRef} className="w-2/4 flex flex-col h-full min-h-0 relative">
+          {countdown != null && (
+            <div
+              className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none rounded-2xl transition-[background-color,backdrop-filter] duration-200"
+              style={countdown > 0 ? { background: 'rgb(0 0 0 / .55)', backdropFilter: 'blur(3px)' } : undefined}
+              aria-live="assertive"
+            >
+              <div
+                key={countdown}
+                className="tr-count font-tech font-bold leading-none"
+                style={{ fontSize: 'clamp(96px, 14vw, 180px)', color: countdown === 0 ? 'var(--primary)' : 'var(--text)', textShadow: '0 0 40px var(--glow)' }}
+              >
+                {countdown === 0 ? 'GO' : countdown}
+              </div>
+            </div>
+          )}
           {isDanger && gameState === 'playing' && (
             <div className="absolute inset-0 border-4 border-red-500/50 rounded-2xl pointer-events-none animate-pulse z-0" />
           )}

@@ -1,6 +1,7 @@
 // アプリ全体で共有する型定義。
 
-export type GameStatus = 'start' | 'playing' | 'gameover' | 'win' | 'timeup';
+// countdown = 開始前の 3・2・1（盤面は準備済み・打鍵と計測はまだ）
+export type GameStatus = 'start' | 'countdown' | 'playing' | 'gameover' | 'win' | 'timeup';
 
 export type WordType = 'normal' | 'ojama' | 'treasure';
 

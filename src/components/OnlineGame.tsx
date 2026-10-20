@@ -987,6 +987,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       if (!started || !selfAliveRef.current) return;
       // キーコンフィグ(code)に従ってアイテム操作・ターゲット切替。
       const kc = keyConfigRef.current;
+      if (e.code === 'Tab') { e.preventDefault(); return; } // ソロのリスタート用キー。対戦中は無効
       if (e.code === kc.target) { e.preventDefault(); cycleTargetMode(); return; }
       if (kc.inputMode === 'cycle') {
         if (e.code === kc.cycle) { e.preventDefault(); cycleSlot(); return; }

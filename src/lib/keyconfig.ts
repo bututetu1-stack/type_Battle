@@ -25,13 +25,16 @@ export interface KeyConfig {
 
 const KEY = 'typeRoyale.keys';
 
+// Tab はどこからでも即やり直し（Monkeytype 風）の専用キー。他の操作には割り当てられない。
+export const RESTART_CODE = 'Tab';
+
 export function defaultKeyConfig(): KeyConfig {
   return {
     inputMode: 'cycle',
     cycle: 'Space',
     fire: 'Enter',
     slots: { attack: 'Digit1', defense: 'Digit2', timed: 'Digit3' },
-    target: 'Tab',
+    target: 'ShiftLeft',
     romajiMode: 'always',
     readingMode: 'full',
     screenShake: true,
@@ -39,8 +42,9 @@ export function defaultKeyConfig(): KeyConfig {
 }
 
 // 旧データ(e.key保存)を code へ移行する。すでに code 形式ならそのまま。
+// リスタート専用の Tab が割り当てられていたら既定へ戻す（以前は狙いの切替が Tab だった）。
 function toCode(v: unknown, d: string): string {
-  if (typeof v !== 'string' || v.length === 0) return d;
+  if (typeof v !== 'string' || v.length === 0 || v === RESTART_CODE) return d;
   if (v === ' ') return 'Space';
   if (/^[0-9]$/.test(v)) return `Digit${v}`;
   if (/^[a-zA-Z]$/.test(v)) return `Key${v.toUpperCase()}`;

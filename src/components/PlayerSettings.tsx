@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Keyboard, X } from 'lucide-react';
 import {
   loadKeyConfig, saveKeyConfig, keyLabel, defaultKeyConfig,
-  type KeyConfig, type InputMode,
+  type KeyConfig, type InputMode, RESTART_CODE,
 } from '../lib/keyconfig';
 import { CAT_META } from '../lib/items';
 import { COLOR_THEMES, accentHex, loadThemeId, saveThemeId, applyColorTheme, IMAGE_THEME_ID, fileToDataUrl, cropToBgImages, saveBgImage, clearBgImage, loadBgImage, cropToMiniImage, saveBoardImage, clearBoardImage, loadBoardImage } from '../lib/theme';
@@ -60,6 +60,7 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
       e.preventDefault();
       e.stopPropagation();
       if (e.code === 'Escape') { setCapturing(null); return; }
+      if (e.code === RESTART_CODE) return; // Tab はリスタート専用なので割り当てない（別のキーを待つ）
       const k = e.code; // 左右Shiftなどを区別するため code を保存
       const next: KeyConfig = JSON.parse(JSON.stringify(cfg));
       if (capturing === 'cycle') next.cycle = k;
