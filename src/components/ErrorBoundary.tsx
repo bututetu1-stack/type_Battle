@@ -30,7 +30,7 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, St
           </div>
           <details className="mt-5 text-left">
             <summary className="text-xs text-muted cursor-pointer">エラーの詳細（開発者向け）</summary>
-            <pre className="mt-2 text-[11px] text-muted whitespace-pre-wrap break-all font-mono2">{error.message}</pre>
+            <pre className="mt-2 text-xs text-muted whitespace-pre-wrap break-all font-mono2">{error.message}</pre>
           </details>
         </div>
       </div>

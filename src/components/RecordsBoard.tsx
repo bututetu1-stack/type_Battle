@@ -191,7 +191,7 @@ function ScoreTable({ rows, highlightUid }: { rows: Row[]; highlightUid?: string
                 {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
               </td>
               <td className="py-2 pr-2 truncate max-w-[8rem] text-text">
-                {r.name}{mine && <span className="ml-1 text-[10px] text-primary">(あなた)</span>}
+                {r.name}{mine && <span className="ml-1 text-xs text-primary">(あなた)</span>}
               </td>
               <td className="py-2 px-2 text-right font-mono2 font-bold text-charge">{r.score}</td>
               <td className="py-2 px-2 text-right font-mono2">{r.keys}</td>

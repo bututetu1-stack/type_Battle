@@ -156,7 +156,7 @@ export default function App() {
 
 const HomeStat = ({ label, value, color }: { label: string; value: string; color: string }) => (
   <div className="text-center">
-    <div className="text-muted" style={{ fontSize: 9, letterSpacing: '0.16em' }}>{label}</div>
+    <div className="text-muted" style={{ fontSize: 12, letterSpacing: '0.16em' }}>{label}</div>
     <div className="font-bold" style={{ fontSize: 20, color }}>{value}</div>
   </div>
 );

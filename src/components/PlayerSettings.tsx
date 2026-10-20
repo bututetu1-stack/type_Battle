@@ -124,7 +124,7 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
                 }`}
               >
                 <div className="text-sm font-bold">{m.label}</div>
-                <div className="text-[10px] text-muted">{m.desc}</div>
+                <div className="text-xs text-muted">{m.desc}</div>
               </button>
             ))}
           </div>
@@ -145,7 +145,7 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
                 <span className="relative w-7 h-7 rounded-full border border-white/20" style={{ background: t.css }}>
                   <span className="absolute right-0 bottom-0 w-2.5 h-2.5 rounded-full" style={{ background: accentHex(t.accent), boxShadow: `0 0 6px ${accentHex(t.accent)}` }} />
                 </span>
-                <span className={`text-[10px] font-bold ${themeId === t.id ? 'text-primary' : 'text-muted'}`}>{t.label}</span>
+                <span className={`text-xs font-bold ${themeId === t.id ? 'text-primary' : 'text-muted'}`}>{t.label}</span>
               </button>
             ))}
             {/* 背景画像（自分のPCから） */}
@@ -155,12 +155,12 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
               }`}
             >
               <span className="w-7 h-7 rounded-full border border-line flex items-center justify-center text-sm" style={{ background: 'var(--bg)' }}>🖼</span>
-              <span className={`text-[10px] font-bold ${themeId === IMAGE_THEME_ID ? 'text-primary' : 'text-muted'}`}>{imgBusy ? '処理中' : '画像'}</span>
+              <span className={`text-xs font-bold ${themeId === IMAGE_THEME_ID ? 'text-primary' : 'text-muted'}`}>{imgBusy ? '処理中' : '画像'}</span>
               <input type="file" accept="image/*" className="hidden" onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => onUploadBg(e.target.files?.[0])} />
             </label>
           </div>
           {hasImage && (
-            <div className="flex items-center justify-between mt-2 text-[10px] text-muted">
+            <div className="flex items-center justify-between mt-2 text-xs text-muted">
               <span>背景画像を設定中（盤面用画像が未設定なら、オンラインの盤面背景にもこの中央が使われます）</span>
               <button onClick={removeBg} className="text-incoming hover:opacity-80 underline shrink-0 ml-2">削除</button>
             </div>
@@ -168,17 +168,17 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
 
           {/* 盤面(ミニボード)専用画像（任意・縦長3:4） */}
           <div className="mt-3 flex items-center justify-between gap-2">
-            <span className="text-[11px] text-muted">盤面（ミニボード）用画像 <span className="text-muted">任意・縦長3:4</span></span>
+            <span className="text-xs text-muted">盤面（ミニボード）用画像 <span className="text-muted">任意・縦長3:4</span></span>
             <div className="flex items-center gap-2 shrink-0">
-              {hasBoard && <span className="text-[10px] text-primary">設定中</span>}
-              {hasBoard && <button onClick={removeBoard} className="text-[10px] text-incoming hover:opacity-80 underline">削除</button>}
-              <label className="tr-btn-ghost text-[11px] font-bold rounded-lg px-3 py-1 cursor-pointer">
+              {hasBoard && <span className="text-xs text-primary">設定中</span>}
+              {hasBoard && <button onClick={removeBoard} className="text-xs text-incoming hover:opacity-80 underline">削除</button>}
+              <label className="tr-btn-ghost text-xs font-bold rounded-lg px-3 py-1 cursor-pointer">
                 {hasBoard ? '変更' : 'アップロード'}
                 <input type="file" accept="image/*" className="hidden" onClick={(e) => { (e.target as HTMLInputElement).value = ''; }} onChange={(e) => onUploadBoard(e.target.files?.[0])} />
               </label>
             </div>
           </div>
-          <p className="text-[10px] text-muted mt-1">※ 盤面用画像を設定すると、オンラインで他の人から見えるあなたの盤面（棒グラフ）の背景に、背景画像とは別の画像を使えます。</p>
+          <p className="text-xs text-muted mt-1">※ 盤面用画像を設定すると、オンラインで他の人から見えるあなたの盤面（棒グラフ）の背景に、背景画像とは別の画像を使えます。</p>
         </div>
 
         {/* ローマ字（つづり）の表示タイミング */}
@@ -197,7 +197,7 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
                 }`}
               >
                 <div className="text-sm font-bold">{m.label}</div>
-                <div className="text-[10px] text-muted">{m.desc}</div>
+                <div className="text-xs text-muted">{m.desc}</div>
               </button>
             ))}
           </div>
@@ -220,11 +220,11 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
                 }`}
               >
                 <div className="text-sm font-bold">{m.label}</div>
-                <div className="text-[10px] text-muted">{m.desc}</div>
+                <div className="text-xs text-muted">{m.desc}</div>
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-muted mt-1">※「漢字のみ」は ふりがな・かな・ローマ字をすべて隠します（漢字を見て読みを打つ）。</p>
+          <p className="text-xs text-muted mt-1">※「漢字のみ」は ふりがな・かな・ローマ字をすべて隠します（漢字を見て読みを打つ）。</p>
         </div>
 
         {/* 演出（画面の揺れなど） */}
@@ -236,7 +236,7 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
           >
             <span className="text-left">
               <span className="text-sm font-bold text-text block">画面の揺れ</span>
-              <span className="text-[10px] text-muted">撃破・被弾時の画面シェイクとヒットストップ</span>
+              <span className="text-xs text-muted">撃破・被弾時の画面シェイクとヒットストップ</span>
             </span>
             {/* トグルスイッチ */}
             <span
@@ -264,7 +264,7 @@ export default function PlayerSettings({ onClose }: { onClose: () => void }) {
           <KeyRow label="ターゲット切替" bindId="target" value={cfg.target} />
         </div>
 
-        <p className="text-[10px] text-muted mt-2 leading-relaxed">
+        <p className="text-xs text-muted mt-2 leading-relaxed">
           ※ ボタンを押してから設定したいキーを押してください（Escでキャンセル）。
           タイピングに使う文字キーは避けてください（数字キーや Space/Enter 推奨）。
         </p>

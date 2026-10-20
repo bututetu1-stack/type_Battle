@@ -1358,7 +1358,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const renderResultExtras = () => (
     <div className="flex flex-col items-center gap-3 mb-6 w-full max-w-sm">
       <div className="text-center">
-        <div className="font-tech text-charge" style={{ fontSize: 10, letterSpacing: '0.14em', opacity: 0.85 }}>総合スコア</div>
+        <div className="font-tech text-charge" style={{ fontSize: 12, letterSpacing: '0.14em', opacity: 0.85 }}>総合スコア</div>
         <div className="font-tech text-4xl font-black text-charge" style={{ textShadow: '0 0 12px var(--charge)' }}>{currentScore()}</div>
       </div>
       <div className="flex items-center justify-center gap-3 flex-wrap text-sm">
@@ -1418,7 +1418,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           <span>生存 <span className="text-text font-bold font-tech">{mmss}</span></span>
         </div>
         <div className="w-full">
-          <div className="flex justify-between text-[10px] text-muted mb-0.5">
+          <div className="flex justify-between text-xs text-muted mb-0.5">
             <span>スタート</span>
             <span>優勝 🏆</span>
           </div>
@@ -1428,7 +1428,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
               style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg, var(--incoming), var(--charge), var(--success))', boxShadow: '0 0 14px var(--glow)' }}
             />
           </div>
-          <div className="text-center text-[11px] text-muted mt-1">優勝への到達度 {progressPct}%</div>
+          <div className="text-center text-xs text-muted mt-1">優勝への到達度 {progressPct}%</div>
         </div>
       </div>
     );
@@ -1726,20 +1726,20 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             {gameState === 'playing' && soloMode !== 'timeattack' && (
               <div className="absolute top-16 right-0 w-40 z-20 flex flex-col gap-2 pointer-events-none">
                 <div>
-                  <div className="text-[9px] font-bold text-yellow-300/80 mb-0.5 text-right">アイテム使用</div>
+                  <div className="text-xs font-bold text-yellow-300/80 mb-0.5 text-right">アイテム使用</div>
                   <div className="flex flex-col gap-0.5 items-end">
                     {toasts.filter((t) => t.kind === 'item').slice(-5).map((t) => (
-                      <div key={t.id} className="max-w-full truncate px-2 py-0.5 rounded bg-yellow-600/80 text-black text-[10px] font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200">
+                      <div key={t.id} className="max-w-full truncate px-2 py-0.5 rounded bg-yellow-600/80 text-black text-xs font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200">
                         ✨ {t.text}
                       </div>
                     ))}
                   </div>
                 </div>
                 <div>
-                  <div className="text-[9px] font-bold text-orange-300/80 mb-0.5 text-right">攻撃・撃破</div>
+                  <div className="text-xs font-bold text-orange-300/80 mb-0.5 text-right">攻撃・撃破</div>
                   <div className="flex flex-col gap-0.5 items-end">
                     {toasts.filter((t) => t.kind === 'ko' || t.kind === 'in').slice(-6).map((t) => (
-                      <div key={t.id} className={`max-w-full truncate px-2 py-0.5 rounded text-[10px] font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200 ${
+                      <div key={t.id} className={`max-w-full truncate px-2 py-0.5 rounded text-xs font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200 ${
                         t.kind === 'ko' ? 'bg-orange-600/85 text-white' : 'bg-red-950/85 text-red-200 border border-red-500/40'
                       }`}>
                         {t.kind === 'ko' ? '🏆 ' : '⚠ '}{t.text}
@@ -1748,12 +1748,12 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   </div>
                 </div>
                 <div>
-                  <div className="text-[9px] font-bold text-cyan-300/80 mb-0.5 text-right">自分のアイテム</div>
+                  <div className="text-xs font-bold text-cyan-300/80 mb-0.5 text-right">自分のアイテム</div>
                   <div className="flex flex-col gap-0.5 items-end">
                     {selfLog.slice(-5).map((l) => (
-                      <div key={l.id} className="max-w-full px-2 py-0.5 rounded bg-cyan-900/85 text-cyan-100 text-[10px] font-bold shadow border border-cyan-500/40 animate-in fade-in slide-in-from-right-2 duration-200">
+                      <div key={l.id} className="max-w-full px-2 py-0.5 rounded bg-cyan-900/85 text-cyan-100 text-xs font-bold shadow border border-cyan-500/40 animate-in fade-in slide-in-from-right-2 duration-200">
                         <div className="flex items-center gap-1">{ITEM_META[l.item].icon} {ITEM_META[l.item].name}</div>
-                        <div className="text-[9px] font-normal text-cyan-200/80 leading-tight">{ITEM_META[l.item].desc}</div>
+                        <div className="text-xs font-normal text-cyan-200/80 leading-tight">{ITEM_META[l.item].desc}</div>
                       </div>
                     ))}
                   </div>
@@ -1764,13 +1764,13 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             {/* ターゲットモード切替（[Tab]でも切替） */}
             {gameState === 'playing' && soloMode !== 'timeattack' && (
               <div className="absolute top-1 left-0 flex flex-col items-start gap-1">
-                <div className="flex items-center gap-1 text-[10px] text-gray-500"><Target className="w-3 h-3" /> 狙い [{keyLabel(keyCfg.target)}]</div>
+                <div className="flex items-center gap-1 text-xs text-gray-500"><Target className="w-3 h-3" /> 狙い [{keyLabel(keyCfg.target)}]</div>
                 <div className="flex gap-1">
                   {TARGET_MODES.map((t) => (
                     <button
                       key={t.mode}
                       onClick={() => setTargetMode(t.mode)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                      className={`px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
                         targetMode === t.mode ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
                       }`}
                     >
@@ -1812,7 +1812,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   <span className="text-lg text-gray-500">秒</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 text-[11px] text-amber-300 font-bold mb-0.5">
+                  <div className="flex items-center gap-2 text-xs text-amber-300 font-bold mb-0.5">
                     連打メーター
                     {timeBonusFlash > nowTick && <span className="text-amber-300 animate-bounce">+{timeBonusAmt}秒！</span>}
                   </div>
@@ -1826,7 +1826,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   {/* 区切りごとの追加秒ラベル（画像の 1秒追加/1秒追加/2秒追加/3秒追加） */}
                   <div className="relative h-3.5">
                     {TA_MILESTONES.map((m) => (
-                      <span key={m.at} className="absolute text-[9px] font-bold text-red-400 whitespace-nowrap" style={{ left: `${(m.at / TA_STREAK_MAX) * 100}%`, transform: 'translateX(-90%)' }}>
+                      <span key={m.at} className="absolute text-xs font-bold text-red-400 whitespace-nowrap" style={{ left: `${(m.at / TA_STREAK_MAX) * 100}%`, transform: 'translateX(-90%)' }}>
                         {m.sec}秒追加↑
                       </span>
                     ))}
@@ -1881,7 +1881,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                       );
                     })}
                   </div>
-                  <div className="text-[10px] text-muted text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
+                  <div className="text-xs text-muted text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
                 </div>
               )}
 
@@ -1913,23 +1913,23 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                             sel ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_8px_rgb(var(--ac-400)/0.4)]' : 'border-white/10 bg-neutral-900/80'
                           }`}
                         >
-                          <span className={`text-[9px] font-bold ${c.color}`}>
+                          <span className={`text-xs font-bold ${c.color}`}>
                             {c.label}
                             {direct && <span className="ml-1 text-gray-400 font-mono">[{keyLabel(keyCfg.slots[c.key])}]</span>}
                           </span>
                           {item ? (
                             <span className="flex items-center gap-1">
                               <ItemIcon type={item} />
-                              <span className="text-[10px] font-bold text-yellow-200">{ITEM_META[item].name}</span>
+                              <span className="text-xs font-bold text-yellow-200">{ITEM_META[item].name}</span>
                             </span>
                           ) : (
-                            <span className="text-[10px] text-gray-600">空き</span>
+                            <span className="text-xs text-gray-600">空き</span>
                           )}
                         </button>
                       );
                     })}
                   </div>
-                  <div className="text-[10px] text-gray-500">
+                  <div className="text-xs text-gray-500">
                     {keyCfg.inputMode === 'cycle' ? (
                       <>
                         <span className="text-cyan-300 font-bold">[{keyLabel(keyCfg.cycle)}]</span> 切替 ／{' '}
@@ -1954,12 +1954,12 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   return (
                     <div key={e.type} className="bg-neutral-900/90 border border-white/15 rounded-lg px-3 py-1 flex items-center gap-2">
                       <span className="text-lg leading-none">{ITEM_EMOJI[e.type]}</span>
-                      <span className="text-[11px] font-bold text-gray-100 whitespace-nowrap w-20 shrink-0">{ITEM_META[e.type].name}</span>
+                      <span className="text-xs font-bold text-gray-100 whitespace-nowrap w-20 shrink-0">{ITEM_META[e.type].name}</span>
                       <div className="flex-1 h-2.5 rounded-full bg-neutral-700 overflow-hidden">
                         <div className={`h-full ${e.color} transition-[width] duration-150`} style={{ width: `${frac * 100}%` }} />
                       </div>
                       <span className="text-xs font-mono font-black text-white tabular-nums w-10 text-right">
-                        {(remain / 1000).toFixed(1)}<span className="text-[9px] text-gray-400">s</span>
+                        {(remain / 1000).toFixed(1)}<span className="text-xs text-gray-400">s</span>
                       </span>
                     </div>
                   );
@@ -1970,7 +1970,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             {/* 自分のバックログ（処理待ち）。満タンでトップアウト＝敗北。タイムアタックでは非表示。 */}
             {soloMode !== 'timeattack' && (
             <div className="w-full max-w-lg mt-4">
-              <div className="text-[10px] text-muted mb-0.5">自分のバックログ（満タンで脱落）</div>
+              <div className="text-xs text-muted mb-0.5">自分のバックログ（満タンで脱落）</div>
               <div className="flex gap-1">
                 {Array.from({ length: maxBacklog }).map((_, i) => {
                   const filled = i < backlog.length;
@@ -2022,16 +2022,16 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                     <button key={m} onClick={() => setSoloMode(m)}
                       className={`rounded-lg px-3 py-2 text-left border transition-colors ${soloMode === m ? 'bg-cyan-600/20 border-cyan-500 text-cyan-200' : 'bg-neutral-800 border-white/10 text-gray-400 hover:bg-neutral-700'}`}>
                       <div className="text-sm font-bold">{lbl}</div>
-                      <div className="text-[10px] text-gray-500">{desc}</div>
+                      <div className="text-xs text-gray-500">{desc}</div>
                     </button>
                   ))}
                 </div>
                 {soloMode === 'timeattack' && (
-                  <div className="mt-2 flex items-center justify-center gap-2 text-[11px] text-gray-400">
+                  <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-400">
                     <span>制限時間</span>
                     {[30, 60, 90, 120].map((s) => (
                       <button key={s} onClick={() => setCfgTaSeconds(s)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgTaSeconds === s ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                        className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${cfgTaSeconds === s ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
                         {s}秒
                       </button>
                     ))}
@@ -2048,13 +2048,13 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
                   {/* 難易度プリセット: 速度・敵・CPUをまとめて設定（細部は各スライダーで微調整）。 */}
                   <div className="mb-1">
-                    <div className="text-[10px] text-gray-500 mb-1">難易度プリセット（速度・敵・CPUをまとめて設定）</div>
+                    <div className="text-xs text-gray-500 mb-1">難易度プリセット（速度・敵・CPUをまとめて設定）</div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {(['easy', 'normal', 'hard'] as const).map((k) => (
                         <button
                           key={k}
                           onClick={() => applyDifficulty(DIFFICULTY_PRESETS[k])}
-                          className="px-2 py-1.5 rounded-lg text-[11px] font-bold bg-neutral-800 text-gray-300 hover:bg-neutral-700 border border-white/10 transition-colors"
+                          className="px-2 py-1.5 rounded-lg text-xs font-bold bg-neutral-800 text-gray-300 hover:bg-neutral-700 border border-white/10 transition-colors"
                         >
                           {DIFFICULTY_PRESETS[k].label}
                         </button>
@@ -2074,16 +2074,16 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
 
                   {/* ② 攻撃・ゲージ */}
                   <CfgSection title="攻撃・ゲージ" icon={<Swords className="w-3.5 h-3.5" />} accentText="text-orange-300">
-                    <div className="text-[11px] text-gray-400">
+                    <div className="text-xs text-gray-400">
                       ゲージ加算方式
                       <div className="flex gap-1 mt-1 items-center flex-wrap">
                         {([['word', 'ワード数'], ['char', '文字数']] as const).map(([m, lbl]) => (
                           <button key={m} onClick={() => setCfgGaugeMode(m)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgGaugeMode === m ? 'bg-orange-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                            className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${cfgGaugeMode === m ? 'bg-orange-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
                             {lbl}
                           </button>
                         ))}
-                        <span className="text-[9px] text-gray-600 self-center ml-1">
+                        <span className="text-xs text-gray-600 self-center ml-1">
                           {cfgGaugeMode === 'char' ? '長い単語ほどゲージが溜まる' : '1ワード=1ゲージ'}
                         </span>
                       </div>
@@ -2097,16 +2097,16 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                     <CfgSlider label="アタック数が増える連鎖数" hint="この連鎖ごとに攻撃量+1" accent="orange" value={cfgComboStep} display={String(cfgComboStep)} min={2} max={15} step={1} onChange={setCfgComboStep} />
                     <CfgSlider label="バッジ上限（撃破数の補正上限）" accent="yellow" value={cfgBadgeCap} display={String(cfgBadgeCap)} min={0} max={10} step={1} onChange={setCfgBadgeCap} />
                     <CfgSlider label="バッジ1枚の攻撃上昇率" accent="yellow" value={cfgBadgeRate} display={`${cfgBadgeRate}%`} min={0} max={100} step={5} onChange={setCfgBadgeRate} />
-                    <div className="text-[11px] text-gray-400">
+                    <div className="text-xs text-gray-400">
                       逆転補正 <span className="text-gray-600">（劣勢ほど防御・逆転／優勢ほど攻撃）</span>
                       <div className="flex gap-1 mt-1 items-center flex-wrap">
                         {([[0, 'なし'], [1, '弱'], [2, '中'], [3, '強']] as const).map(([v, lbl]) => (
                           <button key={v} onClick={() => setCfgComeback(v)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgComeback === v ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                            className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${cfgComeback === v ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
                             {lbl}
                           </button>
                         ))}
-                        <span className="text-[9px] text-gray-600 self-center ml-1">順位＋ピンチ度で判定</span>
+                        <span className="text-xs text-gray-600 self-center ml-1">順位＋ピンチ度で判定</span>
                       </div>
                     </div>
                   </CfgSection>
@@ -2114,20 +2114,20 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                   {/* ③ お宝・アイテム */}
                   <CfgSection title="お宝・アイテム" icon={<Gift className="w-3.5 h-3.5" />} accentText="text-yellow-300">
                     <CfgSlider label="お宝の出現率" hint="お宝🟨を打つとアイテム入手" accent="yellow" value={cfgTreasureRate} display={`${cfgTreasureRate}%`} min={0} max={80} step={5} onChange={setCfgTreasureRate} />
-                    <div className="text-[11px] text-gray-400">
+                    <div className="text-xs text-gray-400">
                       アイテム
                       <div className="flex gap-1 mt-1 items-center flex-wrap">
                         {([[true, 'あり'], [false, 'なし']] as const).map(([on, lbl]) => (
                           <button key={String(on)} onClick={() => setCfgItemsOn(on)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${cfgItemsOn === on ? 'bg-fuchsia-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
+                            className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${cfgItemsOn === on ? 'bg-fuchsia-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
                             {lbl}
                           </button>
                         ))}
-                        <span className="text-[9px] text-gray-600 self-center ml-1">なしでお宝もアイテムも出ません</span>
+                        <span className="text-xs text-gray-600 self-center ml-1">なしでお宝もアイテムも出ません</span>
                       </div>
                     </div>
                     {cfgItemsOn && (
-                      <div className="text-[11px] text-gray-400">
+                      <div className="text-xs text-gray-400">
                         アイテムの個別ON/OFF <span className="text-gray-600">（OFFは出ません）</span>
                         <div className="flex flex-wrap gap-1 mt-1">
                           {ALL_ITEMS.map((it) => {
@@ -2136,7 +2136,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                               <button
                                 key={it}
                                 onClick={() => setCfgDisabledItems((prev) => off ? prev.filter((x) => x !== it) : [...prev, it])}
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors flex items-center gap-0.5 ${off ? 'bg-neutral-800 text-gray-600 line-through' : 'bg-fuchsia-700/70 text-white'}`}
+                                className={`px-1.5 py-0.5 rounded text-xs font-bold transition-colors flex items-center gap-0.5 ${off ? 'bg-neutral-800 text-gray-600 line-through' : 'bg-fuchsia-700/70 text-white'}`}
                                 title={ITEM_META[it].desc}
                               >
                                 <span>{ITEM_EMOJI[it]}</span>{ITEM_META[it].name}
@@ -2145,18 +2145,18 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                           })}
                         </div>
                         <div className="flex gap-2 mt-1">
-                          <button onClick={() => setCfgDisabledItems([])} className="text-[9px] text-cyan-400 hover:text-cyan-300 underline">全部ON</button>
-                          <button onClick={() => setCfgDisabledItems([...ALL_ITEMS])} className="text-[9px] text-gray-500 hover:text-gray-300 underline">全部OFF</button>
+                          <button onClick={() => setCfgDisabledItems([])} className="text-xs text-cyan-400 hover:text-cyan-300 underline">全部ON</button>
+                          <button onClick={() => setCfgDisabledItems([...ALL_ITEMS])} className="text-xs text-gray-500 hover:text-gray-300 underline">全部OFF</button>
                         </div>
                       </div>
                     )}
                     {cfgItemsOn && (
                       <div className="border-t border-white/10 pt-3">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-[11px] text-amber-200 font-bold">アイテムの使い方</span>
+                          <span className="text-xs text-amber-200 font-bold">アイテムの使い方</span>
                           <button
                             onClick={() => setCfgAutoFull((v) => !v)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                            className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${
                               cfgAutoFull ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
                             }`}
                           >
@@ -2164,21 +2164,21 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                           </button>
                         </div>
                         {cfgAutoFull ? (
-                          <p className="text-[10px] text-emerald-300/80">
+                          <p className="text-xs text-emerald-300/80">
                             有利/不利を見て、いい感じのタイミングで自動発動します（手動 [{keyLabel(keyCfg.fire)}] も可）。
                           </p>
                         ) : (
                           <div className="flex flex-col gap-1.5">
                             {CAT_META.map((c) => (
                               <div key={c.key} className="flex items-center justify-between gap-2">
-                                <span className={`text-[11px] font-bold ${c.color} w-8 shrink-0`}>{c.label}</span>
+                                <span className={`text-xs font-bold ${c.color} w-8 shrink-0`}>{c.label}</span>
                                 <div className="flex gap-1 flex-wrap justify-end">
                                   {USE_MODES.map((m) => (
                                     <button
                                       key={m.key}
                                       onClick={() => setCfgUse((u) => ({ ...u, [c.key]: m.key }))}
                                       title={m.desc}
-                                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                                      className={`px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
                                         cfgUse[c.key] === m.key ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
                                       }`}
                                     >
@@ -2188,7 +2188,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                                 </div>
                               </div>
                             ))}
-                            <p className="text-[9px] text-gray-600 leading-tight">
+                            <p className="text-xs text-gray-600 leading-tight">
                               新着=[{keyLabel(keyCfg.fire)}]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 保持=1つ保持し被ったら新しい方を発動
                             </p>
                           </div>
@@ -2236,7 +2236,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 </div>
                 {/* 「すべて」出題に各テーマを含めるか（OFFにしたテーマは混ざらない） */}
                 <div className="mt-3">
-                  <div className="text-[11px] text-gray-500 text-center mb-1">「すべて」に含めるテーマ（OFFで除外）</div>
+                  <div className="text-xs text-gray-500 text-center mb-1">「すべて」に含めるテーマ（OFFで除外）</div>
                   <div className="flex flex-wrap gap-1 justify-center">
                     {/* ビルトインテーマ ＋ 自作テーマ（custom:名）を同じ感覚でON/OFF */}
                     {[
@@ -2248,7 +2248,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                         <button
                           key={t.id}
                           onClick={() => setCfgExcluded((prev) => off ? prev.filter((x) => x !== t.id) : [...prev, t.id])}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${off ? 'bg-neutral-800 text-gray-600 line-through' : 'bg-cyan-700/70 text-white'}`}
+                          className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${off ? 'bg-neutral-800 text-gray-600 line-through' : 'bg-cyan-700/70 text-white'}`}
                           title={off ? '「すべて」に含めない' : '「すべて」に含める'}
                         >
                           {t.label}
@@ -2257,8 +2257,8 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                     })}
                   </div>
                   <div className="flex gap-2 justify-center mt-1">
-                    <button onClick={() => setCfgExcluded([])} className="text-[9px] text-cyan-400 hover:text-cyan-300 underline">全部含める</button>
-                    <button onClick={() => setCfgExcluded(THEMES.filter((t) => t.id !== 'all' && t.id !== 'custom').map((t) => t.id))} className="text-[9px] text-gray-500 hover:text-gray-300 underline">全部除外</button>
+                    <button onClick={() => setCfgExcluded([])} className="text-xs text-cyan-400 hover:text-cyan-300 underline">全部含める</button>
+                    <button onClick={() => setCfgExcluded(THEMES.filter((t) => t.id !== 'all' && t.id !== 'custom').map((t) => t.id))} className="text-xs text-gray-500 hover:text-gray-300 underline">全部除外</button>
                   </div>
                 </div>
               </div>
@@ -2278,7 +2278,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
                 <div className="flex flex-col gap-2 text-left text-gray-400">
                   {CAT_META.map((c) => (
                     <div key={c.key}>
-                      <div className={`text-[11px] font-black mb-0.5 ${c.color}`}>{c.label}</div>
+                      <div className={`text-xs font-black mb-0.5 ${c.color}`}>{c.label}</div>
                       <div className="flex flex-col gap-1">
                         {ALL_ITEMS.filter((t) => ITEM_CAT[t] === c.key).map((t) => (
                           <div key={t}>
@@ -2469,7 +2469,7 @@ const Hud = ({ label, value, icon, className }: { label: string; value: number; 
 
 const Stat = ({ label, value, small, suffix }: { label: string; value: number; small?: boolean; suffix?: string }) => (
   <div className="text-center">
-    <div className="font-tech text-muted" style={{ fontSize: 10, letterSpacing: '0.12em' }}>{label}</div>
+    <div className="font-tech text-muted" style={{ fontSize: 12, letterSpacing: '0.12em' }}>{label}</div>
     <div className={`font-tech font-bold text-text ${small ? 'text-lg' : 'text-3xl'}`}>{value}{suffix ?? ''}</div>
   </div>
 );
@@ -2503,12 +2503,12 @@ const CfgSlider = ({
   const a = CFG_ACCENTS[accent];
   const round = (v: number) => Math.round(v * 1000) / 1000; // 0.5等の浮動小数を丸める
   return (
-    <div className="text-[11px] text-gray-400">
+    <div className="text-xs text-gray-400">
       <div className="flex items-baseline justify-between gap-2">
         <span>{label}</span>
         <span className={`font-mono font-bold ${a.val}`}>{display}</span>
       </div>
-      {hint && <div className="text-[9px] text-gray-600 leading-tight">{hint}</div>}
+      {hint && <div className="text-xs text-gray-600 leading-tight">{hint}</div>}
       <div className="flex items-center gap-2 mt-1">
         <StepBtn onClick={() => onChange(round(Math.max(min, value - step)))}>−</StepBtn>
         <input
@@ -2536,7 +2536,7 @@ const CfgSection = ({
         onClick={() => setOpen((o) => !o)}
         className="w-full flex items-center justify-between py-2.5"
       >
-        <span className={`text-[11px] font-black flex items-center gap-1.5 ${accentText}`}>{icon}{title}</span>
+        <span className={`text-xs font-black flex items-center gap-1.5 ${accentText}`}>{icon}{title}</span>
         <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && <div className="pb-3 flex flex-col gap-3">{children}</div>}

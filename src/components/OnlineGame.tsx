@@ -1638,7 +1638,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                 <div className="text-sm font-bold text-cyan-300 flex items-center gap-2">👁 {wp.name} を観戦中</div>
                 {/* 残りバックログ（HP）バー */}
                 <div className="w-full max-w-xs">
-                  <div className="flex justify-between text-[11px] text-gray-500 mb-0.5">
+                  <div className="flex justify-between text-xs text-gray-500 mb-0.5">
                     <span>残り {wp.backlog} / {wpMax}</span>
                     <span>{wp.combo ?? 0} 連鎖 · {wp.kps ?? wp.kpm ?? 0} KPS</span>
                   </div>
@@ -1675,7 +1675,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                     ))}
                   </div>
                 </div>
-                <div className="text-[11px] text-gray-600">他の盤面をクリックすると観戦相手を切り替えられます</div>
+                <div className="text-xs text-gray-600">他の盤面をクリックすると観戦相手を切り替えられます</div>
               </div>
             );
           })()}
@@ -1688,7 +1688,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                 </div>
               ) : (
                 <div className="absolute top-1 left-1/2 -translate-x-1/2 z-20 w-56">
-                  <div className="flex items-center justify-between text-[11px] mb-0.5">
+                  <div className="flex items-center justify-between text-xs mb-0.5">
                     <span className="font-bold text-red-300 flex items-center gap-1">
                       <Crown className="w-3.5 h-3.5 text-yellow-400" /> BOSS {bossPlayer?.name ?? ''}
                     </span>
@@ -1707,13 +1707,13 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             {/* ターゲットモード切替（[Tab]でも切替）。ボスモードの挑戦者は常にボスを狙うため非表示。 */}
             {!(bossMode && !isBoss) && (
               <div className="absolute top-1 left-0 flex flex-col items-start gap-1">
-                <div className="flex items-center gap-1 text-[10px] text-gray-500"><Target className="w-3 h-3" /> 狙い [Tab]</div>
+                <div className="flex items-center gap-1 text-xs text-gray-500"><Target className="w-3 h-3" /> 狙い [Tab]</div>
                 <div className="flex gap-1">
                   {TARGET_MODES.map((t) => (
                     <button
                       key={t.mode}
                       onClick={() => setTargetMode(t.mode)}
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                      className={`px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
                         targetMode === t.mode ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
                       }`}
                     >
@@ -1736,20 +1736,20 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             {/* ログ（ALIVEの下・入力の右側の空白を使用）。上＝アイテム使用 / 下＝攻撃・撃破 */}
             <div className="absolute top-16 right-0 w-40 z-20 flex flex-col gap-2 pointer-events-none">
               <div>
-                <div className="text-[9px] font-bold text-yellow-300/80 mb-0.5 text-right">アイテム使用</div>
+                <div className="text-xs font-bold text-yellow-300/80 mb-0.5 text-right">アイテム使用</div>
                 <div className="flex flex-col gap-0.5 items-end">
                   {toasts.filter((t) => t.kind === 'item').slice(-5).map((t) => (
-                    <div key={t.id} className="max-w-full truncate px-2 py-0.5 rounded bg-yellow-600/80 text-black text-[10px] font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200">
+                    <div key={t.id} className="max-w-full truncate px-2 py-0.5 rounded bg-yellow-600/80 text-black text-xs font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200">
                       ✨ {t.text}
                     </div>
                   ))}
                 </div>
               </div>
               <div>
-                <div className="text-[9px] font-bold text-orange-300/80 mb-0.5 text-right">攻撃・撃破</div>
+                <div className="text-xs font-bold text-orange-300/80 mb-0.5 text-right">攻撃・撃破</div>
                 <div className="flex flex-col gap-0.5 items-end">
                   {toasts.filter((t) => t.kind === 'ko' || t.kind === 'in').slice(-6).map((t) => (
-                    <div key={t.id} className={`max-w-full truncate px-2 py-0.5 rounded text-[10px] font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200 ${
+                    <div key={t.id} className={`max-w-full truncate px-2 py-0.5 rounded text-xs font-bold shadow animate-in fade-in slide-in-from-right-2 duration-200 ${
                       t.kind === 'ko' ? 'bg-orange-600/85 text-white' : 'bg-red-950/85 text-red-200 border border-red-500/40'
                     }`}>
                       {t.kind === 'ko' ? '🏆 ' : '⚠ '}{t.text}
@@ -1758,12 +1758,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                 </div>
               </div>
               <div>
-                <div className="text-[9px] font-bold text-cyan-300/80 mb-0.5 text-right">自分のアイテム</div>
+                <div className="text-xs font-bold text-cyan-300/80 mb-0.5 text-right">自分のアイテム</div>
                 <div className="flex flex-col gap-0.5 items-end">
                   {selfLog.slice(-5).map((l) => (
-                    <div key={l.id} className="max-w-full px-2 py-0.5 rounded bg-cyan-900/85 text-cyan-100 text-[10px] font-bold shadow border border-cyan-500/40 animate-in fade-in slide-in-from-right-2 duration-200">
+                    <div key={l.id} className="max-w-full px-2 py-0.5 rounded bg-cyan-900/85 text-cyan-100 text-xs font-bold shadow border border-cyan-500/40 animate-in fade-in slide-in-from-right-2 duration-200">
                       <div className="flex items-center gap-1">{ITEM_EMOJI[l.item]} {ITEM_META[l.item].name}</div>
-                      <div className="text-[9px] font-normal text-cyan-200/80 leading-tight">{ITEM_META[l.item].desc}</div>
+                      <div className="text-xs font-normal text-cyan-200/80 leading-tight">{ITEM_META[l.item].desc}</div>
                     </div>
                   ))}
                 </div>
@@ -1827,7 +1827,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                       );
                     })}
                   </div>
-                  <div className="text-[10px] text-gray-400 text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
+                  <div className="text-xs text-gray-400 text-center leading-tight mt-0.5">おじゃま<br />着弾予告</div>
                 </div>
               )}
 
@@ -1876,23 +1876,23 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                           sel ? 'border-cyan-400 bg-cyan-950/40 shadow-[0_0_8px_rgb(var(--ac-400)/0.4)]' : 'border-white/10 bg-neutral-900/80'
                         }`}
                       >
-                        <span className={`text-[9px] font-bold ${c.color}`}>
+                        <span className={`text-xs font-bold ${c.color}`}>
                           {c.label}
                           {direct && <span className="ml-1 text-gray-400 font-mono">[{keyLabel(keyCfg.slots[c.key])}]</span>}
                         </span>
                         {item ? (
                           <span className="flex items-center gap-1">
                             <ItemIcon type={item} />
-                            <span className="text-[10px] font-bold text-yellow-200">{ITEM_META[item].name}</span>
+                            <span className="text-xs font-bold text-yellow-200">{ITEM_META[item].name}</span>
                           </span>
                         ) : (
-                          <span className="text-[10px] text-gray-600">空き</span>
+                          <span className="text-xs text-gray-600">空き</span>
                         )}
                       </button>
                     );
                   })}
                 </div>
-                <div className="text-[10px] text-gray-500">
+                <div className="text-xs text-gray-500">
                   {keyCfg.inputMode === 'cycle' ? (
                     <>
                       <span className="text-cyan-300 font-bold">[{keyLabel(keyCfg.cycle)}]</span> 切替 ／{' '}
@@ -1917,12 +1917,12 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
                   return (
                     <div key={e.type} className="bg-neutral-900/90 border border-white/15 rounded-lg px-3 py-1 flex items-center gap-2">
                       <span className="text-lg leading-none">{ITEM_EMOJI[e.type]}</span>
-                      <span className="text-[11px] font-bold text-gray-100 whitespace-nowrap w-20 shrink-0">{ITEM_META[e.type].name}</span>
+                      <span className="text-xs font-bold text-gray-100 whitespace-nowrap w-20 shrink-0">{ITEM_META[e.type].name}</span>
                       <div className="flex-1 h-2.5 rounded-full bg-neutral-700 overflow-hidden">
                         <div className={`h-full ${e.color} transition-[width] duration-150`} style={{ width: `${frac * 100}%` }} />
                       </div>
                       <span className="text-xs font-mono font-black text-white tabular-nums w-10 text-right">
-                        {(remain / 1000).toFixed(1)}<span className="text-[9px] text-gray-400">s</span>
+                        {(remain / 1000).toFixed(1)}<span className="text-xs text-gray-400">s</span>
                       </span>
                     </div>
                   );
@@ -1931,7 +1931,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
             )}
 
             <div className="w-full max-w-lg mt-4">
-              <div className="text-[10px] text-gray-500 mb-0.5">
+              <div className="text-xs text-gray-500 mb-0.5">
                 {isBoss ? 'あなたのHP（満タンで討伐される）' : '自分のバックログ（満タンで脱落）'}
               </div>
               <div className="flex gap-0.5">

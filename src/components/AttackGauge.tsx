@@ -26,11 +26,11 @@ export default function AttackGauge({ progress, combo, pinch, badges = 0, thresh
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs text-muted tracking-wide flex items-center gap-1">
           <Swords className="w-3.5 h-3.5 text-charge" /> 攻撃チャージ
-          <span className="text-[10px] text-muted">（{threshold}{unit}ごとに発射）</span>
+          <span className="text-xs text-muted">（{threshold}{unit}ごとに発射）</span>
         </span>
         <span className={`text-sm font-black font-tech flex items-center gap-1 ${pinch ? 'text-incoming' : 'text-charge'}`}>
           次の攻撃 +{amount}
-          {pinch && <span className="text-[10px] text-incoming">ピンチ×1.5</span>}
+          {pinch && <span className="text-xs text-incoming">ピンチ×1.5</span>}
         </span>
       </div>
       <div className="flex gap-1.5">

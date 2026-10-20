@@ -115,7 +115,7 @@ export default function ImageCropper({ src, onCancel, onConfirm, aspect, title =
             <button
               key={pr.label}
               onClick={() => changeAspect(pr.a)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors ${
                 near(asp, pr.a) ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
               }`}
             >
@@ -123,7 +123,7 @@ export default function ImageCropper({ src, onCancel, onConfirm, aspect, title =
             </button>
           ))}
         </div>
-        <p className="text-[11px] text-gray-500 mb-3">枠をドラッグで移動 ／ 右下の角でサイズ変更。比率は上から選べます（「画面」は背景がそのまま、「盤面(3:4)」は盤面がそのまま表示されます）。</p>
+        <p className="text-xs text-gray-500 mb-3">枠をドラッグで移動 ／ 右下の角でサイズ変更。比率は上から選べます（「画面」は背景がそのまま、「盤面(3:4)」は盤面がそのまま表示されます）。</p>
 
         <div className="relative mx-auto select-none touch-none" style={{ width: disp.w, height: disp.h }}>
           <img src={src} alt="" className="absolute inset-0 w-full h-full object-fill rounded-lg pointer-events-none" draggable={false} />

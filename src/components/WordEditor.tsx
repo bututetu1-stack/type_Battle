@@ -128,18 +128,18 @@ export default function WordEditor({ words, onChange, onClose, title = '語句�
           <button onClick={onClose} className="text-muted hover:text-text"><X className="w-5 h-5" /></button>
         </div>
 
-        {note && <p className="text-[11px] text-muted mb-3">{note}</p>}
+        {note && <p className="text-xs text-muted mb-3">{note}</p>}
 
         {/* テーマ（グループ）選択・管理 */}
         {grouping && (
           <div className="mb-3">
-            <div className="text-[10px] text-muted mb-1">テーマ（自作）</div>
+            <div className="text-xs text-muted mb-1">テーマ（自作）</div>
             <div className="flex flex-wrap gap-1.5">
               {[{ id: ALL, label: 'すべて' }, { id: NONE, label: '未分類' }, ...groupList.map((g) => ({ id: g, label: g }))].map((t) => (
                 <button
                   key={t.id}
                   onClick={() => setActive(t.id)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold transition-colors ${
+                  className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
                     active === t.id ? 'bg-fuchsia-600 text-text' : 'bg-surface text-muted hover:bg-surface2'
                   }`}
                 >
@@ -175,7 +175,7 @@ export default function WordEditor({ words, onChange, onClose, title = '語句�
           <div className="bg-bg/50 rounded-xl p-3 mb-3">
             <div className="grid grid-cols-2 gap-2 mb-2">
               <div>
-                <label className="text-[10px] text-muted">表示（漢字など）</label>
+                <label className="text-xs text-muted">表示（漢字など）</label>
                 <input
                   ref={displayRef}
                   value={display}
@@ -185,7 +185,7 @@ export default function WordEditor({ words, onChange, onClose, title = '語句�
                 />
               </div>
               <div>
-                <label className="text-[10px] text-muted">読み（ひらがな）</label>
+                <label className="text-xs text-muted">読み（ひらがな）</label>
                 <input
                   value={reading}
                   onChange={(e) => setReading(e.target.value)}
@@ -196,11 +196,11 @@ export default function WordEditor({ words, onChange, onClose, title = '語句�
               </div>
             </div>
             {grouping && (
-              <p className="text-[10px] text-muted mb-2">
+              <p className="text-xs text-muted mb-2">
                 追加先テーマ: <span className="text-fuchsia-300 font-bold">{targetGroup ?? '未分類'}</span>
               </p>
             )}
-            {err && <p className="text-[11px] text-red-400 mb-2">{err}</p>}
+            {err && <p className="text-xs text-red-400 mb-2">{err}</p>}
             <button
               onClick={add}
               className="w-full bg-fuchsia-600 hover:bg-fuchsia-500 rounded-lg px-3 py-2 font-bold text-sm flex items-center justify-center gap-1"
@@ -213,7 +213,7 @@ export default function WordEditor({ words, onChange, onClose, title = '語句�
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs text-muted">追加済み（{visible.length}{grouping && active !== ALL ? ` / 全${words.length}` : ''}）</span>
           {multi && visible.length > 0 && (
-            <label className="flex items-center gap-1 text-[10px] text-muted cursor-pointer select-none">
+            <label className="flex items-center gap-1 text-xs text-muted cursor-pointer select-none">
               <input type="checkbox" checked={allVisSelected} onChange={selectAllVisible} className="accent-fuchsia-500" />
               表示中を全選択
             </label>
@@ -223,32 +223,32 @@ export default function WordEditor({ words, onChange, onClose, title = '語句�
         {/* 一括操作バー（1件以上選択時）：テーマへ移動／削除 */}
         {multi && selected.size > 0 && (
           <div className="flex items-center gap-1.5 mb-2 bg-fuchsia-950/40 border border-fuchsia-700/40 rounded-lg px-2 py-1.5">
-            <span className="text-[11px] text-fuchsia-200 font-bold shrink-0">{selected.size}件</span>
+            <span className="text-xs text-fuchsia-200 font-bold shrink-0">{selected.size}件</span>
             <select
               value={moveTarget}
               onChange={(e) => setMoveTarget(e.target.value)}
-              className="bg-surface border border-line rounded px-1 py-0.5 text-[10px] text-text outline-none focus:border-fuchsia-500 min-w-0 flex-1"
+              className="bg-surface border border-line rounded px-1 py-0.5 text-xs text-text outline-none focus:border-fuchsia-500 min-w-0 flex-1"
             >
               <option value="">未分類</option>
               {groupList.map((g) => (
                 <option key={g} value={g}>{g}</option>
               ))}
             </select>
-            <button onClick={() => moveSelected(moveTarget)} className="bg-fuchsia-600 hover:bg-fuchsia-500 rounded px-2 py-0.5 text-[10px] font-bold flex items-center gap-0.5 shrink-0">
+            <button onClick={() => moveSelected(moveTarget)} className="bg-fuchsia-600 hover:bg-fuchsia-500 rounded px-2 py-0.5 text-xs font-bold flex items-center gap-0.5 shrink-0">
               <FolderInput className="w-3 h-3" />移動
             </button>
             <button onClick={deleteSelected} className="text-muted hover:text-red-400 shrink-0" title="選択した語句を削除">
               <Trash2 className="w-3.5 h-3.5" />
             </button>
-            <button onClick={() => setSelected(new Set())} className="text-[10px] text-muted hover:text-text underline shrink-0">解除</button>
+            <button onClick={() => setSelected(new Set())} className="text-xs text-muted hover:text-text underline shrink-0">解除</button>
           </div>
         )}
 
         {visible.length === 0 ? (
-          <p className="text-[11px] text-muted py-4 text-center">まだ追加された語句はありません</p>
+          <p className="text-xs text-muted py-4 text-center">まだ追加された語句はありません</p>
         ) : (
           <>
-          {multi && <p className="text-[9px] text-muted mb-1">チェック または 行をドラッグでまとめて選択 → 上のバーでテーマ移動</p>}
+          {multi && <p className="text-xs text-muted mb-1">チェック または 行をドラッグでまとめて選択 → 上のバーでテーマ移動</p>}
           <div className="bg-bg/40 rounded-xl divide-y divide-white/5 max-h-64 overflow-y-auto">
             {visible.map((w, i) => {
               const sel = selected.has(keyOf(w));
@@ -271,8 +271,8 @@ export default function WordEditor({ words, onChange, onClose, title = '語句�
                   )}
                   <span className="min-w-0">
                     <span className="text-sm text-text font-bold">{w.display}</span>
-                    <span className="text-[11px] text-muted ml-2">{w.reading}</span>
-                    {grouping && w.group && <span className="text-[9px] text-fuchsia-300/70 ml-2">🗂{w.group}</span>}
+                    <span className="text-xs text-muted ml-2">{w.reading}</span>
+                    {grouping && w.group && <span className="text-xs text-fuchsia-300/70 ml-2">🗂{w.group}</span>}
                   </span>
                 </div>
                 {!readOnly && (

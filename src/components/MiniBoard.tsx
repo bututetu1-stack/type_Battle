@@ -70,7 +70,7 @@ export default function MiniBoard({
         ))}
       </div>
       {combo !== undefined && combo > 2 && (
-        <div className="absolute top-0.5 right-0.5 text-[9px] font-bold" style={{ color: 'var(--primary)' }}>{combo}c</div>
+        <div className="absolute top-0.5 right-0.5 text-xs font-bold" style={{ color: 'var(--primary)' }}>{combo}c</div>
       )}
       {str !== undefined && (
         // 強さを★1〜3で表示（強いほど赤寄り）。

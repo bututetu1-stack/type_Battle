@@ -29,14 +29,14 @@ export default function ResultInsights({ kps, acc, score, prev, series, missKeys
           </div>
           <div className="min-w-0">
             <div className="text-text font-bold text-base">{r.rank.title}</div>
-            <div className="text-[11px] text-muted leading-snug">
+            <div className="text-xs text-muted leading-snug">
               {!r.next
                 ? '最高ランク到達'
                 : r.accToNext != null
                   ? <>正確率 <b className="text-text">{Math.round(r.accToNext * 100)}%</b> 以上で「{r.next.title}」</>
                   : <>「{r.next.title}」まで あと <b className="text-text">{r.kpsToNext?.toFixed(1)}</b> KPS</>}
             </div>
-            {r.penalty > 0 && <div className="text-[10px] text-muted">正確率が{acc < 0.8 ? '80' : '90'}%未満のため −{r.penalty}段</div>}
+            {r.penalty > 0 && <div className="text-xs text-muted">正確率が{acc < 0.8 ? '80' : '90'}%未満のため −{r.penalty}段</div>}
           </div>
         </div>
         <BestDiff kps={kps} score={score} prev={prev} />
@@ -51,7 +51,7 @@ export default function ResultInsights({ kps, acc, score, prev, series, missKeys
       <div className="col-span-2">
         <Panel>
           <div className="flex items-baseline justify-between mb-2">
-            <div className="text-[11px] font-bold text-text tracking-wide">苦手キー</div>
+            <div className="text-xs font-bold text-text tracking-wide">苦手キー</div>
             {totalMiss > 0 && <ScaleLegend />}
           </div>
           {totalMiss === 0 ? (
@@ -73,7 +73,7 @@ const Panel = ({ children }: { children: React.ReactNode }) => (
 );
 
 function BestDiff({ kps, score, prev }: Pick<Props, 'kps' | 'score' | 'prev'>) {
-  if (!prev) return <div className="mt-2 text-[11px] text-muted">初めての記録です。次はこれを超えよう</div>;
+  if (!prev) return <div className="mt-2 text-xs text-muted">初めての記録です。次はこれを超えよう</div>;
   const ds = score - prev.score;
   const dk = Math.round((kps - prev.kps) * 10) / 10;
   if (ds > 0) {
@@ -84,7 +84,7 @@ function BestDiff({ kps, score, prev }: Pick<Props, 'kps' | 'score' | 'prev'>) {
     );
   }
   return (
-    <div className="mt-2 text-[11px] text-muted leading-snug">
+    <div className="mt-2 text-xs text-muted leading-snug">
       自己ベストまで <b className="text-text">{-ds}</b> 点
       <span className="ml-2">KPS {dk >= 0 ? '▲' : '▼'}<b className="text-text">{Math.abs(dk).toFixed(1)}</b></span>
     </div>
@@ -108,8 +108,8 @@ function Sparkline({ series }: { series: number[] }) {
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1">
-        <div className="text-[11px] font-bold text-text tracking-wide">速度の推移（KPS）</div>
-        <div className="text-[10px] text-muted font-tech">平均 {avg.toFixed(1)} ・ 最高 {Math.max(0, ...series).toFixed(1)}</div>
+        <div className="text-xs font-bold text-text tracking-wide">速度の推移（KPS）</div>
+        <div className="text-xs text-muted font-tech">平均 {avg.toFixed(1)} ・ 最高 {Math.max(0, ...series).toFixed(1)}</div>
       </div>
       <div className="relative">
         <svg
@@ -139,7 +139,7 @@ function Sparkline({ series }: { series: number[] }) {
             <Dot left={x(hi) / W} top={y(series[hi]) / H} />
             {hover != null && (
               <div
-                className="absolute top-0.5 px-1.5 py-0.5 rounded text-[10px] font-tech text-text whitespace-nowrap pointer-events-none"
+                className="absolute top-0.5 px-1.5 py-0.5 rounded text-xs font-tech text-text whitespace-nowrap pointer-events-none"
                 style={{
                   left: `${(x(hi) / W) * 100}%`,
                   transform: `translateX(${x(hi) / W > 0.75 ? 'calc(-100% - 6px)' : '6px'})`,
@@ -174,7 +174,7 @@ const STEPS = ['--ac-900', '--ac-700', '--ac-500', '--ac-300'];
 const stepOf = (c: number, max: number) => Math.min(3, Math.ceil((c / max) * 4) - 1);
 
 const ScaleLegend = () => (
-  <div className="flex items-center gap-1 text-[10px] text-muted">
+  <div className="flex items-center gap-1 text-xs text-muted">
     少
     {STEPS.map((s) => <span key={s} className="inline-block rounded-sm" style={{ width: 10, height: 10, background: `rgb(var(${s}))` }} />)}
     多
@@ -204,7 +204,7 @@ function KeyboardHeat({ tally }: { tally: Tally }) {
                 title={c ? `${k.toUpperCase()}: ${c}回ミス` : k.toUpperCase()}
                 className="relative flex items-center justify-center rounded font-mono2 uppercase"
                 style={{
-                  width: K, height: K, fontSize: 10,
+                  width: K, height: K, fontSize: 12,
                   background: s >= 0 ? `rgb(var(${STEPS[s]}))` : 'rgba(255,255,255,.04)',
                   border: '1px solid var(--line)',
                   color: s >= 2 ? 'var(--bg)' : s >= 0 ? 'var(--text)' : 'var(--muted)',
@@ -226,7 +226,7 @@ function WeakList({ keys, kana }: { keys: Tally; kana: Tally }) {
   const tk = topOf(keys, 3);
   const tn = topOf(kana, 3);
   return (
-    <div className="flex-1 min-w-[9rem] text-[11px] grid gap-2">
+    <div className="flex-1 min-w-[9rem] text-xs grid gap-2">
       <div>
         <div className="text-muted mb-1">キー</div>
         <div className="flex flex-wrap gap-1">

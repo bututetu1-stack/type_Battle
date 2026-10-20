@@ -229,13 +229,13 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                     {m.id === 'boss' && <Crown className="w-3.5 h-3.5 text-yellow-400" />}
                     {m.label}
                   </div>
-                  <div className="text-[10px] text-muted">{m.desc}</div>
+                  <div className="text-xs text-muted">{m.desc}</div>
                 </button>
               );
             })}
           </div>
           {meta.mode === 'boss' && (
-            <p className="text-[11px] text-yellow-300/80 mt-1.5">
+            <p className="text-xs text-yellow-300/80 mt-1.5">
               👑 ボスは {players[meta.bossUid || meta.hostUid]?.name ?? 'ホスト'}。他の参加者が協力して討伐します。
             </p>
           )}
@@ -257,7 +257,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                 {lbl}
               </button>
             ))}
-            <span className="text-[10px] text-muted self-center ml-1">なしでお宝・アイテムが出ません</span>
+            <span className="text-xs text-muted self-center ml-1">なしでお宝・アイテムが出ません</span>
           </div>
         </div>
 
@@ -279,7 +279,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
             disabled={!isHost || meta.itemsOn === false}
             className="w-full accent-yellow-500 disabled:opacity-60"
           />
-          <p className="text-[10px] text-muted mt-0.5">
+          <p className="text-xs text-muted mt-0.5">
             高いほどアイテムが多く出ます。出る内容は有利/不利で変化（不利なら防御・逆転、有利なら攻撃が出やすい）。
           </p>
         </div>
@@ -319,19 +319,19 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
             disabled={!isHost}
             className="w-full accent-cyan-500 disabled:opacity-60"
           />
-          <p className="text-[10px] text-muted mt-0.5">右ほど速い（おじゃま単語が早く積もります）。</p>
+          <p className="text-xs text-muted mt-0.5">右ほど速い（おじゃま単語が早く積もります）。</p>
         </div>
 
         {/* ゲージ加算方式（ホストが選択） */}
         <div className="mb-2 flex items-center gap-2">
-          <span className="text-[11px] text-muted">ゲージ加算方式</span>
+          <span className="text-xs text-muted">ゲージ加算方式</span>
           {([['word', 'ワード数'], ['char', '文字数']] as const).map(([m, lbl]) => (
             <button key={m} onClick={() => isHost && setRoomGaugeMode(roomId, m)} disabled={!isHost}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors disabled:opacity-60 ${(meta.gaugeMode === 'char' ? 'char' : 'word') === m ? 'bg-orange-600 text-text' : 'bg-surface text-muted hover:bg-surface2'}`}>
+              className={`px-2 py-0.5 rounded text-xs font-bold transition-colors disabled:opacity-60 ${(meta.gaugeMode === 'char' ? 'char' : 'word') === m ? 'bg-orange-600 text-text' : 'bg-surface text-muted hover:bg-surface2'}`}>
               {lbl}
             </button>
           ))}
-          <span className="text-[9px] text-muted">{meta.gaugeMode === 'char' ? '長い単語ほど溜まる' : '1ワード=1'}</span>
+          <span className="text-xs text-muted">{meta.gaugeMode === 'char' ? '長い単語ほど溜まる' : '1ワード=1'}</span>
         </div>
 
         {/* 攻撃の設定（ホストが選択） */}
@@ -346,7 +346,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
             { key: 'badgeRate', label: 'バッジ上昇率%', val: typeof meta.badgeRate === 'number' ? meta.badgeRate : 25, min: 0, max: 100, set: setRoomBadgeRate },
           ] as const).map((s) => (
             <div key={s.key} className="bg-bg2/60 border border-line rounded-lg p-2">
-              <div className="text-[10px] text-muted mb-1 flex items-center justify-between">
+              <div className="text-xs text-muted mb-1 flex items-center justify-between">
                 <span>{s.label}</span>
                 <span className="text-orange-300 font-mono font-bold">{s.val}</span>
               </div>
@@ -366,14 +366,14 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
 
         {/* 逆転補正（ホストが選択） */}
         <div className="mb-5 flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] text-muted">逆転補正</span>
+          <span className="text-xs text-muted">逆転補正</span>
           {([[0, 'なし'], [1, '弱'], [2, '中'], [3, '強']] as const).map(([v, lbl]) => (
             <button key={v} onClick={() => isHost && setRoomComeback(roomId, v)} disabled={!isHost}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors disabled:opacity-60 ${(typeof meta.comeback === 'number' ? meta.comeback : 2) === v ? 'bg-emerald-600 text-text' : 'bg-surface text-muted hover:bg-surface2'}`}>
+              className={`px-2 py-0.5 rounded text-xs font-bold transition-colors disabled:opacity-60 ${(typeof meta.comeback === 'number' ? meta.comeback : 2) === v ? 'bg-emerald-600 text-text' : 'bg-surface text-muted hover:bg-surface2'}`}>
               {lbl}
             </button>
           ))}
-          <span className="text-[9px] text-muted">劣勢ほど防御・逆転／優勢ほど攻撃（順位＋ピンチ度）</span>
+          <span className="text-xs text-muted">劣勢ほど防御・逆転／優勢ほど攻撃（順位＋ピンチ度）</span>
         </div>
 
         {/* CPU追加（ホストのみ。royaleモード向け） */}
@@ -384,13 +384,13 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
               <button
                 onClick={() => addCpuPlayer(roomId, cpuStr / 10).catch(() => {})}
                 disabled={playerList.length >= meta.maxPlayers}
-                className="px-2 py-1 rounded bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-40 text-text text-[11px] font-bold flex items-center gap-1"
+                className="px-2 py-1 rounded bg-fuchsia-600 hover:bg-fuchsia-500 disabled:opacity-40 text-text text-xs font-bold flex items-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5" /> 追加
               </button>
             </div>
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-[11px] text-muted shrink-0">強さ {cpuStr}</span>
+              <span className="text-xs text-muted shrink-0">強さ {cpuStr}</span>
               <input
                 type="range"
                 min={0}
@@ -404,7 +404,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
             {cpuPlayers.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {cpuPlayers.map(([id, p]) => (
-                  <span key={id} className="inline-flex items-center gap-1 bg-surface rounded-full pl-2 pr-1 py-0.5 text-[11px] text-text">
+                  <span key={id} className="inline-flex items-center gap-1 bg-surface rounded-full pl-2 pr-1 py-0.5 text-xs text-text">
                     {p.name}
                     <span className="text-fuchsia-300 font-mono">{Math.round((p.str ?? 0.5) * 10)}</span>
                     <button onClick={() => removeCpuPlayer(roomId, id).catch(() => {})} className="text-muted hover:text-red-400">
@@ -414,7 +414,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                 ))}
               </div>
             ) : (
-              <p className="text-[10px] text-muted">CPUはホストの端末でシミュレートされます（バトルロワイヤル向け）。</p>
+              <p className="text-xs text-muted">CPUはホストの端末でシミュレートされます（バトルロワイヤル向け）。</p>
             )}
           </div>
         )}
@@ -444,7 +444,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
           </div>
           {/* 「すべて」出題に各テーマを含めるか（ホストがOFFにしたテーマは混ざらない） */}
           <div className="mt-3">
-            <div className="text-[11px] text-muted mb-1">「すべて」に含めるテーマ（OFFで除外）{isHost ? '（ホスト）' : ''}</div>
+            <div className="text-xs text-muted mb-1">「すべて」に含めるテーマ（OFFで除外）{isHost ? '（ホスト）' : ''}</div>
             <div className="flex flex-wrap gap-1">
               {(() => {
                 const ex = Array.isArray(meta.excludedThemes) ? meta.excludedThemes : (meta.kancolleOn === false ? ['kancolle'] : []);
@@ -455,7 +455,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                       key={t.id}
                       onClick={() => isHost && setRoomExcludedThemes(roomId, off ? ex.filter((x) => x !== t.id) : [...ex, t.id])}
                       disabled={!isHost}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors disabled:opacity-60 ${off ? 'bg-surface text-muted line-through' : 'bg-cyan-700/70 text-text'}`}
+                      className={`px-2 py-0.5 rounded text-xs font-bold transition-colors disabled:opacity-60 ${off ? 'bg-surface text-muted line-through' : 'bg-cyan-700/70 text-text'}`}
                     >
                       {t.label}
                     </button>
@@ -472,7 +472,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
             <span className="text-xs text-amber-200 font-bold">アイテムの使い方（自分用）</span>
             <button
               onClick={() => updatePrefs({ ...itemPrefs, autoFull: !itemPrefs.autoFull })}
-              className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+              className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${
                 itemPrefs.autoFull ? 'bg-emerald-600 text-text' : 'bg-surface text-muted hover:bg-surface2'
               }`}
             >
@@ -480,21 +480,21 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
             </button>
           </div>
           {itemPrefs.autoFull ? (
-            <p className="text-[10px] text-emerald-300/80">
+            <p className="text-xs text-emerald-300/80">
               有利/不利を見て、いい感じのタイミングで自動発動します（手動 [Space] も可）。
             </p>
           ) : (
             <div className="flex flex-col gap-1.5">
               {CAT_META.map((c) => (
                 <div key={c.key} className="flex items-center justify-between gap-2">
-                  <span className={`text-[11px] font-bold ${c.color} w-8 shrink-0`}>{c.label}</span>
+                  <span className={`text-xs font-bold ${c.color} w-8 shrink-0`}>{c.label}</span>
                   <div className="flex gap-1 flex-wrap justify-end">
                     {USE_MODES.map((m) => (
                       <button
                         key={m.key}
                         onClick={() => updatePrefs({ ...itemPrefs, use: { ...itemPrefs.use, [c.key]: m.key } })}
                         title={m.desc}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                        className={`px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
                           itemPrefs.use[c.key] === m.key ? 'bg-cyan-600 text-text' : 'bg-surface text-muted hover:bg-surface2'
                         }`}
                       >
@@ -504,7 +504,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                   </div>
                 </div>
               ))}
-              <p className="text-[9px] text-muted leading-tight">
+              <p className="text-xs text-muted leading-tight">
                 新着=[Enter]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 保持=1つ保持し被ったら新しい方を発動
               </p>
             </div>
@@ -518,7 +518,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
             className="flex-1 bg-surface/70 hover:bg-surface2 rounded-xl px-4 py-2.5 font-bold text-sm flex items-center justify-center gap-2 text-text"
           >
             📚 語句を追加（部屋共有） <span className="text-xs text-muted">(合計 {sharedWords.length})</span>
-            {!isHost && <span className="text-[10px] text-muted">編集はホスト</span>}
+            {!isHost && <span className="text-xs text-muted">編集はホスト</span>}
           </button>
           {(() => {
             const mine = players[uid]?.words || [];
@@ -538,7 +538,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
             );
           })()}
         </div>
-        <p className="text-[10px] text-muted mb-4">※「持ち寄る」を押すと、その端末で追加した語句が全員の出題に合流します（重複は自動除外）。</p>
+        <p className="text-xs text-muted mb-4">※「持ち寄る」を押すと、その端末で追加した語句が全員の出題に合流します（重複は自動除外）。</p>
 
         {/* アイテムのON/OFF＋効果一覧（ホストが各アイテムの有無を設定できる） */}
         <div className={`mb-6 bg-bg2/60 border rounded-xl ${meta.itemsOn === false ? 'opacity-40 pointer-events-none' : 'border-line'}`}>
@@ -553,7 +553,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
           </button>
           {showItems && (
             <div className="px-3 pb-3 flex flex-col gap-3 max-h-72 overflow-y-auto">
-              <p className="text-[10px] text-muted sticky top-0 bg-bg2/95 py-1">
+              <p className="text-xs text-muted sticky top-0 bg-bg2/95 py-1">
                 {isHost ? '右の ON/OFF で各アイテムの出現を切替（OFFは出ません）。' : '各アイテムの ON/OFF はホストが設定します。'}
               </p>
               {CAT_META.map((c) => {
@@ -563,7 +563,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                 if (list.length === 0) return null;
                 return (
                   <div key={c.key}>
-                    <div className={`text-[11px] font-bold mb-1 ${c.color}`}>{c.label}</div>
+                    <div className={`text-xs font-bold mb-1 ${c.color}`}>{c.label}</div>
                     <div className="flex flex-col gap-1">
                       {list.map((it) => {
                         const dis = Array.isArray(meta.disabledItems) ? meta.disabledItems : [];
@@ -573,18 +573,18 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                           setRoomDisabledItems(roomId, off ? dis.filter((x) => x !== it) : [...dis, it]);
                         };
                         return (
-                          <div key={it} className={`flex items-start gap-2 text-[11px] ${off ? 'opacity-45' : ''}`}>
+                          <div key={it} className={`flex items-start gap-2 text-xs ${off ? 'opacity-45' : ''}`}>
                             <span className="text-base leading-none shrink-0">{ITEM_EMOJI[it]}</span>
                             <div className="flex-1 min-w-0">
                               <span className="font-bold text-text">{ITEM_META[it].name}</span>
-                              {BOSS_ONLY.has(it) && <span className="ml-1 text-[9px] text-yellow-300">[ボス]</span>}
-                              {ONLINE_ONLY.has(it) && <span className="ml-1 text-[9px] text-fuchsia-300">[ONLINE]</span>}
+                              {BOSS_ONLY.has(it) && <span className="ml-1 text-xs text-yellow-300">[ボス]</span>}
+                              {ONLINE_ONLY.has(it) && <span className="ml-1 text-xs text-fuchsia-300">[ONLINE]</span>}
                               <span className="text-muted"> — {ITEM_META[it].desc}</span>
                             </div>
                             <button
                               onClick={toggle}
                               disabled={!isHost}
-                              className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold disabled:opacity-60 ${off ? 'bg-surface2 text-muted' : 'bg-fuchsia-600 text-text'}`}
+                              className={`shrink-0 px-1.5 py-0.5 rounded text-xs font-bold disabled:opacity-60 ${off ? 'bg-surface2 text-muted' : 'bg-fuchsia-600 text-text'}`}
                             >
                               {off ? 'OFF' : 'ON'}
                             </button>
@@ -595,7 +595,7 @@ export default function OnlineRoom({ roomId, uid, onLeave }: OnlineRoomProps) {
                   </div>
                 );
               })}
-              <p className="text-[9px] text-muted">※ ソロとオンラインで効果が異なるアイテムがあります（上記はオンラインの効果）。</p>
+              <p className="text-xs text-muted">※ ソロとオンラインで効果が異なるアイテムがあります（上記はオンラインの効果）。</p>
             </div>
           )}
         </div>

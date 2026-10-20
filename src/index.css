@@ -9,6 +9,14 @@ body,
   margin: 0;
 }
 
+body {
+  font-family: 'IBM Plex Sans JP', system-ui, sans-serif;
+  /* 和文の字詰め（かなの余白を詰めて締まって見せる） */
+  font-feature-settings: 'palt';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 /* ===== 計器HUDデザイン: カラートークン（既定 = night テーマ） ===== */
 :root {
   --bg: #0a0a0b;
@@ -38,6 +46,18 @@ body,
   --ac-800: 21 94 117;
   --ac-900: 22 78 99;
   --ac-950: 8 51 68;
+  /* 中間色（グレー）の濃淡。theme.ts がテーマの色味を帯びた値に差し替える */
+  --n-50: 250 250 250;
+  --n-100: 245 245 245;
+  --n-200: 229 229 229;
+  --n-300: 212 212 212;
+  --n-400: 163 163 163;
+  --n-500: 115 115 115;
+  --n-600: 82 82 82;
+  --n-700: 64 64 64;
+  --n-800: 38 38 38;
+  --n-900: 23 23 23;
+  --n-950: 10 10 10;
 }
 
 /* ===== モーション ===== */
@@ -125,7 +145,7 @@ body,
   }
   /* 主要ボタン */
   .tr-btn {
-    font-family: 'Chakra Petch', sans-serif;
+    font-family: 'Chakra Petch', 'IBM Plex Sans JP', sans-serif;
     letter-spacing: 0.1em;
     border-radius: 10px;
     border: 1px solid var(--primary);
@@ -136,7 +156,7 @@ body,
     transition: all 0.2s;
   }
   .tr-btn-ghost {
-    font-family: 'Chakra Petch', sans-serif;
+    font-family: 'Chakra Petch', 'IBM Plex Sans JP', sans-serif;
     letter-spacing: 0.08em;
     border-radius: 10px;
     border: 1px solid var(--line);

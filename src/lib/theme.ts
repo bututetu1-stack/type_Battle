@@ -20,6 +20,26 @@ const PALETTES = {
 } as const;
 export type AccentName = keyof typeof PALETTES;
 const rgbTriplet = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(' ');
+// 中間色（グレー）の濃淡。Tailwind の gray-* / neutral-* はこれの別名にしてあり、
+// 直書きのグレーもテーマの背景色の色味を少し帯びて馴染む（純粋なグレーは浮いて安っぽく見える）。
+// 明るさは Tailwind の neutral に合わせ、暗い側の色味だけをテーマから取る。
+const NEUTRAL_TARGET = [250, 245, 229, 212, 163, 115, 82, 64, 38, 23, 10];
+const TAILWIND_NEUTRAL = ['#fafafa', '#f5f5f5', '#e5e5e5', '#d4d4d4', '#a3a3a3', '#737373', '#525252', '#404040', '#262626', '#171717', '#0a0a0a'];
+const hexRgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+function neutralRamp(t: ColorTheme): string[] {
+  if (t.light) return TAILWIND_NEUTRAL.map(rgbTriplet);
+  // 背景の2番目の色に、アクセントの最も暗い色を少し混ぜた「色味つきの黒」を起点にする。
+  const a = hexRgb(t.tokens.bg2);
+  const b = hexRgb(PALETTES[t.accent][10]);
+  const dark = a.map((c, i) => c + (b[i] - c) * 0.35);
+  const d = (dark[0] + dark[1] + dark[2]) / 3;
+  return NEUTRAL_TARGET.map((target) =>
+    dark
+      .map((c) => Math.round(target >= d ? c + (255 - c) * ((target - d) / (255 - d)) : c * (target / d)))
+      .join(' '),
+  );
+}
+
 // テーマ選択ボタンで背景と並べて見せるアクセント色（400 番）。
 export const accentHex = (a: AccentName): string => PALETTES[a][4];
 
@@ -109,6 +129,7 @@ function applyTokens(t: ColorTheme): void {
     body.style.setProperty(`--${k}`, v);
   }
   PALETTES[t.accent].forEach((hex, i) => body.style.setProperty(`--ac-${ACCENT_SHADES[i]}`, rgbTriplet(hex)));
+  neutralRamp(t).forEach((rgb, i) => body.style.setProperty(`--n-${ACCENT_SHADES[i]}`, rgb));
 }
 
 // body 背景にテーマ（または背景画像）を適用。light 系は theme-light クラスを付与。
