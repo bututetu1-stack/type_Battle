@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Swords, Zap, AlertTriangle, Crown, Shield, Wind, Sparkles,
-  Target, RotateCcw, LogOut, Volume2, VolumeX, Lock, Settings,
+  Swords, Zap, AlertTriangle, Crown, Shield, Sparkles,
+  Target, RotateCcw, LogOut, Volume2, VolumeX, Settings,
 } from 'lucide-react';
 import { mulberry32, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWord, makeOjamaWordFrom, makeShortWord, randomLongWord, newWordBag, setExtraWords, setExcludedThemes } from '../lib/words';
@@ -12,7 +12,13 @@ import {
   type RoomPlayer, type RoomStatus,
 } from '../lib/room';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
-import { ITEM_CAT, ITEM_KIND, ITEM_RARITY, CAT_META, CAT_ORDER, type ItemPrefs, type ItemCat, type UseMode } from '../lib/items';
+import {
+  ITEM_CAT, ITEM_KIND, ITEM_RARITY, CAT_META, CAT_ORDER, type ItemPrefs, type ItemCat, type UseMode,
+  ONLINE_ITEM_META as ITEM_META, ITEM_EMOJI, ITEM_DURATION, BOARD_CHANGE_ITEMS,
+  RAPID_DURATION, KEEP_DURATION, PARRY_DURATION, FREEZE_DURATION, DAZZLE_DURATION,
+  REFLECT_DURATION, OVERCHARGE_DURATION, SIPHON_DURATION,
+} from '../lib/items';
+import ItemIcon from './ItemIcon';
 import { loadKeyConfig, keyLabel, type KeyConfig } from '../lib/keyconfig';
 import PlayerSettings from './PlayerSettings';
 import type { GameMode, ItemType, TargetMode, Word } from '../lib/types';
@@ -31,88 +37,8 @@ const PINCH_RATIO = 0.7;
 const PINCH_MULT = 1.5;
 const ATTACK_CAP = 5; // 1回の攻撃で送れるおじゃまの上限（即死コンボ防止）
 const BOSS_MAX_BACKLOG = 26; // ボスのバックログ上限（＝ボスのHP。多対一なので高め）
-// ストックされている単語を変化させる系アイテム（発動を分かりやすく強調する）。
-const BOARD_CHANGE_ITEMS = new Set<ItemType>(['purge', 'shrink', 'goldify', 'clear', 'drain']);
 
-export const ITEM_META: Record<ItemType, { name: string; desc: string }> = {
-  shield: { name: 'シールド', desc: '次の自動供給を1回無効化' },
-  clear: { name: 'おじゃま一掃', desc: 'バックログのおじゃまを消す' },
-  rapid: { name: '連射', desc: '8秒間 1クリアごとにおじゃま+1' },
-  keep: { name: '連鎖キープ', desc: '10秒間ミスしても連鎖が切れない' },
-  shrink: { name: '短縮', desc: '溜まったワードを全て短い単語に変換' },
-  parry: { name: '受け流し', desc: '一定時間 被攻撃を他の相手に逸らす' },
-  meteor: { name: 'メテオ', desc: 'ボス: 全挑戦者へ一斉攻撃' },
-  quake: { name: '地割れ', desc: 'ボス: 最も危険な挑戦者へトドメ' },
-  regen: { name: '再生', desc: 'ボス: 自分のHPを回復' },
-  rally: { name: '総攻撃', desc: '挑戦者: ボスへ即時の大攻撃' },
-  focus: { name: '会心', desc: '挑戦者: 次のボスへの攻撃を倍化' },
-  barrier: { name: 'バリア', desc: '次の被弾を1回まるごと防ぐ' },
-  freeze: { name: 'フリーズ', desc: '5秒間 被攻撃を無効化＋自動供給を停止' },
-  purge: { name: '大掃除', desc: 'バックログを全消去（逆転のチャンス）' },
-  guard: { name: '超シールド', desc: 'シールドの上位互換。自動供給を2回ぶん防ぐ' },
-  snipe: { name: '狙撃', desc: '最も危険な相手にトドメの一撃（おじゃま+4）' },
-  burst: { name: 'バースト', desc: '全ての相手へおじゃま+2' },
-  heavy: { name: '強撃', desc: '連鎖に応じたおじゃまを即送信' },
-  flood: { name: 'フラッド', desc: '狙った相手へ濁流の波状おじゃま（相殺しにくい）' },
-  drain: { name: 'ドレイン', desc: '自分を2減らし相手へおじゃま+2' },
-  mirror: { name: 'ミラー', desc: '不利なほど強いおじゃまを送る' },
-  goldify: { name: 'ゴールド化', desc: '溜まっているワードを全てお宝に変える' },
-  reflect: { name: 'リフレクト', desc: '8秒間 受けた攻撃を送り主へ跳ね返す' },
-  overcharge: { name: 'オーバーチャージ', desc: '8秒間 アタックゲージが倍速で溜まる' },
-  thunder: { name: 'サンダーボルト', desc: '首位（最多連鎖）の相手へ落雷+5' },
-  jammer: { name: 'ジャマー', desc: '全相手へ長文おじゃまを送りつける' },
-  siphon: { name: 'サイフォン', desc: '8秒間 攻撃が当たるたび自分のHPが回復' },
-  dazzle: { name: '視認性低下', desc: '8秒間 狙った相手の画面をゲーミング(虹色)に光らせる' },
-};
-export const ITEM_EMOJI: Record<ItemType, string> = {
-  shield: '🛡',
-  clear: '🌀',
-  rapid: '⚡',
-  keep: '🔒',
-  shrink: '✂',
-  parry: '🪃',
-  meteor: '🌠',
-  quake: '🌋',
-  regen: '💚',
-  rally: '⚔',
-  focus: '🎯',
-  barrier: '🛡️',
-  freeze: '🧊',
-  purge: '🧹',
-  guard: '🧱',
-  snipe: '🎯',
-  burst: '💥',
-  heavy: '🔨',
-  flood: '🌊',
-  drain: '🩸',
-  mirror: '🪞',
-  goldify: '✨',
-  reflect: '🪞',
-  overcharge: '🔋',
-  thunder: '⚡',
-  jammer: '📡',
-  siphon: '🧛',
-  dazzle: '🌈',
-};
-const RAPID_DURATION = 8000;
-const DAZZLE_DURATION = 8000; // 視認性低下（相手画面ゲーミング化）の効果時間
-const KEEP_DURATION = 10000;
-const PARRY_DURATION = 8000; // 受け流し（被攻撃を他プレイヤーへ逸らす）の効果時間
-const FREEZE_DURATION = 5000; // フリーズ（着弾予告と自動供給を停止）の効果時間
-const REFLECT_DURATION = 8000; // リフレクト（被攻撃を送り主へ跳ね返す）
-const OVERCHARGE_DURATION = 8000; // オーバーチャージ（ゲージ倍速）
-const SIPHON_DURATION = 8000; // サイフォン（攻撃命中で自分のHP回復）
 
-// 時間制限つきアイテムの効果時間（カウントダウンゲージ用）。
-const ITEM_DURATION: Partial<Record<ItemType, number>> = {
-  rapid: RAPID_DURATION,
-  keep: KEEP_DURATION,
-  parry: PARRY_DURATION,
-  freeze: FREEZE_DURATION,
-  reflect: REFLECT_DURATION,
-  overcharge: OVERCHARGE_DURATION,
-  siphon: SIPHON_DURATION,
-};
 
 const TARGET_MODES: { mode: TargetMode; label: string }[] = [
   { mode: 'random', label: 'ランダム' },
@@ -2097,10 +2023,3 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
   );
 }
 
-const ItemIcon = ({ type }: { type: ItemType }) => {
-  if (type === 'shield') return <Shield className="w-5 h-5 text-blue-300" />;
-  if (type === 'clear') return <Wind className="w-5 h-5 text-cyan-300" />;
-  if (type === 'keep') return <Lock className="w-5 h-5 text-fuchsia-300" />;
-  if (type === 'rapid') return <Zap className="w-5 h-5 text-yellow-300" />;
-  return <span className="text-base leading-none">{ITEM_EMOJI[type]}</span>;
-};

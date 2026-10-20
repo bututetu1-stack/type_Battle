@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, Wind, ArrowLeft,
-  Volume2, VolumeX, Crown, Target, Lock, Scissors, Settings, RotateCcw, Timer,
+  Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, ArrowLeft,
+  Volume2, VolumeX, Crown, Target, Settings, RotateCcw, Timer,
   ChevronDown, Gauge, Gift,
 } from 'lucide-react';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
@@ -9,7 +9,12 @@ import { generateWord, makeOjamaWordFrom, makeShortWord, newWordBag, THEMES, tog
 import { loadCustomWords, loadCustomGroups } from '../lib/customwords';
 import { processKey, type PlayerState } from '../lib/engine';
 import { sfx, resumeAudio, setSfxEnabled } from '../lib/sfx';
-import { ITEM_CAT, ITEM_KIND, ITEM_RARITY, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode } from '../lib/items';
+import {
+  ITEM_CAT, ITEM_KIND, ITEM_RARITY, CAT_META, CAT_ORDER, USE_MODES, type ItemCat, type UseMode,
+  ITEM_META, ITEM_EMOJI, ITEM_DURATION, BOARD_CHANGE_ITEMS,
+  RAPID_DURATION, KEEP_DURATION, PARRY_DURATION, FREEZE_DURATION, DAZZLE_DURATION,
+} from '../lib/items';
+import ItemIcon from './ItemIcon';
 import { loadKeyConfig, keyLabel, type KeyConfig } from '../lib/keyconfig';
 import PlayerSettings from './PlayerSettings';
 import type { Dummy, GameStatus, ItemType, TargetMode, Word } from '../lib/types';
@@ -28,16 +33,11 @@ const MIN_SPAWN_INTERVAL = 1000;
 const DEFAULT_ACCEL = 0.98; // 1供給ごとの間隔倍率
 const DUMMY_COUNT = 20;
 const ATTACK_CAP = 5; // 1回の攻撃量の上限（即死コンボ防止）
-const RAPID_DURATION = 8000; // 連射アイテムの効果時間
-const KEEP_DURATION = 10000; // 連鎖キープ（ミスで連鎖が切れない）の効果時間
-const PARRY_DURATION = 8000; // 受け流し（被攻撃を逸らす）の効果時間
 const ATTACK_THRESHOLD = 5; // 何クリアごとに攻撃を発射するか（初期値）
 const AVOID_RECENT = 10; // 直近この数の語は再出させない（袋方式に加える近接重複ガード）
 const TELEGRAPH_DELAY = 2500; // CPU攻撃の着弾予告→確定までの猶予（相殺の反応時間を確保）
 const CFG_KEY = 'typeRoyale.custom'; // カスタム設定の保存キー
 
-const FREEZE_DURATION = 5000; // フリーズ（着弾予告と自動供給を停止）の効果時間
-const DAZZLE_DURATION = 8000; // 視認性低下（お題パネルをゲーミング化）の効果時間
 // タイムアタックの「連打メーター」: ノーミス打鍵数で貯まり、区切りごとに時間追加。
 // ミス または 満タン(=最後の区切り到達)でメーターはリセット。
 const TA_STREAK_MAX = 120; // 連打メーター満タンに必要なノーミス打鍵数
@@ -45,58 +45,7 @@ const TA_MILESTONES: { at: number; sec: number }[] = [
   { at: 30, sec: 1 }, { at: 60, sec: 1 }, { at: 90, sec: 2 }, { at: 120, sec: 3 },
 ]; // 30打ごとに区切り。到達でその秒数を追加（1/1/2/3秒）。
 
-// 時間制限つきアイテムの効果時間（カウントダウンゲージ用）。
-const ITEM_DURATION: Partial<Record<ItemType, number>> = {
-  rapid: RAPID_DURATION,
-  keep: KEEP_DURATION,
-  parry: PARRY_DURATION,
-  freeze: FREEZE_DURATION,
-};
 
-const ITEM_META: Record<ItemType, { name: string; icon: string; desc: string }> = {
-  shield: { name: 'シールド', icon: '🛡', desc: '次の自動供給を1回無効化' },
-  clear: { name: 'おじゃま一掃', icon: '🌀', desc: 'バックログのおじゃまを消す' },
-  rapid: { name: '連射', icon: '⚡', desc: '8秒間 1クリアごとにおじゃま+1' },
-  keep: { name: '連鎖キープ', icon: '🔒', desc: '10秒間ミスしても連鎖が切れない' },
-  shrink: { name: '短縮', icon: '✂', desc: '溜まったワードを全て短い単語に変換' },
-  parry: { name: '受け流し', icon: '🪃', desc: '8秒間 被攻撃を他の相手へ逸らす' },
-  // ボスモード専用（ソロでは出現しない）。
-  meteor: { name: 'メテオ', icon: '🌠', desc: 'ボス: 全挑戦者へ一斉攻撃' },
-  quake: { name: '地割れ', icon: '🌋', desc: 'ボス: 最も危険な挑戦者へトドメ' },
-  regen: { name: '再生', icon: '💚', desc: 'ボス: 自分のHPを回復' },
-  rally: { name: '総攻撃', icon: '⚔', desc: '挑戦者: ボスへ即時の大攻撃' },
-  focus: { name: '会心', icon: '🎯', desc: '挑戦者: 次のボスへの攻撃を倍化' },
-  // 防御
-  barrier: { name: 'バリア', icon: '🛡️', desc: '次の被弾を1回まるごと防ぐ' },
-  freeze: { name: 'フリーズ', icon: '🧊', desc: '5秒間 被攻撃を無効化＋自動供給を停止' },
-  purge: { name: '大掃除', icon: '🧹', desc: 'バックログを全消去（逆転のチャンス）' },
-  guard: { name: '超シールド', icon: '🧱', desc: 'シールドの上位互換。自動供給を2回ぶん防ぐ' },
-  // 攻撃（送る数字は全ておじゃまの数）
-  snipe: { name: '狙撃', icon: '🎯', desc: '最も危険な相手にトドメの一撃（おじゃま+4）' },
-  burst: { name: 'バースト', icon: '💥', desc: '全ての相手へおじゃま+2' },
-  heavy: { name: '強撃', icon: '🔨', desc: '連鎖に応じたおじゃまを即送信' },
-  flood: { name: 'フラッド', icon: '🌊', desc: '狙った相手へ濁流の大量おじゃま+7' },
-  drain: { name: 'ドレイン', icon: '🩸', desc: '自分を2減らし相手へおじゃま+2' },
-  mirror: { name: 'ミラー', icon: '🪞', desc: '不利なほど強いおじゃまを送る' },
-  // お宝/HP
-  goldify: { name: 'ゴールド化', icon: '✨', desc: '溜まっているワードを全てお宝に変える' },
-  // オンライン専用（ソロには出現しない）
-  reflect: { name: 'リフレクト', icon: '🪞', desc: '一定時間 受けた攻撃を送り主へ跳ね返す' },
-  overcharge: { name: 'オーバーチャージ', icon: '🔋', desc: '一定時間 アタックゲージが倍速で溜まる' },
-  thunder: { name: 'サンダーボルト', icon: '⚡', desc: '首位の相手へ落雷の大ダメージ' },
-  jammer: { name: 'ジャマー', icon: '📡', desc: '全相手へ長文おじゃまを送りつける' },
-  siphon: { name: 'サイフォン', icon: '🧛', desc: '一定時間 攻撃が当たるたび自分のHPが回復' },
-  dazzle: { name: '視認性低下', icon: '🌈', desc: '一定時間 狙った相手の画面をゲーミングに光らせる' },
-};
-const ITEM_EMOJI: Record<ItemType, string> = {
-  shield: '🛡', clear: '🌀', rapid: '⚡', keep: '🔒',
-  shrink: '✂', parry: '🪃',
-  meteor: '🌠', quake: '🌋', regen: '💚', rally: '⚔', focus: '🎯',
-  barrier: '🛡️', freeze: '🧊', purge: '🧹', guard: '🧱',
-  snipe: '🎯', burst: '💥', heavy: '🔨', flood: '🌊', drain: '🩸', mirror: '🪞',
-  goldify: '✨',
-  reflect: '🪞', overcharge: '🔋', thunder: '⚡', jammer: '📡', siphon: '🧛', dazzle: '🌈',
-};
 // プレイ中にドロップするアイテム（役割が被る/強すぎ/地味なものを整理）。
 const ALL_ITEMS: ItemType[] = [
   // 攻撃（相手へおじゃま）
@@ -108,8 +57,6 @@ const ALL_ITEMS: ItemType[] = [
   // お宝
   'goldify',
 ];
-// ストックされている単語を変化させる系アイテム（発動を分かりやすく強調する）。
-const BOARD_CHANGE_ITEMS = new Set<ItemType>(['purge', 'shrink', 'goldify', 'clear', 'drain']);
 
 
 const MAX_DUMMIES = 30; // 敵数の上限（名前プールの都合）
@@ -2481,15 +2428,6 @@ const Stat = ({ label, value, small, suffix }: { label: string; value: number; s
   </div>
 );
 
-const ItemIcon = ({ type }: { type: ItemType }) => {
-  if (type === 'shield') return <Shield className="w-5 h-5 text-blue-300" />;
-  if (type === 'clear') return <Wind className="w-5 h-5 text-cyan-300" />;
-  if (type === 'keep') return <Lock className="w-5 h-5 text-fuchsia-300" />;
-  if (type === 'shrink') return <Scissors className="w-5 h-5 text-emerald-300" />;
-  if (type === 'parry') return <Shield className="w-5 h-5 text-violet-300" />;
-  if (type === 'rapid') return <Zap className="w-5 h-5 text-yellow-300" />;
-  return <span className="text-base leading-none">{ITEM_EMOJI[type]}</span>;
-};
 
 // カスタム設定の ±0.1秒 ステップボタン。
 const StepBtn = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (

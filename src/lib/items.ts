@@ -110,3 +110,79 @@ export function saveItemPrefs(p: ItemPrefs): void {
     localStorage.setItem(PREFS_KEY, JSON.stringify({ ...o, autoFull: p.autoFull, use: p.use }));
   } catch { /* 保存不可環境は無視 */ }
 }
+
+// ===== アイテムの表示定義（ソロ/オンライン共通の単一の正） =====
+// 以前は SoloGame / OnlineGame に同じ表が二重にあり、追加・削除のたび両方を直す必要があった。
+
+// 時間制限つきアイテムの効果時間（ms）。両モードで同じ値を使う。
+export const RAPID_DURATION = 8000; // 連射
+export const KEEP_DURATION = 10000; // 連鎖キープ（ミスで連鎖が切れない）
+export const PARRY_DURATION = 8000; // 受け流し（被攻撃を他の相手へ逸らす）
+export const FREEZE_DURATION = 5000; // フリーズ（着弾予告と自動供給を停止）
+export const DAZZLE_DURATION = 8000; // 視認性低下（お題パネルをゲーミング化）
+export const REFLECT_DURATION = 8000; // リフレクト（被攻撃を送り主へ跳ね返す）
+export const OVERCHARGE_DURATION = 8000; // オーバーチャージ（ゲージ倍速）
+export const SIPHON_DURATION = 8000; // サイフォン（攻撃命中で自分のHP回復）
+
+// 残り時間カウントダウンを出すアイテム。
+export const ITEM_DURATION: Partial<Record<ItemType, number>> = {
+  rapid: RAPID_DURATION,
+  keep: KEEP_DURATION,
+  parry: PARRY_DURATION,
+  freeze: FREEZE_DURATION,
+  reflect: REFLECT_DURATION,
+  overcharge: OVERCHARGE_DURATION,
+  siphon: SIPHON_DURATION,
+};
+
+// ストックされている単語を変化させる系アイテム（発動を分かりやすく強調する）。
+export const BOARD_CHANGE_ITEMS = new Set<ItemType>(['purge', 'shrink', 'goldify', 'clear', 'drain']);
+
+// onlineDesc: オンラインで挙動が違うものだけ説明を上書きする。
+export interface ItemMeta { name: string; icon: string; desc: string; onlineDesc?: string }
+
+export const ITEM_META: Record<ItemType, ItemMeta> = {
+  shield: { name: 'シールド', icon: '🛡', desc: '次の自動供給を1回無効化' },
+  clear: { name: 'おじゃま一掃', icon: '🌀', desc: 'バックログのおじゃまを消す' },
+  rapid: { name: '連射', icon: '⚡', desc: '8秒間 1クリアごとにおじゃま+1' },
+  keep: { name: '連鎖キープ', icon: '🔒', desc: '10秒間ミスしても連鎖が切れない' },
+  shrink: { name: '短縮', icon: '✂', desc: '溜まったワードを全て短い単語に変換' },
+  parry: { name: '受け流し', icon: '🪃', desc: '8秒間 被攻撃を他の相手へ逸らす' },
+  // ボスモード専用
+  meteor: { name: 'メテオ', icon: '🌠', desc: 'ボス: 全挑戦者へ一斉攻撃' },
+  quake: { name: '地割れ', icon: '🌋', desc: 'ボス: 最も危険な挑戦者へトドメ' },
+  regen: { name: '再生', icon: '💚', desc: 'ボス: 自分のHPを回復' },
+  rally: { name: '総攻撃', icon: '⚔', desc: '挑戦者: ボスへ即時の大攻撃' },
+  focus: { name: '会心', icon: '🎯', desc: '挑戦者: 次のボスへの攻撃を倍化' },
+  // 防御
+  barrier: { name: 'バリア', icon: '🛡️', desc: '次の被弾を1回まるごと防ぐ' },
+  freeze: { name: 'フリーズ', icon: '🧊', desc: '5秒間 被攻撃を無効化＋自動供給を停止' },
+  purge: { name: '大掃除', icon: '🧹', desc: 'バックログを全消去（逆転のチャンス）' },
+  guard: { name: '超シールド', icon: '🧱', desc: 'シールドの上位互換。自動供給を2回ぶん防ぐ' },
+  // 攻撃（送る数字は全ておじゃまの数）
+  snipe: { name: '狙撃', icon: '🎯', desc: '最も危険な相手にトドメの一撃（おじゃま+4）' },
+  burst: { name: 'バースト', icon: '💥', desc: '全ての相手へおじゃま+2' },
+  heavy: { name: '強撃', icon: '🔨', desc: '連鎖に応じたおじゃまを即送信' },
+  flood: {
+    name: 'フラッド', icon: '🌊', desc: '狙った相手へ濁流の大量おじゃま+7',
+    onlineDesc: '狙った相手へ濁流の波状おじゃま（相殺しにくい）',
+  },
+  drain: { name: 'ドレイン', icon: '🩸', desc: '自分を2減らし相手へおじゃま+2' },
+  mirror: { name: 'ミラー', icon: '🪞', desc: '不利なほど強いおじゃまを送る' },
+  // お宝
+  goldify: { name: 'ゴールド化', icon: '✨', desc: '溜まっているワードを全てお宝に変える' },
+  // オンライン専用
+  reflect: { name: 'リフレクト', icon: '🪞', desc: '8秒間 受けた攻撃を送り主へ跳ね返す' },
+  overcharge: { name: 'オーバーチャージ', icon: '🔋', desc: '8秒間 アタックゲージが倍速で溜まる' },
+  thunder: { name: 'サンダーボルト', icon: '⚡', desc: '首位（最多連鎖）の相手へ落雷+5' },
+  jammer: { name: 'ジャマー', icon: '📡', desc: '全相手へ長文おじゃまを送りつける' },
+  siphon: { name: 'サイフォン', icon: '🧛', desc: '8秒間 攻撃が当たるたび自分のHPが回復' },
+  dazzle: { name: '視認性低下', icon: '🌈', desc: '8秒間 狙った相手の画面をゲーミング(虹色)に光らせる' },
+};
+
+const mapMeta = <T>(f: (m: ItemMeta) => T) =>
+  Object.fromEntries(Object.entries(ITEM_META).map(([k, m]) => [k, f(m)])) as Record<ItemType, T>;
+
+export const ITEM_EMOJI: Record<ItemType, string> = mapMeta((m) => m.icon);
+// オンライン用（説明だけモード別の上書きを反映）。
+export const ONLINE_ITEM_META: Record<ItemType, ItemMeta> = mapMeta((m) => ({ ...m, desc: m.onlineDesc ?? m.desc }));

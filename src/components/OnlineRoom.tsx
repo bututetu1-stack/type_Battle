@@ -31,9 +31,9 @@ import {
 import { THEMES, toggleThemeSelection } from '../lib/words';
 import WordEditor from './WordEditor';
 import { loadCustomWords } from '../lib/customwords';
-import { loadItemPrefs, saveItemPrefs, CAT_META, USE_MODES, ITEM_CAT, type ItemPrefs } from '../lib/items';
+import { loadItemPrefs, saveItemPrefs, CAT_META, USE_MODES, ITEM_CAT, ONLINE_ITEM_META as ITEM_META, ITEM_EMOJI, type ItemPrefs } from '../lib/items';
 import type { ItemType } from '../lib/types';
-import OnlineGame, { ITEM_META, ITEM_EMOJI } from './OnlineGame';
+import OnlineGame from './OnlineGame';
 
 interface OnlineRoomProps {
   roomId: string;
