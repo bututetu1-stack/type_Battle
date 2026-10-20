@@ -293,6 +293,11 @@ body {
     outline: 2px solid rgb(var(--ac-300));
     outline-offset: 2px;
   }
+  /* 上の部品以外のボタン（アイコンだけのボタン、待機室のアイテムの行など）にも、キーボード操作の時だけ枠を出す */
+  button:focus-visible {
+    outline: 2px solid rgb(var(--ac-300));
+    outline-offset: 2px;
+  }
   /* 小さいセグメント（プレイ中の狙いの切替など） */
   .ui-seg-sm { padding: 3px; gap: 2px; border-radius: 10px; }
   .ui-seg-sm .ui-seg-btn { flex: none; padding: 4px 10px; font-size: 12px; border-radius: 7px; }
