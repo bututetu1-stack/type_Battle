@@ -6,7 +6,7 @@ import './index.css';
 
 // デプロイ確認用のビルド識別子。反映されたか一目で分かるよう画面隅に薄く表示する。
 // 変更をデプロイするたびに末尾を更新する（例: -a → -b）。
-const BUILD = '2026-08-14-a';
+const BUILD = '2026-10-20-a';
 console.info('[TYPE ROYALE] build', BUILD);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
