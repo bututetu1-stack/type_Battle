@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import {
   Swords, Zap, Trophy, Shield, AlertTriangle, Sparkles, ArrowLeft,
   Volume2, VolumeX, Crown, Target, Settings, RotateCcw, Timer,
-  ChevronDown, Gauge, Gift,
+  ChevronDown, Gauge, Gift, Play, BookOpen, FolderOpen, SlidersHorizontal, HelpCircle, Check,
 } from 'lucide-react';
+import { Seg, Field, Panel, Kbd } from './ui';
 import { mulberry32, randomSeed, type RNG } from '../lib/rng';
 import { generateWord, makeOjamaWordFrom, makeShortWord, newWordBag, THEMES, toggleThemeSelection, setExtraWords, setExcludedThemes } from '../lib/words';
 import { loadCustomWords, loadCustomGroups } from '../lib/customwords';
@@ -24,7 +25,7 @@ import CurrentWord from './CurrentWord';
 import AttackGauge from './AttackGauge';
 import RecordsBoard from './RecordsBoard';
 import TrCorners from './TrCorners';
-import { computeScore, accuracyOf, addScore, renameScore, loadPlayerName, savePlayerName, previousBest, type ScoreRecord } from '../lib/scores';
+import { computeScore, accuracyOf, addScore, renameScore, loadPlayerName, savePlayerName, previousBest, loadScores, type ScoreRecord } from '../lib/scores';
 import { expectedNextChar, bump, kpsSeries, type Tally } from '../lib/analytics';
 import ResultInsights from './ResultInsights';
 import { submitGlobalScore } from '../lib/leaderboard';
@@ -1511,6 +1512,11 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     normal: { label: 'ふつう', initial: 2800, min: 1100, accelSpeed: 2, hp: 12, enemies: 10, cpuStr: 5 },
     hard: { label: 'むずかしい', initial: 2000, min: 750, accelSpeed: 5, hp: 9, enemies: 14, cpuStr: 7 },
   } as const;
+  const activePreset = (Object.keys(DIFFICULTY_PRESETS) as (keyof typeof DIFFICULTY_PRESETS)[]).find((k) => {
+    const p = DIFFICULTY_PRESETS[k];
+    return cfgInitial === p.initial && cfgMin === p.min && Math.abs(accelSpeed - p.accelSpeed) < 0.05
+      && cfgHp === Math.min(HP_MAX, Math.max(HP_MIN, p.hp)) && cfgEnemies === Math.min(MAX_DUMMIES, p.enemies) && cfgCpuStr === p.cpuStr;
+  }) ?? null;
   const applyDifficulty = (p: typeof DIFFICULTY_PRESETS[keyof typeof DIFFICULTY_PRESETS]) => {
     setCfgInitial(p.initial);
     setCfgMin(p.min);
@@ -2052,315 +2058,306 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
             // ヘッダー(h-16)の下を画面いっぱいに使う固定オーバーレイ。
             // <main> は画面揺れ演出のため transform を持ち、fixed の基準が <main> になって
             // 64px 下にずれる（後ろのバトル画面が上に見えていた）。body 直下に出して画面基準にする。
-            <div className="fixed left-0 right-0 top-16 bottom-0 bg-neutral-950/90 backdrop-blur-sm z-30 overflow-y-auto">
-              <div className="min-h-full flex flex-col items-center justify-center w-full py-8 px-2">
-              <Swords className="w-20 h-20 text-cyan-500 mb-6" />
-              <h2 className="text-4xl font-black tracking-widest mb-2 text-white">TYPE ROYALE</h2>
-              <p className="text-gray-400 mb-3 font-mono">Press [SPACE] to {gameState === 'start' ? 'Start' : 'Retry'}</p>
-              {/* 結果画面から設定を開いた場合：このまま再挑戦／結果へ戻る */}
-              {settingsOpen && gameState !== 'start' && (
-                <div className="flex gap-2 mb-5">
-                  <button onClick={() => startGame()} className="bg-cyan-600 hover:bg-cyan-500 rounded-lg px-4 py-1.5 font-bold text-sm">▶ この設定で再挑戦</button>
-                  <button onClick={() => setSettingsOpen(false)} className="bg-neutral-700 hover:bg-neutral-600 rounded-lg px-4 py-1.5 font-bold text-sm">結果へ戻る</button>
-                </div>
-              )}
-
-              {/* モード選択（バトル / タイムアタック） */}
-              <div className="mb-4 w-full max-w-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  {([['royale', '⚔ バトル', '敵CPUと対戦'], ['timeattack', '⏱ タイムアタック', '制限時間でスコア']] as const).map(([m, lbl, desc]) => (
-                    <button key={m} onClick={() => setSoloMode(m)}
-                      className={`rounded-lg px-3 py-2 text-left border transition-colors ${soloMode === m ? 'bg-cyan-600/20 border-cyan-500 text-cyan-200' : 'bg-neutral-800 border-white/10 text-gray-400 hover:bg-neutral-700'}`}>
-                      <div className="text-sm font-bold">{lbl}</div>
-                      <div className="text-xs text-gray-500">{desc}</div>
-                    </button>
-                  ))}
-                </div>
-                {soloMode === 'timeattack' && (
-                  <div className="mt-2 flex items-center justify-center gap-2 text-xs text-gray-400">
-                    <span>制限時間</span>
-                    {[30, 60, 90, 120].map((s) => (
-                      <button key={s} onClick={() => setCfgTaSeconds(s)}
-                        className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${cfgTaSeconds === s ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
-                        {s}秒
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* カスタム設定（戦闘チューニング）。タイムアタックは寿司打式なので非表示。 */}
-              {soloMode !== 'timeattack' && (
-              <div className="mb-6 w-full max-w-sm bg-neutral-900/60 border border-amber-700/40 rounded-xl px-4 py-3">
-                  <div className="text-xs text-amber-300 font-black mb-2 flex items-center gap-1">
-                    <Zap className="w-3.5 h-3.5" /> カスタム設定
+            <div
+              className="fixed left-0 right-0 top-16 bottom-0 z-30 overflow-y-auto"
+              style={{ background: 'rgb(var(--n-950) / 0.94)', backdropFilter: 'blur(10px)' }}
+            >
+              <div className="w-full max-w-[1180px] mx-auto px-6 py-8 grid gap-6 lg:gap-10 lg:grid-cols-[minmax(0,400px)_minmax(0,1fr)] items-start">
+                {/* ── 左: 何で遊ぶか＋開始（スクロールしても常に見える） ── */}
+                <section className="lg:sticky lg:top-8 flex flex-col gap-6">
+                  <div>
+                    <div className="ui-eyebrow">SOLO</div>
+                    <h2 className="mt-1.5 text-[28px] leading-tight font-bold text-text [text-wrap:balance]">モードを選んでスタート</h2>
                   </div>
 
-                  {/* 難易度プリセット: 速度・敵・CPUをまとめて設定（細部は各スライダーで微調整）。 */}
-                  <div className="mb-1">
-                    <div className="text-xs text-gray-500 mb-1">難易度プリセット（速度・敵・CPUをまとめて設定）</div>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {(['easy', 'normal', 'hard'] as const).map((k) => (
-                        <button
-                          key={k}
-                          onClick={() => applyDifficulty(DIFFICULTY_PRESETS[k])}
-                          className="px-2 py-1.5 rounded-lg text-xs font-bold bg-neutral-800 text-gray-300 hover:bg-neutral-700 border border-white/10 transition-colors"
-                        >
-                          {DIFFICULTY_PRESETS[k].label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* ① 難易度（速度・敵）: よく触る項目なので既定で開く。 */}
-                  <CfgSection title="難易度（速度・敵）" icon={<Gauge className="w-3.5 h-3.5" />} accentText="text-cyan-300" defaultOpen>
-                    <CfgSlider label="初期供給間隔" value={cfgInitial} display={`${(cfgInitial / 1000).toFixed(1)}秒`} min={500} max={6000} step={100} onChange={setCfgInitial} />
-                    <CfgSlider label="最短間隔" value={cfgMin} display={`${(cfgMin / 1000).toFixed(1)}秒`} min={300} max={3000} step={100} onChange={setCfgMin} />
-                    <CfgSlider label="加速度" hint="大きいほど速く加速 / 0で加速なし" value={accelSpeed} display={accelSpeed.toFixed(1)} min={0} max={10} step={0.5} onChange={setAccelFromSpeed} />
-                    <CfgSlider label="自分のHP（積載限界）" value={cfgHp} display={String(cfgHp)} min={HP_MIN} max={HP_MAX} step={1} onChange={setCfgHp} />
-                    <CfgSlider label="敵の数" value={cfgEnemies} display={String(cfgEnemies)} min={1} max={MAX_DUMMIES} step={1} onChange={setCfgEnemies} />
-                    <CfgSlider label="CPUの強さ（平均）" hint="強弱が混在し平均がこの値" value={cfgCpuStr} display={String(cfgCpuStr)} min={0} max={10} step={1} onChange={setCfgCpuStr} />
-                  </CfgSection>
-
-                  {/* ② 攻撃・ゲージ */}
-                  <CfgSection title="攻撃・ゲージ" icon={<Swords className="w-3.5 h-3.5" />} accentText="text-orange-300">
-                    <div className="text-xs text-gray-400">
-                      ゲージ加算方式
-                      <div className="flex gap-1 mt-1 items-center flex-wrap">
-                        {([['word', 'ワード数'], ['char', '文字数']] as const).map(([m, lbl]) => (
-                          <button key={m} onClick={() => setCfgGaugeMode(m)}
-                            className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${cfgGaugeMode === m ? 'bg-orange-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
-                            {lbl}
-                          </button>
-                        ))}
-                        <span className="text-xs text-gray-600 self-center ml-1">
-                          {cfgGaugeMode === 'char' ? '長い単語ほどゲージが溜まる' : '1ワード=1ゲージ'}
-                        </span>
-                      </div>
-                    </div>
-                    {cfgGaugeMode === 'word' ? (
-                      <CfgSlider label="アタックゲージ（何クリアで発射）" accent="orange" value={cfgAttackGauge} display={String(cfgAttackGauge)} min={2} max={10} step={1} onChange={setCfgAttackGauge} />
-                    ) : (
-                      <CfgSlider label="アタックゲージ（何文字で発射）" accent="orange" value={cfgGaugeChars} display={String(cfgGaugeChars)} min={6} max={40} step={1} onChange={setCfgGaugeChars} />
-                    )}
-                    <CfgSlider label="アタック数の上限" accent="orange" value={cfgAttackCap} display={String(cfgAttackCap)} min={2} max={12} step={1} onChange={setCfgAttackCap} />
-                    <CfgSlider label="アタック数が増える連鎖数" hint="この連鎖ごとに攻撃量+1" accent="orange" value={cfgComboStep} display={String(cfgComboStep)} min={2} max={15} step={1} onChange={setCfgComboStep} />
-                    <CfgSlider label="バッジ上限（撃破数の補正上限）" accent="yellow" value={cfgBadgeCap} display={String(cfgBadgeCap)} min={0} max={10} step={1} onChange={setCfgBadgeCap} />
-                    <CfgSlider label="バッジ1枚の攻撃上昇率" accent="yellow" value={cfgBadgeRate} display={`${cfgBadgeRate}%`} min={0} max={100} step={5} onChange={setCfgBadgeRate} />
-                    <div className="text-xs text-gray-400">
-                      逆転補正 <span className="text-gray-600">（劣勢ほど防御・逆転／優勢ほど攻撃）</span>
-                      <div className="flex gap-1 mt-1 items-center flex-wrap">
-                        {([[0, 'なし'], [1, '弱'], [2, '中'], [3, '強']] as const).map(([v, lbl]) => (
-                          <button key={v} onClick={() => setCfgComeback(v)}
-                            className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${cfgComeback === v ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
-                            {lbl}
-                          </button>
-                        ))}
-                        <span className="text-xs text-gray-600 self-center ml-1">順位＋ピンチ度で判定</span>
-                      </div>
-                    </div>
-                  </CfgSection>
-
-                  {/* ③ お宝・アイテム */}
-                  <CfgSection title="お宝・アイテム" icon={<Gift className="w-3.5 h-3.5" />} accentText="text-yellow-300">
-                    <CfgSlider label="お宝の出現率" hint="お宝🟨を打つとアイテム入手" accent="yellow" value={cfgTreasureRate} display={`${cfgTreasureRate}%`} min={0} max={80} step={5} onChange={setCfgTreasureRate} />
-                    <div className="text-xs text-gray-400">
-                      アイテム
-                      <div className="flex gap-1 mt-1 items-center flex-wrap">
-                        {([[true, 'あり'], [false, 'なし']] as const).map(([on, lbl]) => (
-                          <button key={String(on)} onClick={() => setCfgItemsOn(on)}
-                            className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${cfgItemsOn === on ? 'bg-fuchsia-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'}`}>
-                            {lbl}
-                          </button>
-                        ))}
-                        <span className="text-xs text-gray-600 self-center ml-1">なしでお宝もアイテムも出ません</span>
-                      </div>
-                    </div>
-                    {cfgItemsOn && (
-                      <div className="text-xs text-gray-400">
-                        アイテムの個別ON/OFF <span className="text-gray-600">（OFFは出ません）</span>
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {ALL_ITEMS.map((it) => {
-                            const off = cfgDisabledItems.includes(it);
-                            return (
-                              <button
-                                key={it}
-                                onClick={() => setCfgDisabledItems((prev) => off ? prev.filter((x) => x !== it) : [...prev, it])}
-                                className={`px-1.5 py-0.5 rounded text-xs font-bold transition-colors flex items-center gap-0.5 ${off ? 'bg-neutral-800 text-gray-600 line-through' : 'bg-fuchsia-700/70 text-white'}`}
-                                title={ITEM_META[it].desc}
-                              >
-                                <span>{ITEM_EMOJI[it]}</span>{ITEM_META[it].name}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <div className="flex gap-2 mt-1">
-                          <button onClick={() => setCfgDisabledItems([])} className="text-xs text-cyan-400 hover:text-cyan-300 underline">全部ON</button>
-                          <button onClick={() => setCfgDisabledItems([...ALL_ITEMS])} className="text-xs text-gray-500 hover:text-gray-300 underline">全部OFF</button>
-                        </div>
-                      </div>
-                    )}
-                    {cfgItemsOn && (
-                      <div className="border-t border-white/10 pt-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-amber-200 font-bold">アイテムの使い方</span>
-                          <button
-                            onClick={() => setCfgAutoFull((v) => !v)}
-                            className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${
-                              cfgAutoFull ? 'bg-emerald-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
-                            }`}
-                          >
-                            完全オート {cfgAutoFull ? 'ON' : 'OFF'}
-                          </button>
-                        </div>
-                        {cfgAutoFull ? (
-                          <p className="text-xs text-emerald-300/80">
-                            有利/不利を見て、いい感じのタイミングで自動発動します（手動 [{keyLabel(keyCfg.fire)}] も可）。
-                          </p>
-                        ) : (
-                          <div className="flex flex-col gap-1.5">
-                            {CAT_META.map((c) => (
-                              <div key={c.key} className="flex items-center justify-between gap-2">
-                                <span className={`text-xs font-bold ${c.color} w-8 shrink-0`}>{c.label}</span>
-                                <div className="flex gap-1 flex-wrap justify-end">
-                                  {USE_MODES.map((m) => (
-                                    <button
-                                      key={m.key}
-                                      onClick={() => setCfgUse((u) => ({ ...u, [c.key]: m.key }))}
-                                      title={m.desc}
-                                      className={`px-1.5 py-0.5 rounded text-xs font-bold transition-colors ${
-                                        cfgUse[c.key] === m.key ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
-                                      }`}
-                                    >
-                                      {m.label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                            <p className="text-xs text-gray-600 leading-tight">
-                              新着=[{keyLabel(keyCfg.fire)}]手動 / 即時=拾った瞬間 / オート=良い時に自動 / 保持=1つ保持し被ったら新しい方を発動
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </CfgSection>
-                </div>
-              )}
-
-              {/* 出題テーマ選択（複数選択可。「すべて」を選ぶと全語彙） */}
-              <div className="mb-6 w-full max-w-sm">
-                <div className="text-xs text-gray-500 mb-1.5 text-center">出題テーマ（複数選択可）</div>
-                <div className="flex flex-wrap gap-1.5 justify-center">
-                  {THEMES.map((t) => {
-                    const sel = t.id === 'all' ? theme === 'all' || theme === '' : theme.split(',').includes(t.id);
-                    return (
-                      <button
-                        key={t.id}
-                        onClick={() => setTheme((cur) => toggleThemeSelection(cur, t.id))}
-                        className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
-                          sel ? 'bg-cyan-600 text-white' : 'bg-neutral-800 text-gray-400 hover:bg-neutral-700'
-                        }`}
-                      >
-                        {t.label}
-                      </button>
-                    );
-                  })}
-                  {/* 自作テーマ（語句のグループ）。'custom:テーマ名' で個別に出題できる。 */}
-                  {customGroups.map((g) => {
-                    const id = `custom:${g}`;
-                    const sel = theme.split(',').includes(id);
-                    return (
-                      <button
-                        key={id}
-                        onClick={() => setTheme((cur) => toggleThemeSelection(cur, id))}
-                        className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors ${
-                          sel ? 'bg-fuchsia-600 text-white' : 'bg-neutral-800 text-fuchsia-300/80 hover:bg-neutral-700'
-                        }`}
-                      >
-                        🗂 {g}
-                      </button>
-                    );
-                  })}
-                </div>
-                {/* 「すべて」出題に各テーマを含めるか（OFFにしたテーマは混ざらない） */}
-                <div className="mt-3">
-                  <div className="text-xs text-gray-500 text-center mb-1">「すべて」に含めるテーマ（OFFで除外）</div>
-                  <div className="flex flex-wrap gap-1 justify-center">
-                    {/* ビルトインテーマ ＋ 自作テーマ（custom:名）を同じ感覚でON/OFF */}
-                    {[
-                      ...THEMES.filter((t) => t.id !== 'all' && t.id !== 'custom').map((t) => ({ id: t.id, label: t.label })),
-                      ...customGroups.map((g) => ({ id: `custom:${g}`, label: `🗂${g}` })),
-                    ].map((t) => {
-                      const off = cfgExcluded.includes(t.id);
+                  <div className="grid gap-2.5" role="radiogroup" aria-label="モード">
+                    {([
+                      ['royale', 'バトル', `CPU ${cfgEnemies}人と撃ち合い、最後の1人を目指す`, Swords],
+                      ['timeattack', 'タイムアタック', '制限時間内の量と正確さでスコアを競う', Timer],
+                    ] as const).map(([m, name, desc, Icon]) => {
+                      const on = soloMode === m;
                       return (
                         <button
-                          key={t.id}
-                          onClick={() => setCfgExcluded((prev) => off ? prev.filter((x) => x !== t.id) : [...prev, t.id])}
-                          className={`px-2 py-0.5 rounded text-xs font-bold transition-colors ${off ? 'bg-neutral-800 text-gray-600 line-through' : 'bg-cyan-700/70 text-white'}`}
-                          title={off ? '「すべて」に含めない' : '「すべて」に含める'}
+                          key={m}
+                          type="button"
+                          role="radio"
+                          aria-checked={on}
+                          onClick={() => setSoloMode(m)}
+                          className="group flex items-center gap-4 rounded-[14px] px-4 py-3.5 text-left border transition-colors"
+                          style={{
+                            borderColor: on ? 'rgb(var(--ac-400) / 0.7)' : 'var(--line)',
+                            background: on ? 'rgb(var(--ac-400) / 0.1)' : 'rgb(var(--n-50) / 0.025)',
+                          }}
                         >
-                          {t.label}
+                          <span
+                            className="flex items-center justify-center w-11 h-11 rounded-xl shrink-0"
+                            style={{ background: on ? 'rgb(var(--ac-400) / 0.18)' : 'rgb(var(--n-50) / 0.05)', color: on ? 'rgb(var(--ac-300))' : 'rgb(var(--n-400))' }}
+                          >
+                            <Icon className="w-5 h-5" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-[17px] font-bold text-text">{name}</span>
+                            <span className="block text-sm text-muted mt-0.5 leading-snug">{desc}</span>
+                          </span>
+                          <span
+                            className="w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center"
+                            style={{ borderColor: on ? 'rgb(var(--ac-400))' : 'rgb(var(--n-600))' }}
+                            aria-hidden
+                          >
+                            {on && <span className="w-2.5 h-2.5 rounded-full" style={{ background: 'rgb(var(--ac-400))' }} />}
+                          </span>
                         </button>
                       );
                     })}
                   </div>
-                  <div className="flex gap-2 justify-center mt-1">
-                    <button onClick={() => setCfgExcluded([])} className="text-xs text-cyan-400 hover:text-cyan-300 underline">全部含める</button>
-                    <button onClick={() => setCfgExcluded(THEMES.filter((t) => t.id !== 'all' && t.id !== 'custom').map((t) => t.id))} className="text-xs text-gray-500 hover:text-gray-300 underline">全部除外</button>
-                  </div>
-                </div>
-              </div>
 
-              <div className="flex gap-4 text-sm text-gray-500 bg-neutral-900/50 p-4 rounded-xl">
-                <div>🟦 通常単語</div>
-                <div>🟥 おじゃま単語</div>
-                <div>🟨 お宝単語</div>
-              </div>
-              <p className="text-xs text-gray-600 mt-4 max-w-sm text-center">
-                ノーミスで打ち切ると連鎖UP。5連鎖ごとに敵CPUへおじゃまを送って撃墜！ CPUも反撃してくるので [{keyLabel(keyCfg.target)}] で狙いを切り替えよう。お宝(🟨)を打つと攻撃/防御/効果のスロットにアイテム獲得 → {keyCfg.inputMode === 'cycle' ? `[${keyLabel(keyCfg.cycle)}]でスロット切替・[${keyLabel(keyCfg.fire)}]で発動` : '各スロットの即時キーで発動'}。
-              </p>
-              <div className="mt-4 text-xs bg-neutral-900/50 p-3 rounded-xl max-w-sm w-full">
-                <div className="text-gray-400 font-bold mb-1.5 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-yellow-400" /> アイテム効果（お宝🟨で入手 → スロットへ。{keyCfg.inputMode === 'cycle' ? `[${keyLabel(keyCfg.cycle)}]切替/[${keyLabel(keyCfg.fire)}]発動` : '各スロット即時キー'}）
-                </div>
-                <div className="flex flex-col gap-2 text-left text-gray-400">
-                  {CAT_META.map((c) => (
-                    <div key={c.key}>
-                      <div className={`text-xs font-black mb-0.5 ${c.color}`}>{c.label}</div>
-                      <div className="flex flex-col gap-1">
-                        {ALL_ITEMS.filter((t) => ITEM_CAT[t] === c.key).map((t) => (
-                          <div key={t}>
-                            <span className="mr-1">{ITEM_META[t].icon}</span>
-                            <span className="text-gray-300 font-bold">{ITEM_META[t].name}</span>
-                            <span className="text-gray-500"> … {ITEM_META[t].desc}</span>
+                  {soloMode === 'timeattack' ? (
+                    <Field label="制限時間">
+                      <Seg label="制限時間" value={cfgTaSeconds} onChange={setCfgTaSeconds}
+                        options={[30, 60, 90, 120].map((s) => ({ value: s, label: `${s}秒` }))} />
+                    </Field>
+                  ) : (
+                    <Field label="難易度" note={activePreset ? undefined : '詳細設定の値で遊びます'}>
+                      {/* どのプリセットとも一致しない時は「カスタム」を選択中として示す（押しても何もしない） */}
+                      <Seg label="難易度" value={activePreset ?? 'custom'}
+                        onChange={(k) => { if (k !== 'custom') applyDifficulty(DIFFICULTY_PRESETS[k]); }}
+                        options={[
+                          ...(['easy', 'normal', 'hard'] as const).map((k) => ({ value: k, label: DIFFICULTY_PRESETS[k].label })),
+                          { value: 'custom' as const, label: 'カスタム' },
+                        ]} />
+                    </Field>
+                  )}
+
+                  <div className="flex flex-col gap-2.5">
+                    <button type="button" onClick={() => startGame()} className="ui-btn-primary h-14 text-lg">
+                      <Play className="w-5 h-5" fill="currentColor" />
+                      {gameState === 'start' ? 'スタート' : 'この設定で再挑戦'}
+                      <Kbd>Space</Kbd>
+                    </button>
+                    {settingsOpen && gameState !== 'start' && (
+                      <button type="button" onClick={() => setSettingsOpen(false)} className="ui-btn-secondary h-11 text-[15px]">
+                        結果へ戻る
+                      </button>
+                    )}
+                    <p className="text-[13px] text-muted text-center">
+                      <Kbd>Tab</Kbd> でいつでも即リスタート
+                    </p>
+                  </div>
+
+                  {/* このモードの自分の記録（開始前に目標を見せる） */}
+                  {(() => {
+                    const mode = soloMode === 'timeattack' ? 'timeattack' : 'royale';
+                    const ta = mode === 'timeattack' ? cfgTaSeconds : undefined;
+                    const best = previousBest(mode, ta, null);
+                    const plays = loadScores().filter((r) => r.mode === mode && (mode !== 'timeattack' || r.taSeconds === ta)).length;
+                    return (
+                      <div className="ui-panel px-5 py-4">
+                        <div className="flex items-baseline justify-between mb-3">
+                          <span className="text-sm font-semibold text-text">あなたの記録</span>
+                          <span className="text-xs text-muted">{mode === 'timeattack' ? `タイムアタック ${ta}秒` : 'バトル'}</span>
+                        </div>
+                        {best ? (
+                          <div className="grid grid-cols-3 gap-3">
+                            {([['自己ベスト', String(best.score)], ['最高KPS', best.kps.toFixed(1)], ['プレイ', `${plays}回`]] as const).map(([k, v]) => (
+                              <div key={k}>
+                                <div className="text-xs text-muted">{k}</div>
+                                <div className="font-tech text-xl font-semibold tabular-nums text-text mt-0.5">{v}</div>
+                              </div>
+                            ))}
                           </div>
+                        ) : (
+                          <p className="text-sm text-muted">まだ記録がありません。最初の1回をどうぞ。</p>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </section>
+
+                {/* ── 右: 出題・詳細設定・遊び方 ── */}
+                <div className="flex flex-col gap-4 min-w-0">
+                  <Panel title="出題テーマ" icon={<BookOpen className="w-4 h-4" />} aside={<span className="text-xs text-muted">複数選べます</span>}>
+                    <div className="flex flex-wrap gap-2">
+                      {THEMES.map((t) => {
+                        const sel = t.id === 'all' ? theme === 'all' || theme === '' : theme.split(',').includes(t.id);
+                        return (
+                          <button key={t.id} type="button" data-on={sel} aria-pressed={sel} className="ui-chip"
+                            onClick={() => setTheme((cur) => toggleThemeSelection(cur, t.id))}>
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                      {/* 自作テーマ（語句のグループ）。'custom:テーマ名' で個別に出題できる。 */}
+                      {customGroups.map((g) => {
+                        const id = `custom:${g}`;
+                        const sel = theme.split(',').includes(id);
+                        return (
+                          <button key={id} type="button" data-on={sel} aria-pressed={sel} className="ui-chip"
+                            onClick={() => setTheme((cur) => toggleThemeSelection(cur, id))}>
+                            <FolderOpen className="w-3.5 h-3.5" /> {g}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {/* 「すべて」出題に各テーマを含めるか（OFFにしたテーマは混ざらない） */}
+                    <div className="mt-4 border-t pt-1" style={{ borderColor: 'var(--line)' }}>
+                      <CfgSection title="「すべて」に含めるテーマ" icon={<SlidersHorizontal className="w-4 h-4" />}>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            ...THEMES.filter((t) => t.id !== 'all' && t.id !== 'custom').map((t) => ({ id: t.id, label: t.label })),
+                            ...customGroups.map((g) => ({ id: `custom:${g}`, label: g })),
+                          ].map((t) => {
+                            const off = cfgExcluded.includes(t.id);
+                            return (
+                              <button key={t.id} type="button" className="ui-chip" data-off={off} aria-pressed={!off}
+                                title={off ? '「すべて」に含めない' : '「すべて」に含める'}
+                                onClick={() => setCfgExcluded((prev) => off ? prev.filter((x) => x !== t.id) : [...prev, t.id])}>
+                                {!off && <Check className="w-3.5 h-3.5" />}{t.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <div className="flex gap-4 text-sm">
+                          <button type="button" onClick={() => setCfgExcluded([])} className="text-cyan-300 hover:underline">全部含める</button>
+                          <button type="button" onClick={() => setCfgExcluded(THEMES.filter((t) => t.id !== 'all' && t.id !== 'custom').map((t) => t.id))} className="text-muted hover:text-text hover:underline">全部外す</button>
+                        </div>
+                      </CfgSection>
+                    </div>
+                  </Panel>
+
+                  {/* 詳細設定（戦闘チューニング）。タイムアタックは寿司打式なので非表示。 */}
+                  {soloMode !== 'timeattack' && (
+                    <Panel title="詳細設定" icon={<SlidersHorizontal className="w-4 h-4" />} aside={<span className="text-xs text-muted">変えると難易度は「カスタム」に</span>}>
+                      <CfgSection title="速度・敵" icon={<Gauge className="w-4 h-4" />} defaultOpen>
+                        <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">
+                          <CfgSlider label="最初の出題間隔" value={cfgInitial} display={`${(cfgInitial / 1000).toFixed(1)}秒`} min={500} max={6000} step={100} onChange={setCfgInitial} />
+                          <CfgSlider label="最短の出題間隔" value={cfgMin} display={`${(cfgMin / 1000).toFixed(1)}秒`} min={300} max={3000} step={100} onChange={setCfgMin} />
+                          <CfgSlider label="加速の速さ" hint="大きいほど早く速くなる／0で加速なし" value={accelSpeed} display={accelSpeed.toFixed(1)} min={0} max={10} step={0.5} onChange={setAccelFromSpeed} />
+                          <CfgSlider label="自分のHP（積める量）" value={cfgHp} display={String(cfgHp)} min={HP_MIN} max={HP_MAX} step={1} onChange={setCfgHp} />
+                          <CfgSlider label="敵の数" value={cfgEnemies} display={`${cfgEnemies}人`} min={1} max={MAX_DUMMIES} step={1} onChange={setCfgEnemies} />
+                          <CfgSlider label="CPUの強さ（平均）" hint="強いCPUと弱いCPUが混ざり、平均がこの値" value={cfgCpuStr} display={String(cfgCpuStr)} min={0} max={10} step={1} onChange={setCfgCpuStr} />
+                        </div>
+                      </CfgSection>
+
+                      <CfgSection title="攻撃・ゲージ" icon={<Swords className="w-4 h-4" />}>
+                        <Field label="ゲージの溜まり方" note={cfgGaugeMode === 'char' ? '長い単語ほど溜まる' : '1単語＝1ゲージ'}>
+                          <Seg label="ゲージの溜まり方" value={cfgGaugeMode} onChange={setCfgGaugeMode}
+                            options={[{ value: 'word' as const, label: '単語の数' }, { value: 'char' as const, label: '文字の数' }]} />
+                        </Field>
+                        <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">
+                          {cfgGaugeMode === 'word' ? (
+                            <CfgSlider label="何単語で攻撃するか" value={cfgAttackGauge} display={`${cfgAttackGauge}単語`} min={2} max={10} step={1} onChange={setCfgAttackGauge} />
+                          ) : (
+                            <CfgSlider label="何文字で攻撃するか" value={cfgGaugeChars} display={`${cfgGaugeChars}文字`} min={6} max={40} step={1} onChange={setCfgGaugeChars} />
+                          )}
+                          <CfgSlider label="1回の攻撃の上限" value={cfgAttackCap} display={String(cfgAttackCap)} min={2} max={12} step={1} onChange={setCfgAttackCap} />
+                          <CfgSlider label="攻撃が増える連鎖数" hint="この連鎖ごとに攻撃量が+1" value={cfgComboStep} display={`${cfgComboStep}連鎖`} min={2} max={15} step={1} onChange={setCfgComboStep} />
+                          <CfgSlider label="バッジの上限" hint="撃破数による攻撃の補正の上限" value={cfgBadgeCap} display={`${cfgBadgeCap}枚`} min={0} max={10} step={1} onChange={setCfgBadgeCap} />
+                          <CfgSlider label="バッジ1枚の攻撃上昇" value={cfgBadgeRate} display={`${cfgBadgeRate}%`} min={0} max={100} step={5} onChange={setCfgBadgeRate} />
+                        </div>
+                        <Field label="逆転補正" note="劣勢ほど防御・逆転のアイテム、優勢ほど攻撃のアイテムが出る">
+                          <Seg label="逆転補正" value={cfgComeback} onChange={setCfgComeback}
+                            options={([[0, 'なし'], [1, '弱'], [2, '中'], [3, '強']] as const).map(([v, l]) => ({ value: v, label: l }))} />
+                        </Field>
+                      </CfgSection>
+
+                      <CfgSection title="お宝・アイテム" icon={<Gift className="w-4 h-4" />}>
+                        <Field label="アイテム" note={cfgItemsOn ? undefined : 'お宝もアイテムも出ません'}>
+                          <Seg label="アイテム" value={cfgItemsOn} onChange={setCfgItemsOn}
+                            options={[{ value: true, label: 'あり' }, { value: false, label: 'なし' }]} />
+                        </Field>
+                        {cfgItemsOn && (
+                          <>
+                            <CfgSlider label="お宝の出る確率" hint="お宝の単語を打つとアイテムが手に入る" value={cfgTreasureRate} display={`${cfgTreasureRate}%`} min={0} max={80} step={5} onChange={setCfgTreasureRate} />
+                            <Field label="出てくるアイテム" note="外したアイテムは出ません">
+                              <div className="flex flex-wrap gap-2">
+                                {ALL_ITEMS.map((it) => {
+                                  const off = cfgDisabledItems.includes(it);
+                                  return (
+                                    <button key={it} type="button" className="ui-chip" data-off={off} aria-pressed={!off} title={ITEM_META[it].desc}
+                                      onClick={() => setCfgDisabledItems((prev) => off ? prev.filter((x) => x !== it) : [...prev, it])}>
+                                      <span className="text-base leading-none">{ITEM_EMOJI[it]}</span>{ITEM_META[it].name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <div className="flex gap-4 text-sm">
+                                <button type="button" onClick={() => setCfgDisabledItems([])} className="text-cyan-300 hover:underline">全部出す</button>
+                                <button type="button" onClick={() => setCfgDisabledItems([...ALL_ITEMS])} className="text-muted hover:text-text hover:underline">全部外す</button>
+                              </div>
+                            </Field>
+                            <Field label="アイテムの使い方" note={cfgAutoFull ? `良いタイミングで自動発動（[${keyLabel(keyCfg.fire)}]で手動も可）` : undefined}>
+                              <Seg label="完全オート" value={cfgAutoFull} onChange={setCfgAutoFull}
+                                options={[{ value: false, label: '種類ごとに決める' }, { value: true, label: '完全オート' }]} />
+                              {!cfgAutoFull && (
+                                <div className="grid gap-2.5 mt-1">
+                                  {CAT_META.map((c) => (
+                                    <div key={c.key} className="grid grid-cols-[3.5rem_minmax(0,1fr)] items-center gap-3">
+                                      <span className="text-sm font-semibold text-text">{c.label}</span>
+                                      <Seg label={`${c.label}の使い方`} value={cfgUse[c.key]} onChange={(v) => setCfgUse((u) => ({ ...u, [c.key]: v }))}
+                                        options={USE_MODES.map((m) => ({ value: m.key, label: <span title={m.desc}>{m.label}</span> }))} />
+                                    </div>
+                                  ))}
+                                  <p className="text-xs text-muted leading-relaxed">
+                                    新着＝[{keyLabel(keyCfg.fire)}]で手動 ／ 即時＝拾った瞬間 ／ オート＝良い時に自動 ／ 保持＝1つ持ち、重なったら新しい方を発動
+                                  </p>
+                                </div>
+                              )}
+                            </Field>
+                          </>
+                        )}
+                      </CfgSection>
+                    </Panel>
+                  )}
+
+                  {/* 遊び方（初めての人向け。慣れたら閉じたまま） */}
+                  <section className="ui-panel px-5 py-1">
+                    <CfgSection title="遊び方" icon={<HelpCircle className="w-4 h-4" />}>
+                      <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-text">
+                        {([['var(--backload)', '通常の単語'], ['var(--incoming)', 'おじゃま単語'], ['var(--charge)', 'お宝の単語（アイテム入手）']] as const).map(([c, l]) => (
+                          <span key={l} className="flex items-center gap-2"><span className="w-3 h-3 rounded-[3px]" style={{ background: c }} />{l}</span>
                         ))}
                       </div>
-                    </div>
-                  ))}
+                      {soloMode !== 'timeattack' ? (
+                        <ul className="text-sm text-muted leading-relaxed list-disc pl-5 space-y-1">
+                          <li>ノーミスで打ち切ると<b className="text-text">連鎖</b>が伸び、{cfgComboStep}連鎖ごとに攻撃が強くなります。</li>
+                          <li>一定数打つと攻撃ゲージが満タンになり、敵CPUへおじゃまを送ります。<Kbd>{keyLabel(keyCfg.target)}</Kbd> で狙う相手を切り替え。</li>
+                          <li>送られてきたおじゃまは<b className="text-text">着弾予告</b>（お題の左）に並び、単語を1つ打つごとに1つ消せます。</li>
+                          <li>自分の山（下のゲージ）が満タンになると脱落。最後の1人になれば勝ち。</li>
+                          {cfgItemsOn && (
+                            <li>
+                              お宝の単語を打つとアイテムが手に入ります。
+                              {keyCfg.inputMode === 'cycle'
+                                ? <><Kbd>{keyLabel(keyCfg.cycle)}</Kbd> で選んで <Kbd>{keyLabel(keyCfg.fire)}</Kbd> で発動。</>
+                                : '各スロットのキーで発動。'}
+                            </li>
+                          )}
+                        </ul>
+                      ) : (
+                        <ul className="text-sm text-muted leading-relaxed list-disc pl-5 space-y-1">
+                          <li>制限時間内にできるだけ多く、正確に打ちます。</li>
+                          <li>ノーミスで打ち続けると時間がのびます。</li>
+                        </ul>
+                      )}
+                      {soloMode !== 'timeattack' && cfgItemsOn && (
+                        <div className="grid gap-4 md:grid-cols-3">
+                          {CAT_META.map((c) => (
+                            <div key={c.key}>
+                              <div className="text-xs font-semibold text-muted mb-2 tracking-wider">{c.label}</div>
+                              <div className="flex flex-col gap-2">
+                                {ALL_ITEMS.filter((t) => ITEM_CAT[t] === c.key).map((t) => (
+                                  <div key={t} className="flex gap-2.5 items-start">
+                                    <span className="mt-0.5 shrink-0"><ItemIcon type={t} /></span>
+                                    <span className="text-sm leading-snug"><b className="text-text font-semibold">{ITEM_META[t].name}</b><span className="block text-muted">{ITEM_META[t].desc}</span></span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CfgSection>
+                  </section>
                 </div>
-              </div>
-
-              {/* ゲージの説明 */}
-              <div className="mt-3 mb-2 text-xs bg-neutral-900/50 p-3 rounded-xl max-w-sm w-full">
-                <div className="text-gray-400 font-bold mb-1.5">ゲージの見方</div>
-                <div className="flex flex-col gap-1 text-left text-gray-500">
-                  <div>
-                    <span className="text-red-400 font-bold">左の赤ゲージ（着弾予告）</span> … CPUから送られてくるおじゃまの予告。<span className="text-cyan-300">単語を1つ打ち切るごとに1つ相殺（防御）</span>でき、相殺しきれず時間切れになるとバックログに加算される。
-                  </div>
-                  <div>
-                    <span className="text-cyan-400 font-bold">下の青ゲージ（バックログ）</span> … 自分の処理待ちの山。満タンでトップアウト＝敗北。
-                  </div>
-                  <div>
-                    <span className="text-orange-300 font-bold">攻撃チャージ</span> … 一定クリアごとに発射（ゲージ短縮で短くなる）。表示の「+N」がその時送る攻撃量。
-                  </div>
-                  <div>
-                    <span className="text-cyan-300 font-bold">連鎖(COMBO)</span> … ノーミスで打ち切った連続数。長いほど攻撃が増える。
-                  </div>
-                </div>
-              </div>
               </div>
             </div>,
             document.body,
@@ -2526,70 +2523,70 @@ const Stat = ({ label, value, small, suffix }: { label: string; value: number; s
 
 
 // カスタム設定の ±0.1秒 ステップボタン。
-const StepBtn = ({ onClick, children }: { onClick: () => void; children: React.ReactNode }) => (
+// スライダー横の ±1段ボタン。
+const StepBtn = ({ onClick, label, children }: { onClick: () => void; label: string; children: React.ReactNode }) => (
   <button
     type="button"
     onClick={onClick}
-    className="px-2 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-cyan-300 text-xs font-mono font-bold shrink-0"
+    aria-label={label}
+    className="w-8 h-8 rounded-lg flex items-center justify-center text-base font-bold shrink-0 text-text transition-colors hover:bg-neutral-800"
+    style={{ background: 'rgb(var(--n-50) / 0.05)', border: '1px solid var(--line)' }}
   >
     {children}
   </button>
 );
 
-// アクセント色（Tailwind パージ対策で静的クラス文字列を用意）。
-const CFG_ACCENTS: Record<string, { range: string; val: string }> = {
-  cyan: { range: 'accent-cyan-500', val: 'text-cyan-300' },
-  orange: { range: 'accent-orange-500', val: 'text-orange-300' },
-  yellow: { range: 'accent-yellow-500', val: 'text-yellow-300' },
-};
-
-// 繰り返しの多かったスライダー行を1コンポーネントに集約（±ボタン付き）。
+// 設定のスライダー1行（見出し・現在値・補足・±ボタン）。
 const CfgSlider = ({
-  label, value, display, min, max, step, onChange, accent = 'cyan', hint,
+  label, value, display, min, max, step, onChange, hint,
 }: {
   label: string; value: number; display: string; min: number; max: number; step: number;
-  onChange: (v: number) => void; accent?: 'cyan' | 'orange' | 'yellow'; hint?: string;
+  onChange: (v: number) => void; hint?: string;
 }) => {
-  const a = CFG_ACCENTS[accent];
+  const id = useId();
   const round = (v: number) => Math.round(v * 1000) / 1000; // 0.5等の浮動小数を丸める
   return (
-    <div className="text-xs text-gray-400">
-      <div className="flex items-baseline justify-between gap-2">
-        <span>{label}</span>
-        <span className={`font-mono font-bold ${a.val}`}>{display}</span>
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <label htmlFor={id} className="text-sm text-text">{label}</label>
+        <span className="font-tech text-[15px] font-semibold tabular-nums text-cyan-200">{display}</span>
       </div>
-      {hint && <div className="text-xs text-gray-600 leading-tight">{hint}</div>}
-      <div className="flex items-center gap-2 mt-1">
-        <StepBtn onClick={() => onChange(round(Math.max(min, value - step)))}>−</StepBtn>
+      {hint && <div className="text-xs text-muted mt-0.5 leading-snug">{hint}</div>}
+      <div className="flex items-center gap-2.5 mt-2">
+        <StepBtn label={`${label}を下げる`} onClick={() => onChange(round(Math.max(min, value - step)))}>−</StepBtn>
         <input
+          id={id}
           type="range" min={min} max={max} step={step} value={value}
           onChange={(e) => onChange(Number(e.target.value))}
-          className={`flex-1 ${a.range}`}
+          className="flex-1 ui-range"
         />
-        <StepBtn onClick={() => onChange(round(Math.min(max, value + step)))}>＋</StepBtn>
+        <StepBtn label={`${label}を上げる`} onClick={() => onChange(round(Math.min(max, value + step)))}>＋</StepBtn>
       </div>
     </div>
   );
 };
 
-// 折りたたみできる設定セクション（見出し＋開閉）。ごちゃつきを分類して隠す。
+// 折りたたみできる設定セクション（見出し＋開閉）。項目を分類して、普段は隠しておける。
 const CfgSection = ({
-  title, icon, accentText, defaultOpen = false, children,
+  title, icon, defaultOpen = false, children,
 }: {
-  title: string; icon: React.ReactNode; accentText: string; defaultOpen?: boolean; children: React.ReactNode;
+  title: string; icon: React.ReactNode; defaultOpen?: boolean; children: React.ReactNode;
 }) => {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border-t border-white/10 first:border-t-0">
+    <div className="border-t first:border-t-0" style={{ borderColor: 'var(--line)' }}>
       <button
         type="button"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between py-2.5"
+        className="w-full flex items-center justify-between py-3.5 text-left"
       >
-        <span className={`text-xs font-black flex items-center gap-1.5 ${accentText}`}>{icon}{title}</span>
-        <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <span className="flex items-center gap-2 text-[15px] font-semibold text-text">
+          <span className="text-muted">{icon}</span>{title}
+        </span>
+        <ChevronDown className={`w-4 h-4 text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && <div className="pb-3 flex flex-col gap-3">{children}</div>}
+      {open && <div className="pb-5 flex flex-col gap-5">{children}</div>}
     </div>
   );
 };

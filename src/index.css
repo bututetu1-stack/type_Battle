@@ -175,6 +175,123 @@ body {
     transition: all 0.2s;
   }
   .tr-btn-ghost:hover { border-color: var(--primary); }
+  /* ===== 共通UI部品（開始画面・結果画面などで共有） ===== */
+  /* 小見出し（英字の飾りラベル） */
+  .ui-eyebrow {
+    font-family: 'Chakra Petch', 'IBM Plex Sans JP', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    color: rgb(var(--ac-300));
+  }
+  /* 面（パネル）。1段だけ持ち上げた面で、罫線は細く */
+  .ui-panel {
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: linear-gradient(180deg, rgb(var(--n-50) / 0.035), rgb(var(--n-50) / 0.015));
+    box-shadow: inset 0 1px 0 rgb(var(--n-50) / 0.05);
+  }
+  /* 選択式のボタン群（セグメント） */
+  .ui-seg {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 12px;
+    background: rgb(var(--n-950) / 0.6);
+    border: 1px solid var(--line);
+  }
+  .ui-seg-btn {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: rgb(var(--n-400));
+    transition: background-color 0.15s, color 0.15s;
+  }
+  .ui-seg-btn:hover { color: var(--text); background: rgb(var(--n-50) / 0.04); }
+  .ui-seg-btn[data-on='true'] {
+    color: rgb(var(--ac-200));
+    background: rgb(var(--ac-400) / 0.16);
+    box-shadow: inset 0 0 0 1px rgb(var(--ac-400) / 0.55);
+  }
+  /* オン/オフの札（テーマ・アイテムの選択） */
+  .ui-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 500;
+    color: rgb(var(--n-300));
+    background: rgb(var(--n-50) / 0.04);
+    border: 1px solid var(--line);
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .ui-chip:hover { color: var(--text); border-color: rgb(var(--n-50) / 0.25); }
+  .ui-chip[data-on='true'] {
+    color: var(--bg);
+    background: rgb(var(--ac-300));
+    border-color: rgb(var(--ac-300));
+  }
+  .ui-chip[data-off='true'] { color: rgb(var(--n-500)); text-decoration: line-through; }
+  /* キーの表示 */
+  .ui-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.9em;
+    padding: 2px 7px;
+    border-radius: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.5;
+    color: var(--text);
+    background: rgb(var(--n-50) / 0.06);
+    border: 1px solid rgb(var(--n-50) / 0.16);
+    border-bottom-width: 2px;
+  }
+  /* 主要ボタン（画面に1つだけ） */
+  .ui-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border-radius: 12px;
+    font-weight: 700;
+    color: var(--bg);
+    background: rgb(var(--ac-400));
+    box-shadow: 0 10px 30px -12px var(--glow), inset 0 1px 0 rgb(255 255 255 / 0.25);
+    transition: background-color 0.15s, transform 0.15s;
+  }
+  .ui-btn-primary:hover { background: rgb(var(--ac-300)); }
+  .ui-btn-primary:active { transform: translateY(1px); }
+  .ui-btn-primary .ui-kbd { color: var(--bg); background: rgb(0 0 0 / 0.12); border-color: rgb(0 0 0 / 0.2); }
+  .ui-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 12px;
+    font-weight: 600;
+    color: var(--text);
+    background: rgb(var(--n-50) / 0.05);
+    border: 1px solid var(--line);
+    transition: background-color 0.15s, border-color 0.15s;
+  }
+  .ui-btn-secondary:hover { background: rgb(var(--n-50) / 0.09); border-color: rgb(var(--n-50) / 0.25); }
+  .ui-btn-primary:focus-visible,
+  .ui-btn-secondary:focus-visible,
+  .ui-seg-btn:focus-visible,
+  .ui-chip:focus-visible {
+    outline: 2px solid rgb(var(--ac-300));
+    outline-offset: 2px;
+  }
+  /* スライダーのつまみ・溝をアクセント色に */
+  .ui-range { accent-color: rgb(var(--ac-400)); }
+
   /* キーボード操作時のフォーカスを見えるように（マウス操作では出ない） */
   .tr-btn:focus-visible,
   .tr-btn-ghost:focus-visible {
