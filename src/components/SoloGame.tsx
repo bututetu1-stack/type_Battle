@@ -151,10 +151,12 @@ const TARGET_MODES: { mode: TargetMode; label: string }[] = [
 
 interface Telegraph { id: number; amount: number; confirmAt: number; word?: { display: string; reading: string }; }
 
+// ゲーム用語やアイテム名（おじゃま・シールド等）は「○○ から攻撃」「○○ が △△ 使用」の
+// 通知で紛らわしいので使わない。
 const CPU_NAMES = [
   'タイピー', 'カナ丸', 'ローマ', 'ことだま', 'はやて', 'シフト', 'エンター', 'スペース',
-  'バックスペース', 'キャップス', 'コンボ', 'チェイン', 'おじゃま', 'おたから', 'シールド',
-  'ブレーキ', 'ラピッド', 'ボム', 'ターゲット', 'ロイヤル',
+  'バックスペース', 'キャップス', 'コンボ', 'チェイン', 'エスケープ', 'テンキー', 'デリート',
+  'カーソル', 'ラピッド', 'ボム', 'ターゲット', 'ロイヤル',
   // 21〜30人目以降の名前
   'クイック', 'フラッシュ', 'ミラージュ', 'サンダー', 'ブリッツ', 'ノヴァ', 'ゼロ', 'アルファ',
   'オメガ', 'ファントム', 'クリムゾン', 'コメット', 'ストライク', 'ヴァイパー', 'ジェット',
@@ -208,7 +210,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   const [incomingDummy, setIncomingDummy] = useState<number | null>(null);
   const [muted, setMuted] = useState(false);
   const [theme, setTheme] = useState(initialCfg.theme);
-  const [attackThreshold, setAttackThreshold] = useState(ATTACK_THRESHOLD); // ゲージ短縮で 5→4
+  const [attackThreshold, setAttackThreshold] = useState(ATTACK_THRESHOLD); // 何クリアで発射するか（表示用。設定の attackGauge）
   const [nowTick, setNowTick] = useState(0); // カウントダウン描画用の時刻（効果の発動中判定にも使う）
   const [attackProgress, setAttackProgress] = useState(0); // 次の攻撃までのゲージ（ミスで減らない）
   const [targetMode, setTargetMode] = useState<TargetMode>('random');
@@ -522,7 +524,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
   // forcedTarget を渡すと 狙い設定を無視して特定の相手へ撃つ（狙撃のトドメ用）。
   const fireAttack = useCallback((amount: number, forcedTarget?: Dummy | null) => {
     if (amount <= 0) return;
-    // 相殺（ただし長文＝ロング送信は相殺対象外で必ず着弾する）。
+    // 受信予告と相殺（長文は相殺対象外で必ず着弾する）。
     let remaining = amount;
     const sorted = [...pendingRef.current].sort((a, b) => a.confirmAt - b.confirmAt);
     for (const e of sorted) {
@@ -701,11 +703,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     },
     [addBeam, pushToast, koFx],
   );
-
-  // 上限超過時の保護。トーテム発動中なら無効化、所持中なら自動発動、無ければ脱落。
-  const overflowProtect = useCallback((): 'protected' | 'gameover' => {
-    return 'gameover';
-  }, []);
 
   const grantItem = useCallback(() => {
     const rng = itemRngRef.current;
@@ -1194,7 +1191,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       setBacklog((prev) => {
         const next = [...prev, ...words];
         if (next.length >= maxBacklogRef.current) {
-          if (overflowProtect() === 'protected') return next.slice(0, maxBacklogRef.current - 1);
           gameOver();
           return next.slice(0, maxBacklogRef.current);
         }
@@ -1202,7 +1198,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
       });
     }, 100);
     return () => clearInterval(id);
-  }, [gameState, gameOver, updatePending, deflectToCpu, pushToast, overflowProtect]);
+  }, [gameState, gameOver, updatePending, deflectToCpu, pushToast]);
 
   // 迎撃: 相殺可能な予告が来ているのに山が空＝何もできず暇、を解消する。
   // 山が空のあいだは迎撃用の短いお題を供給し、打ち切れば1つ相殺できる（速い人ほど多く防げる）。
@@ -1241,7 +1237,6 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
           if (prev.length >= maxBacklogRef.current) {
             // タイムアタックは敗北なし。満杯なら供給を止めるだけ（時間切れで終了）。
             if (soloModeRef.current === 'timeattack') return prev;
-            if (overflowProtect() === 'protected') return prev.slice(0, maxBacklogRef.current - 1);
             gameOver();
             return prev;
           }
@@ -1253,7 +1248,7 @@ export default function SoloGame({ onExit }: { onExit: () => void }) {
     };
     timerId = setTimeout(loop, spawnInterval);
     return () => clearTimeout(timerId);
-  }, [gameState, soloMode, spawnInterval, gameOver, overflowProtect, nextWord]);
+  }, [gameState, soloMode, spawnInterval, gameOver, nextWord]);
 
   // --- カウントダウン描画用の時刻ティック ---
   useEffect(() => {

@@ -351,12 +351,12 @@ export interface AttackEvent {
   id: string;
   from: string;
   amount: number;
-  word?: { display: string; reading: string }; // ロング送信の単語（任意）
+  word?: { display: string; reading: string }; // ジャマーの長文（任意）
   fx?: string; // 特殊効果（'dazzle'=視認性低下など。おじゃまではなく相手画面への演出）
 }
 
 // 対象プレイヤーへおじゃまを送信（/attacks/{targetUid} に push）。
-// word を渡すと「ロング送信」、fx を渡すと特殊効果（視認性低下など）になる。
+// word を渡すと長文おじゃま（ジャマー）、fx を渡すと特殊効果（視認性低下など）になる。
 export function sendAttack(
   roomId: string,
   targetUid: string,

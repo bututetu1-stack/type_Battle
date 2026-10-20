@@ -51,7 +51,7 @@ interface Telegraph {
   id: string;
   amount: number;
   confirmAt: number;
-  word?: { display: string; reading: string }; // ロング送信の単語
+  word?: { display: string; reading: string }; // ジャマーの長文
 }
 
 // 生存判定: 脱落していない かつ 接続中（切断したプレイヤーは脱落扱い / Phase 4）。
@@ -521,7 +521,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
       const sorted = [...pendingRef.current].sort((a, b) => a.confirmAt - b.confirmAt);
       for (const e of sorted) {
         if (remaining <= 0) break;
-        if (e.word) continue; // 長文（ロング送信）は相殺対象外で必ず着弾する
+        if (e.word) continue; // 長文（ジャマー）は相殺対象外で必ず着弾する
         const cut = Math.min(remaining, e.amount);
         e.amount -= cut;
         remaining -= cut;
@@ -1061,7 +1061,7 @@ export default function OnlineGame({ roomId, uid, seed, startAt, status, hostUid
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [started, launchAttack, sendAmount, fireSelected, cycleSlot, fireSlot, grantItem, cycleTargetMode, offsetIncoming, addBurst, addRing]);
 
-  // ベース供給＆加速ループ（シールド/ブレーキ対応）。
+  // ベース供給＆加速ループ（フリーズ/超シールド/シールド対応）。
   useEffect(() => {
     if (!started || !selfAlive || status !== 'playing') return; // 決着後は供給を止める
     let timerId: ReturnType<typeof setTimeout>;

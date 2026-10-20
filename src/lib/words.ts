@@ -1253,11 +1253,10 @@ export const makeShortWord = (type: WordType = 'normal', theme: string = 'all', 
   return buildWord(entry, type, 's');
 };
 
-// アイテム「ロング送信」で相手に送りつける長文（読みは14文字以上）。
-// 1個でも打ち切るのに時間がかかる“重い”お邪魔として機能する。
-// ロング送信（長文アイテム）専用の長文。読みは14文字以上の普通の文章。
+// アイテム「ジャマー」（オンライン）で相手に送りつける長文（読みは14文字以上の普通の文章）。
+// 1個でも打ち切るのに時間がかかる“重い”おじゃまとして機能する。
 // ことわざは「言い切り形」にして長文ではなくなったため、長文ジャンルからは外し、
-// 専用の長文をここで生成して送る。
+// 専用の長文をここに置く。
 export const LONG_SENTENCES: WordEntry[] = [
   { display: '今日はとても良い天気で散歩日和だ', reading: 'きょうはとてもよいてんきでさんぽびよりだ' },
   { display: '図書館で借りた本を期限までに返す', reading: 'としょかんでかりたほんをきげんまでにかえす' },
@@ -1310,13 +1309,13 @@ export const LONG_SENTENCES: WordEntry[] = [
   { display: '熱心に練習した曲をみんなの前で弾く', reading: 'ねっしんにれんしゅうしたきょくをみんなのまえでひく' },
 ];
 
-// ロング送信用の長文をランダムに選ぶ（表示と読みのペア）。
+// ジャマー用の長文をランダムに選ぶ（表示と読みのペア）。
 export const randomLongWord = (): { display: string; reading: string } => {
   const e = LONG_SENTENCES[Math.floor(Math.random() * LONG_SENTENCES.length)];
   return { display: e.display, reading: e.reading };
 };
 
-// 指定の表示・読みからおじゃま単語を生成（受信したロング送信の挿入用）。
+// 指定の表示・読みからおじゃま単語を生成（受信した長文の挿入用）。
 export const makeOjamaWordFrom = (display: string, reading: string): Word => ({
   id: `o${idCounter++}`,
   display,
@@ -1332,7 +1331,7 @@ export interface Theme {
   label: string;
 }
 
-// 通常出題は「単語のみ」。長文はロング送信アイテム専用にするためテーマには
+// 通常出題は「単語のみ」。長文はジャマー専用にするためテーマには
 // 含めない（LONG_SENTENCES は makeOjamaWordFrom 経由でのみ出現）。
 export const THEMES: Theme[] = [
   { id: 'all', label: 'すべて' },
